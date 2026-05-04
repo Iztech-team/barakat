@@ -98,5 +98,43 @@
     "fieldtype": "Data",
     "unique": 1,
     "insert_after": ""
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Opening Entry-custom_device_id",
+    "dt": "POS Opening Entry",
+    "fieldname": "custom_device_id",
+    "label": "Device ID",
+    "fieldtype": "Data",
+    "insert_after": "user"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Opening Entry-custom_opened_by_staff",
+    "dt": "POS Opening Entry",
+    "fieldname": "custom_opened_by_staff",
+    "label": "Opened By Staff",
+    "fieldtype": "Link",
+    "options": "Employee",
+    "insert_after": "custom_device_id"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Closing Entry-custom_device_id",
+    "dt": "POS Closing Entry",
+    "fieldname": "custom_device_id",
+    "label": "Device ID",
+    "fieldtype": "Data",
+    "insert_after": "user"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Closing Entry-custom_closed_by_staff",
+    "dt": "POS Closing Entry",
+    "fieldname": "custom_closed_by_staff",
+    "label": "Closed By Staff",
+    "fieldtype": "Link",
+    "options": "Employee",
+    "insert_after": "custom_device_id"
   }
 ]

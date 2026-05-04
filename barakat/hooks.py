@@ -20,6 +20,9 @@ fixtures = [
 					"custom_pos_pin",
 					"custom_external_id",
 					"custom_operator_employee",
+					"custom_device_id",
+					"custom_opened_by_staff",
+					"custom_closed_by_staff",
 				],
 			]
 		],
@@ -27,6 +30,10 @@ fixtures = [
 ]
 
 after_install = "barakat.setup.install.after_install"
+
+override_doctype_class = {
+	"POS Opening Entry": "barakat.overrides.pos_opening_entry.BarakatPOSOpeningEntry"
+}
 
 # Apps
 # ------------------
