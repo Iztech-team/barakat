@@ -61,6 +61,16 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "Employee-custom_pos_branches",
+    "dt": "Employee",
+    "fieldname": "custom_pos_branches",
+    "label": "POS Branches",
+    "fieldtype": "Table",
+    "options": "POS Employee Branch",
+    "insert_after": "custom_pos_pin"
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Sales Invoice-custom_external_id",
     "dt": "Sales Invoice",
     "fieldname": "custom_external_id",

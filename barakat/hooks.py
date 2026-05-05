@@ -7,6 +7,10 @@ app_license = "mit"
 
 fixtures = [
 	{
+		"dt": "DocType",
+		"filters": [["name", "in", ["POS Employee Branch"]]],
+	},
+	{
 		"dt": "Custom Field",
 		"filters": [
 			[
@@ -19,6 +23,7 @@ fixtures = [
 					"custom_pos_profile",
 					"custom_pos_price_list",
 					"custom_pos_pin",
+					"custom_pos_branches",
 					"custom_external_id",
 					"custom_operator_employee",
 					"custom_device_id",
