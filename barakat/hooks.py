@@ -36,6 +36,12 @@ fixtures = [
 
 after_install = "barakat.setup.install.after_install"
 
+doc_events = {
+	"User": {
+		"after_insert": "barakat.sync.enqueue_user_sync",
+	}
+}
+
 override_doctype_class = {
 	"POS Opening Entry": "barakat.overrides.pos_opening_entry.BarakatPOSOpeningEntry"
 }
