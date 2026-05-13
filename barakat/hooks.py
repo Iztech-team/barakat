@@ -38,7 +38,8 @@ after_install = "barakat.setup.install.after_install"
 
 doc_events = {
 	"User": {
-		"after_insert": "barakat.sync.enqueue_user_sync",
+		"before_validate": "barakat.sync.capture_new_password",
+		"on_update": "barakat.sync.enqueue_user_sync",
 	},
 	"Employee": {
 		"validate": "barakat.validations.validate_employee_pin",
