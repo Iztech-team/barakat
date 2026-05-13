@@ -24,6 +24,11 @@ def redeem_client_token(token: str):
 
     site_url = frappe.conf.get("site_url") or frappe.local.site
 
+    # Derive the master site hostname for the Host header (needed when master_url
+    # is an internal IP like http://172.x.x.x:8000 but Frappe routes by hostname).
+    from urllib.parse import urlparse as _urlparse
+    master_host = frappe.conf.get("master_hostname") or _urlparse(master_url).hostname or "master.localhost"
+
     # Call master to verify the token
     try:
         resp = requests.post(
@@ -31,6 +36,7 @@ def redeem_client_token(token: str):
             headers={
                 "Authorization": f"token {api_key}:{api_secret}",
                 "Content-Type": "application/json",
+                "Host": master_host,
             },
             json={"token": token, "site_url": site_url},
             timeout=10,
@@ -58,26 +64,32 @@ def redeem_client_token(token: str):
             frappe.AuthenticationError,
         )
 
-    # Ensure the user exists locally
-    if not frappe.db.exists("User", user_email):
-        frappe.throw(
-            f"User '{user_email}' does not exist on this site. "
-            "They need to be created here first (the sync hook handles this automatically).",
-            frappe.DoesNotExistError,
-        )
+    # Ensure the user exists locally (use raw SQL to bypass any guest-context filters)
+    user_exists = frappe.db.sql(
+        "SELECT `name` FROM `tabUser` WHERE `name` = %s LIMIT 1", (user_email,)
+    )
+    if not user_exists:
+        # Auto-create the user — master already verified the token so they are legitimate
+        user_doc = frappe.new_doc("User")
+        user_doc.email = user_email
+        user_doc.first_name = user_email.split("@")[0]
+        user_doc.send_welcome_email = 0
+        user_doc.user_type = "System User"
+        user_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
 
-    # Create a local Frappe session for this user
-    # This sets the sid cookie in the response, same as a normal login
+    # Create a local Frappe session for this user using the standard login flow
     login_manager = frappe.auth.LoginManager()
     login_manager.user = user_email
     login_manager.post_login()
 
     full_name = frappe.db.get_value("User", user_email, "full_name") or user_email
 
-    # The sid is delivered via Set-Cookie header automatically by Frappe.
-    # We also return it in the body so the desktop app can read it without cookie parsing.
+    # frappe.local.session.sid is set by post_login()
+    sid = frappe.local.session.sid
+
     return {
         "email": user_email,
         "full_name": full_name,
-        "sid": frappe.local.session.data.sid,
+        "sid": sid,
     }
