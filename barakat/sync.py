@@ -85,7 +85,9 @@ def sync_user_to_master(payload, site_url):
 
 	# Upsert: try PUT first, fall back to POST on 404
 	# Strip email from PUT body — it's already in the URL
+	# send_welcome_email is always 0 — master must never send its own welcome email
 	put_payload = {k: v for k, v in payload.items() if k != "email"}
+	put_payload["send_welcome_email"] = 0
 	try:
 		resp = requests.put(
 			f"{master_url}/api/resource/User/{email}",
