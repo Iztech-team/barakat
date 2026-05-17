@@ -23,6 +23,7 @@ fixtures = [
 					"custom_pos_profile",
 					"custom_pos_price_list",				"custom_cash_account",
 				"custom_counter_account",					"custom_pos_pin",
+					"custom_role_preset",
 					"custom_pos_branches",
 					"custom_external_id",
 					"custom_operator_employee",				"custom_pos_opening_entry",					"custom_device_id",
