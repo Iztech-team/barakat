@@ -21,13 +21,22 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "POS Profile-custom_barakat_section",
+    "dt": "POS Profile",
+    "fieldname": "custom_barakat_section",
+    "label": "Barakat Settings",
+    "fieldtype": "Section Break",
+    "insert_after": "allow_partial_payment"
+  },
+  {
+    "doctype": "Custom Field",
     "name": "POS Profile-custom_device",
     "dt": "POS Profile",
     "fieldname": "custom_device",
     "label": "Linked Device",
     "fieldtype": "Link",
     "options": "Device",
-    "insert_after": "company",
+    "insert_after": "custom_barakat_section",
     "read_only": 0,
     "in_list_view": 1
   },
@@ -48,20 +57,50 @@
     "name": "POS Profile-custom_cash_account",
     "dt": "POS Profile",
     "fieldname": "custom_cash_account",
-    "label": "POS Cash Account",
+    "label": "Cash Drawer Account",
     "fieldtype": "Link",
     "options": "Account",
-    "insert_after": ""
+    "insert_after": "custom_branch"
   },
   {
     "doctype": "Custom Field",
-    "name": "POS Profile-custom_counter_account",
+    "name": "POS Profile-custom_salary_advance_account",
     "dt": "POS Profile",
-    "fieldname": "custom_counter_account",
-    "label": "POS Counter Account",
+    "fieldname": "custom_salary_advance_account",
+    "label": "Salary Advance Account",
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_cash_account"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Profile-custom_expense_account",
+    "dt": "POS Profile",
+    "fieldname": "custom_expense_account",
+    "label": "Expense Account",
+    "fieldtype": "Link",
+    "options": "Account",
+    "insert_after": "custom_salary_advance_account"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Profile-custom_owner_deposit_account",
+    "dt": "POS Profile",
+    "fieldname": "custom_owner_deposit_account",
+    "label": "Owner Deposit Account",
+    "fieldtype": "Link",
+    "options": "Account",
+    "insert_after": "custom_expense_account"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "POS Profile-custom_bank_account",
+    "dt": "POS Profile",
+    "fieldname": "custom_bank_account",
+    "label": "Bank Account",
+    "fieldtype": "Link",
+    "options": "Account",
+    "insert_after": "custom_owner_deposit_account"
   },
   {
     "doctype": "Custom Field",

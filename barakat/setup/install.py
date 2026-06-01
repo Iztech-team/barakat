@@ -73,7 +73,7 @@ def _create_default_customer():
 
 
 def _create_device_custom_fields():
-	"""Create custom fields for the device-profile mapping system."""
+	"""Create custom fields for the device-profile mapping and cash movement system."""
 	fields = [
 		# Branch: table of POS Profiles
 		{
@@ -84,6 +84,14 @@ def _create_device_custom_fields():
 			"options": "Branch POS Profile",
 			"insert_after": "custom_pos_company",
 		},
+		# POS Profile: section break grouping all Barakat fields
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_barakat_section",
+			"label": "Barakat Settings",
+			"fieldtype": "Section Break",
+			"insert_after": "allow_partial_payment",
+		},
 		# POS Profile: which device is linked to this profile
 		{
 			"dt": "POS Profile",
@@ -91,7 +99,7 @@ def _create_device_custom_fields():
 			"label": "Linked Device",
 			"fieldtype": "Link",
 			"options": "Device",
-			"insert_after": "company",
+			"insert_after": "custom_barakat_section",
 			"read_only": 0,
 			"in_list_view": 1,
 		},
@@ -105,6 +113,51 @@ def _create_device_custom_fields():
 			"insert_after": "custom_device",
 			"read_only": 1,
 			"in_list_view": 1,
+		},
+		# POS Profile: the physical cash drawer account for this device
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_cash_account",
+			"label": "Cash Drawer Account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"insert_after": "custom_branch",
+		},
+		# POS Profile: account used for the other side of salary advance movements
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_salary_advance_account",
+			"label": "Salary Advance Account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"insert_after": "custom_cash_account",
+		},
+		# POS Profile: account used for the other side of expense movements (maintenance, petty cash, other)
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_expense_account",
+			"label": "Expense Account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"insert_after": "custom_salary_advance_account",
+		},
+		# POS Profile: account used for the other side of owner deposit movements
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_owner_deposit_account",
+			"label": "Owner Deposit Account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"insert_after": "custom_expense_account",
+		},
+		# POS Profile: bank account used for the other side of bank deposit movements
+		{
+			"dt": "POS Profile",
+			"fieldname": "custom_bank_account",
+			"label": "Bank Account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"insert_after": "custom_owner_deposit_account",
 		},
 	]
 

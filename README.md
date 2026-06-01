@@ -14,23 +14,15 @@ bench install-app barakat
 
 ### Site Configuration
 
-After installing on each client site, add the following 3 variables to the site config:
+After installing, set one config variable on each client site:
 
 ```bash
-bench --site <client-site> set-config master_url "http://master.localhost:8000"
-bench --site <client-site> set-config master_api_key "your_master_api_key"
-bench --site <client-site> set-config master_api_secret "your_master_api_secret"
-bench --site <client-site> set-config site_url "<client-site>"
+bench --site <client-site> set-config front_door_domain "master.yourdomain.com"
 ```
 
 | Variable | Description |
 |---|---|
-| `master_url` | Full URL of the master ERPNext site |
-| `master_api_key` | API key from the master site service account |
-| `master_api_secret` | API secret from the master site service account |
-| `site_url` | Hostname (and port) of this client site, e.g. `pos.localhost:8000`. Sent to master during token verification to identify which site the user belongs to. |
-
-The API key and secret can be generated on the master site under **Settings → Users → (service user) → API Access → Generate Keys**.
+| `front_door_domain` | Hostname of the master ERPNext site. Required by the `iztechvalley_gateway` app to authenticate users and verify SSO tokens. |
 
 ### Contributing
 
