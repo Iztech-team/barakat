@@ -61,7 +61,7 @@
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_branch",
-    "link_filters": "[['account_type', '=', 'Cash'], ['company', '=', 'eval:doc.company']]"
+    "link_filters": "[[\"account_type\", \"=\", \"Cash\"], [\"company\", \"=\", \"eval:doc.company\"]]"
   },
   {
     "doctype": "Custom Field",
@@ -73,7 +73,7 @@
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_cash_account",
-    "link_filters": "[['account_type', '=', 'Receivable'], ['company', '=', 'eval:doc.company']]"
+    "link_filters": "[[\"account_type\", \"=\", \"Receivable\"], [\"company\", \"=\", \"eval:doc.company\"]]"
   },
   {
     "doctype": "Custom Field",
@@ -85,7 +85,7 @@
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_salary_advance_account",
-    "link_filters": "[['root_type', '=', 'Expense'], ['company', '=', 'eval:doc.company']]"
+    "link_filters": "[[\"root_type\", \"=\", \"Expense\"], [\"company\", \"=\", \"eval:doc.company\"]]"
   },
   {
     "doctype": "Custom Field",
@@ -97,7 +97,7 @@
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_expense_account",
-    "link_filters": "[['root_type', 'in', ['Equity', 'Liability']], ['company', '=', 'eval:doc.company']]"
+    "link_filters": "[[\"root_type\", \"in\", [\"Equity\", \"Liability\"]], [\"company\", \"=\", \"eval:doc.company\"]]"
   },
   {
     "doctype": "Custom Field",
@@ -109,7 +109,7 @@
     "fieldtype": "Link",
     "options": "Account",
     "insert_after": "custom_owner_deposit_account",
-    "link_filters": "[['account_type', '=', 'Bank'], ['company', '=', 'eval:doc.company']]"
+    "link_filters": "[[\"account_type\", \"=\", \"Bank\"], [\"company\", \"=\", \"eval:doc.company\"]]"
   },
   {
     "doctype": "Custom Field",

@@ -122,7 +122,7 @@ def _create_device_custom_fields():
 			"fieldtype": "Link",
 			"options": "Account",
 			"insert_after": "custom_branch",
-			"link_filters": "[['account_type', '=', 'Cash'], ['company', '=', 'eval:doc.company']]",
+			"link_filters": '[["account_type", "=", "Cash"], ["company", "=", "eval:doc.company"]]',
 		},
 		# POS Profile: account used for the other side of salary advance movements.
 		# Must be Receivable type so ERPNext can tag the employee as a party on the JE.
@@ -134,7 +134,7 @@ def _create_device_custom_fields():
 			"fieldtype": "Link",
 			"options": "Account",
 			"insert_after": "custom_cash_account",
-			"link_filters": "[['account_type', '=', 'Receivable'], ['company', '=', 'eval:doc.company']]",
+			"link_filters": '[["account_type", "=", "Receivable"], ["company", "=", "eval:doc.company"]]',
 		},
 		# POS Profile: account used for the other side of expense movements (maintenance, petty cash, other)
 		{
@@ -145,7 +145,7 @@ def _create_device_custom_fields():
 			"fieldtype": "Link",
 			"options": "Account",
 			"insert_after": "custom_salary_advance_account",
-			"link_filters": "[['root_type', '=', 'Expense'], ['company', '=', 'eval:doc.company']]",
+			"link_filters": '[["root_type", "=", "Expense"], ["company", "=", "eval:doc.company"]]',
 		},
 		# POS Profile: account used for the other side of owner deposit movements
 		{
@@ -156,7 +156,7 @@ def _create_device_custom_fields():
 			"fieldtype": "Link",
 			"options": "Account",
 			"insert_after": "custom_expense_account",
-			"link_filters": "[['root_type', 'in', ['Equity', 'Liability']], ['company', '=', 'eval:doc.company']]",
+			"link_filters": '[["root_type", "in", ["Equity", "Liability"]], ["company", "=", "eval:doc.company"]]',
 		},
 		# POS Profile: bank account used for the other side of bank deposit movements
 		{
@@ -167,7 +167,7 @@ def _create_device_custom_fields():
 			"fieldtype": "Link",
 			"options": "Account",
 			"insert_after": "custom_owner_deposit_account",
-			"link_filters": "[['account_type', '=', 'Bank'], ['company', '=', 'eval:doc.company']]",
+			"link_filters": '[["account_type", "=", "Bank"], ["company", "=", "eval:doc.company"]]',
 		},
 	]
 
