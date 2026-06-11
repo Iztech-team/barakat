@@ -12,6 +12,8 @@ bench get-app $URL_OF_THIS_REPO --branch main
 bench install-app barakat
 ```
 
+
+
 ### Site Configuration
 
 After installing, set one config variable on each client site:
