@@ -28,6 +28,8 @@ def _set_pos_invoice_type():
 
 def _set_commercial_rounding():
 	frappe.db.set_single_value("System Settings", "rounding_method", "Commercial Rounding")
+	frappe.db.set_default("rounding_method", "Commercial Rounding")
+	frappe.clear_document_cache("System Settings", "System Settings")
 
 
 def _set_session_expiry():
