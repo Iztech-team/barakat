@@ -7,7 +7,6 @@ def after_install():
 		_set_session_expiry,
 		_set_pos_invoice_type,
 		_set_commercial_rounding,
-		_create_misc_item,
 		_create_default_customer,
 		_provision_barakat_roles,
 	]:
@@ -15,6 +14,17 @@ def after_install():
 			fn()
 		except Exception as e:
 			frappe.log_error(f"barakat after_install: {fn.__name__} failed: {e}", "Install")
+	frappe.db.commit()
+
+
+def after_setup_wizard():
+	for fn in [
+		_create_misc_item,
+	]:
+		try:
+			fn()
+		except Exception as e:
+			frappe.log_error(f"barakat after_setup_wizard: {fn.__name__} failed: {e}", "Install")
 	frappe.db.commit()
 
 

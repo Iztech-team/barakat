@@ -8,3 +8,4 @@ barakat.patches.remove_counter_account_custom_field
 barakat.patches.add_link_filters_to_pos_profile_account_fields
 barakat.patches.clear_link_filters_from_pos_profile_account_fields
 barakat.patches.set_commercial_rounding
+barakat.patches.repair_misc_item_group
