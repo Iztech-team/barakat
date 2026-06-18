@@ -1,10 +1,26 @@
 import frappe
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 
 
 class BarakatPOSInvoice(POSInvoice):
+	def set_outstanding_amount(self):
+		# Standard POS Invoice sets outstanding = (rounded_total or grand_total) -
+		# paid_amount and ignores write_off_amount entirely. That leaves a fully
+		# written-off remainder — e.g. a 0.5 total that rounds to 0, where the
+		# customer pays nothing and the 0.5 is written off — stuck as Unpaid.
+		# Run ERPNext's standard logic first, then subtract the write-off so the
+		# invoice settles to Paid. This only affects invoices that actually carry a
+		# write-off (write_off_amount > 0); every other invoice is untouched. It
+		# also matches the ledger, which already books the write-off through the
+		# inherited Sales Invoice GL posting.
+		super().set_outstanding_amount()
+		if flt(self.write_off_amount):
+			self.outstanding_amount = max(
+				0.0, flt(self.outstanding_amount) - flt(self.write_off_amount)
+			)
+
 	def validate_pos_opening_entry(self):
 		opening_entries = frappe.get_all(
 			"POS Opening Entry",
