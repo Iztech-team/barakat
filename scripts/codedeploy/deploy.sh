@@ -21,6 +21,11 @@ case "${DEPLOYMENT_GROUP_NAME:-}" in
 esac
 echo "[deploy] app=$APP branch=$BRANCH prod=$IS_PROD group=${DEPLOYMENT_GROUP_NAME:-?}"
 
+# Apps share ONE bench; `bench migrate` takes a global lock. When several app
+# pipelines deploy at once they would collide, so serialize the bench section.
+exec 9>/tmp/barakat-bench-deploy.lock
+flock -w 900 9 || { echo "[deploy] could not acquire bench deploy lock within 900s" >&2; exit 1; }
+
 sudo -H -u frappe IS_PROD="$IS_PROD" APP="$APP" BRANCH="$BRANCH" BENCH="$BENCH" bash -euo pipefail <<'EOF'
 export PATH=/usr/bin:/usr/local/bin:/home/frappe/.local/bin:$PATH
 cd "$BENCH"
