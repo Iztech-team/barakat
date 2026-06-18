@@ -11,7 +11,11 @@ case "${DEPLOYMENT_GROUP_NAME:-}" in
 esac
 [ -z "$SITE" ] && { echo "[validate] no site mapped, skipping"; exit 0; }
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $SITE" http://localhost/api/method/ping || echo 000)
+# Resolve the site to localhost and follow the http->https redirect so we hit the
+# real serving path (nginx 301s http->https; the app answers 200 on https).
+code=$(curl -sk -L -o /dev/null -w '%{http_code}' \
+  --resolve "$SITE:80:127.0.0.1" --resolve "$SITE:443:127.0.0.1" \
+  "http://$SITE/api/method/frappe.ping" || echo 000)
 echo "[validate] $SITE -> HTTP $code"
 
 # ValidateService must fail the deploy if the site is down; ApplicationStop should not.
