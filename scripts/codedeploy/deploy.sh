@@ -32,8 +32,11 @@ fi
 
 # 2. Fast-forward the app's checkout to the env's branch
 cd "apps/$APP"
-git fetch origin "$BRANCH"
-git reset --hard "origin/$BRANCH"
+# Bench apps may track the GitHub repo under "origin" or "upstream" — use whichever exists.
+REMOTE=origin
+git remote get-url "$REMOTE" >/dev/null 2>&1 || REMOTE=upstream
+git fetch "$REMOTE" "$BRANCH"
+git reset --hard "$REMOTE/$BRANCH"
 cd "$BENCH"
 
 # 3. Apply schema/patches, rebuild this app's assets, restart workers
