@@ -6,6 +6,7 @@ set -uo pipefail
 # Pick a representative site per env to health-check.
 case "${DEPLOYMENT_GROUP_NAME:-}" in
   *prod*) SITE="barakat.iztech.net" ;;
+  *test*) SITE="pos2.35.158.120.8.nip.io" ;;   # site name resolves to localhost below
   *dev*)  SITE="pos2.35.158.120.8.nip.io" ;;
   *)      SITE="" ;;
 esac

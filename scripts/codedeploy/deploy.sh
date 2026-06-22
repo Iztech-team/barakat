@@ -41,7 +41,7 @@ cd "apps/$APP"
 REMOTE=origin
 git remote get-url "$REMOTE" >/dev/null 2>&1 || REMOTE=upstream
 git fetch "$REMOTE" "$BRANCH"
-git reset --hard FETCH_HEAD   # FETCH_HEAD = just-fetched branch tip (no remote-tracking ref needed)
+git checkout -B "$BRANCH" FETCH_HEAD   # put the app ON the env branch at the just-fetched tip
 cd "$BENCH"
 
 # 3. Apply schema/patches, rebuild this app's assets, restart workers
