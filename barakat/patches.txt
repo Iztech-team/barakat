@@ -9,3 +9,4 @@ barakat.patches.add_link_filters_to_pos_profile_account_fields
 barakat.patches.clear_link_filters_from_pos_profile_account_fields
 barakat.patches.set_commercial_rounding
 barakat.patches.repair_misc_item_group
+barakat.patches.make_sales_invoice_external_id_non_unique

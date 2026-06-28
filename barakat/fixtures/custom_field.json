@@ -297,7 +297,7 @@
     "fieldname": "custom_external_id",
     "label": "External Id",
     "fieldtype": "Data",
-    "unique": 1,
+    "unique": 0,
     "insert_after": ""
   },
   {
