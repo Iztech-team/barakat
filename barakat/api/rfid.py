@@ -46,6 +46,11 @@ def commission_units(item_code: str, warehouse: str, epcs) -> dict:
 				# Serial-and-Batch-Bundle + Serial Nos from these on submit.
 				"use_serial_batch_fields": 1,
 				"serial_no": "\n".join(new),
+				# Commissioning is about registering serials, not booking cost: a freshly
+				# tagged item often has no valuation rate yet, and ERPNext would otherwise
+				# refuse to submit the receipt ("Valuation Rate ... is required"). Allow a
+				# zero rate so intake never gets blocked on accounting setup.
+				"allow_zero_valuation_rate": 1,
 			}],
 		})
 		se.insert(ignore_permissions=True)
@@ -97,6 +102,9 @@ def decommission_units(epcs) -> dict:
 				"s_warehouse": warehouse,
 				"use_serial_batch_fields": 1,
 				"serial_no": "\n".join(serials),
+				# Same reasoning as commissioning: don't let a zero valuation rate block
+				# retiring a tag from stock.
+				"allow_zero_valuation_rate": 1,
 			}],
 		})
 		se.insert(ignore_permissions=True)
