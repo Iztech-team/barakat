@@ -20,6 +20,7 @@ def after_install():
 def after_setup_wizard(args=None):
 	for fn in [
 		_create_misc_item,
+		_fix_stock_adjustment_accounts,
 	]:
 		try:
 			fn()
@@ -29,15 +30,15 @@ def after_setup_wizard(args=None):
 
 
 def after_migrate():
-	if not frappe.db.exists("Item Group", "All Item Groups"):
-		return
-	if frappe.db.exists("Item", "MISC"):
-		return
-	try:
-		_create_misc_item()
-		frappe.db.commit()
-	except Exception as e:
-		frappe.log_error(f"barakat after_migrate: _create_misc_item failed: {e}", "Install")
+	# Re-apply post-setup fixes the setup_wizard_complete hook may have missed
+	# (sites restored, or provisioned via API). Each fixer is idempotent and
+	# self-guarding, so this is safe to run after every migrate.
+	for fn in [_create_misc_item, _fix_stock_adjustment_accounts]:
+		try:
+			fn()
+		except Exception as e:
+			frappe.log_error(f"barakat after_migrate: {fn.__name__} failed: {e}", "Install")
+	frappe.db.commit()
 
 
 def _enable_negative_stock():
@@ -58,9 +59,30 @@ def _set_session_expiry():
 	frappe.db.set_single_value("System Settings", "session_expiry", "8760:00")
 
 
+def _fix_stock_adjustment_accounts():
+	# On a brand-new company the Stock Adjustment account can land under a P&L
+	# (Expense) root. That blocks Bin / Stock Ledger creation when items are added,
+	# so a fresh site with no demo data can't take products. Force it to an
+	# Asset / Balance Sheet account so items create cleanly. Idempotent — the loop
+	# is empty until a company (chart of accounts) exists.
+	for acc in frappe.get_all(
+		"Account",
+		filters={"account_type": "Stock Adjustment"},
+		fields=["name", "root_type", "report_type"],
+	):
+		if acc.root_type != "Asset" or acc.report_type != "Balance Sheet":
+			frappe.db.set_value(
+				"Account",
+				acc.name,
+				{"root_type": "Asset", "report_type": "Balance Sheet"},
+			)
+
+
 def _create_misc_item():
 	if frappe.db.exists("Item", "MISC"):
 		return
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return  # site not set up yet — item groups come from erpnext/the wizard
 	if not frappe.db.exists("Item Group", "Miscellaneous"):
 		parent = "All Item Groups" if frappe.db.exists("Item Group", "All Item Groups") else ""
 		frappe.get_doc(
