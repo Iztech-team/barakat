@@ -10,6 +10,7 @@ def after_install():
 		_create_default_customer,
 		_provision_barakat_roles,
 		_grant_settings_manager_perms,
+		_grant_loyalty_manager_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
@@ -46,6 +47,7 @@ def after_migrate():
 		_fix_stock_adjustment_accounts,
 		_provision_barakat_roles,
 		_grant_settings_manager_perms,
+		_grant_loyalty_manager_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
@@ -200,6 +202,65 @@ def _grant_settings_manager_perms():
 		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "read", 1, validate=False)
 		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "write", 1, validate=False)
 		frappe.clear_cache(doctype=doctype)
+
+
+# Loyalty Program ships from ERPNext with a SINGLE permission row: `System Manager`
+# only (read/write/create/delete). Every other role — including all the functional
+# manager roles in the Manager persona bundle (Accounts/Sales/Stock Manager, etc.) —
+# has ZERO access, so listing programs raises
+#   frappe.exceptions.PermissionError: Insufficient Permission for Loyalty Program
+# (a doctype-level select-permission failure, NOT a record/user-permission filter).
+#
+# The admin panel's Loyalty Programs page ("برامج الولاء") reads Loyalty Program under
+# the acting user's own session (proxy → GET /api/loyalty/programs → frappe.client.get_list),
+# so a Manager persona — which deliberately does NOT hold `System Manager` (owner-bypass)
+# — gets a 403 and the page fails to load. Same class as the Rounding-page block that
+# `_grant_settings_manager_perms` fixes for System Settings / Global Defaults.
+#
+# Fix: grant the Manager-only `Barakat Settings Manager` role read+write+create+delete
+# on Loyalty Program. That role is bundled ONLY into the Manager persona
+# (proxy-barakat/src/modules/roles/catalog.ts) and is already assigned to existing
+# Manager users, so this unblocks them immediately WITHOUT handing out `System Manager`
+# and with ZERO blast radius to native ERPNext roles (unlike granting to Sales User /
+# Accounts User, which ~70–100 users hold). Manager persona is `customers: write`, so it
+# needs full CRUD (create/edit/delete programs), not just read.
+#
+# NOTE (scope): the Loyalty tab is gated by the `customers` module, which Branch
+# Supervisor (write), Cashier (write) and Accountant (read) also have — they hit the
+# SAME 403. They are NOT fixed here: none of them holds a dedicated persona-scoped role
+# (their bundles are broad native roles like Sales User/Accounts User), so unblocking
+# them cleanly requires new dedicated roles bundled into those personas + a back-fill for
+# existing users. That is a larger change left for a follow-up decision.
+LOYALTY_MANAGER_DOCTYPE = "Loyalty Program"
+
+
+def _grant_loyalty_manager_perms():
+	"""Give the Manager-only `Barakat Settings Manager` role CRUD on Loyalty Program.
+
+	Uses frappe.permissions.add_permission, which copies the doctype's existing standard
+	DocPerms into Custom DocPerm (setup_custom_perms) BEFORE adding our row — critical so
+	`System Manager`'s own perms are preserved rather than silently replaced.
+
+	Idempotent: re-adding an existing (role, permlevel) perm is a no-op and the property
+	writes are re-asserted each run — safe to call on every migrate. Guarded to run only
+	when the Loyalty Program doctype exists (it ships with erpnext; the guard is defensive).
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	if not frappe.db.exists("DocType", LOYALTY_MANAGER_DOCTYPE):
+		return  # erpnext not installed / doctype absent — nothing to grant
+
+	if not frappe.db.exists("Role", SETTINGS_MANAGER_ROLE):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": SETTINGS_MANAGER_ROLE, "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+	add_permission(LOYALTY_MANAGER_DOCTYPE, SETTINGS_MANAGER_ROLE, 0)
+	for perm in ("read", "write", "create", "delete"):
+		update_permission_property(
+			LOYALTY_MANAGER_DOCTYPE, SETTINGS_MANAGER_ROLE, 0, perm, 1, validate=False
+		)
+	frappe.clear_cache(doctype=LOYALTY_MANAGER_DOCTYPE)
 
 
 def _relax_demo_company_user_perm():
