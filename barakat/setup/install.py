@@ -10,6 +10,7 @@ def after_install():
 		_create_default_customer,
 		_provision_barakat_roles,
 		_grant_settings_manager_perms,
+		_relax_demo_company_user_perm,
 	]:
 		try:
 			fn()
@@ -45,6 +46,7 @@ def after_migrate():
 		_fix_stock_adjustment_accounts,
 		_provision_barakat_roles,
 		_grant_settings_manager_perms,
+		_relax_demo_company_user_perm,
 	]:
 		try:
 			fn()
@@ -198,3 +200,33 @@ def _grant_settings_manager_perms():
 		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "read", 1, validate=False)
 		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "write", 1, validate=False)
 		frappe.clear_cache(doctype=doctype)
+
+
+def _relax_demo_company_user_perm():
+	"""Ignore user permissions on `Global Defaults.demo_company`.
+
+	Global Defaults ships a `demo_company` Link(Company) field with
+	`ignore_user_permissions = 0`. A company-restricted user (e.g. a Manager holding
+	`Barakat Settings Manager`) then gets a 403 reading Global Defaults — the record is
+	"linked to Company … field Demo Company" that their User Permission doesn't allow.
+	The sibling `default_company` field already ships with ignore_user_permissions = 1;
+	this mirrors that so the AP Rounding page can read Global Defaults.
+
+	Applied via a Property Setter (make_property_setter upserts, so it's idempotent and
+	safe to re-assert on every migrate). Guarded to run only when the field exists —
+	some sites (no demo data / older schema) may not have `demo_company`.
+	"""
+	field = frappe.get_meta("Global Defaults").get_field("demo_company")
+	if not field:
+		return  # field absent on this site — nothing to relax
+
+	frappe.make_property_setter(
+		{
+			"doctype": "Global Defaults",
+			"fieldname": "demo_company",
+			"property": "ignore_user_permissions",
+			"value": 1,
+			"property_type": "Check",
+		}
+	)
+	frappe.clear_cache(doctype="Global Defaults")
