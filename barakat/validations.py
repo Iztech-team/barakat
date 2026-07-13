@@ -70,8 +70,8 @@ def validate_customer_mobile_unique(doc, method):
 			title=_("Duplicate Mobile Number"),
 			msg=_(
 				"A customer in this company already uses the mobile number <b>{0}</b>: "
-				"<b>{1}</b> ({2}). Select that customer instead of creating a duplicate."
-			).format(mobile, e["customer_name"] or e["name"], e["name"]),
+				"<b>{1}</b>. Select that customer instead of creating a duplicate."
+			).format(mobile, e["customer_name"] or e["name"]),
 		)
 
 
