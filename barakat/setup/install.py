@@ -9,6 +9,7 @@ def after_install():
 		_set_commercial_rounding,
 		_create_default_customer,
 		_provision_barakat_roles,
+		_grant_settings_manager_perms,
 	]:
 		try:
 			fn()
@@ -33,7 +34,18 @@ def after_migrate():
 	# Re-apply post-setup fixes the setup_wizard_complete hook may have missed
 	# (sites restored, or provisioned via API). Each fixer is idempotent and
 	# self-guarding, so this is safe to run after every migrate.
-	for fn in [_create_misc_item, _fix_stock_adjustment_accounts]:
+	#
+	# _provision_barakat_roles + _grant_settings_manager_perms run here too so
+	# EXISTING tenants (installed before this change) pick up the new
+	# `Barakat Settings Manager` role and its System Settings / Global Defaults
+	# permissions on the next `bench migrate` — no reinstall needed, and the
+	# grant survives future migrations (it's re-asserted, idempotently, each run).
+	for fn in [
+		_create_misc_item,
+		_fix_stock_adjustment_accounts,
+		_provision_barakat_roles,
+		_grant_settings_manager_perms,
+	]:
 		try:
 			fn()
 		except Exception as e:
@@ -137,3 +149,52 @@ def _provision_barakat_roles():
 		if frappe.db.exists("Role", role_name):
 			continue
 		frappe.get_doc({"doctype": "Role", "role_name": role_name}).insert(ignore_permissions=True)
+
+
+# Dedicated custom role that carries read+write on ONLY the two singles the admin
+# panel's Rounding page needs. NOT a persona (not a custom_role_preset value); it is
+# bundled into the Manager persona's ERP role bundle by the proxy
+# (proxy-barakat/src/modules/roles/catalog.ts). Keeping it separate from the persona
+# roles means the grant below is scoped to exactly the Manager bundle and nothing else.
+SETTINGS_MANAGER_ROLE = "Barakat Settings Manager"
+
+# The only doctypes this role may touch. Both are Single doctypes that ship with
+# permissions for `System Manager` ONLY. The AP Rounding page reads/writes them under
+# the acting user's own session:
+#   - Global Defaults.disable_rounded_total  (toggle rounded grand total)
+#   - System Settings.rounding_method         (rounding algorithm)
+# SECURITY NOTE: System Settings and Global Defaults expose MANY other sensitive
+# fields (session/password policy, default company/currency/UOM, number/date formats,
+# etc.). Granting write here exposes ALL of those fields to whoever holds this role —
+# currently only the Manager persona. This is an accepted, deliberate tradeoff to let
+# Managers use the Rounding page without the far broader `System Manager` role.
+SETTINGS_MANAGER_DOCTYPES = ("System Settings", "Global Defaults")
+
+
+def _grant_settings_manager_perms():
+	"""Give `Barakat Settings Manager` read+write on the two rounding singles.
+
+	Uses frappe.permissions.add_permission, which first copies the doctype's existing
+	standard DocPerms into Custom DocPerm (frappe.permissions.setup_custom_perms) before
+	adding the new row. That copy is CRITICAL: adding a Custom DocPerm otherwise REPLACES
+	the standard perms entirely, which would silently strip `System Manager`'s own
+	read/write on these singles. Going through add_permission preserves System Manager.
+
+	Idempotent: re-adding an existing (role, permlevel) perm is a no-op, and the property
+	writes are re-asserted each run — safe to call on every migrate.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	if not frappe.db.exists("Role", SETTINGS_MANAGER_ROLE):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": SETTINGS_MANAGER_ROLE, "desk_access": 1}
+		).insert(ignore_permissions=True)
+
+	for doctype in SETTINGS_MANAGER_DOCTYPES:
+		# add_permission runs setup_custom_perms(doctype) first → copies the existing
+		# System Manager DocPerm into Custom DocPerm, then adds our role's row (perm
+		# level 0). Returns None if the row already exists (idempotent).
+		add_permission(doctype, SETTINGS_MANAGER_ROLE, 0)
+		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "read", 1, validate=False)
+		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "write", 1, validate=False)
+		frappe.clear_cache(doctype=doctype)

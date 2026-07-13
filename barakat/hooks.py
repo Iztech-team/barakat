@@ -22,6 +22,11 @@ fixtures = [
 					"Accountant",
 					"Inventory Keeper",
 					"HR",
+					# Dedicated role granting read+write on System Settings /
+					# Global Defaults only (rounding page). Bundled into the
+					# Manager persona by the proxy; perms set by
+					# barakat.setup.install._grant_settings_manager_perms.
+					"Barakat Settings Manager",
 				],
 			]
 		],
