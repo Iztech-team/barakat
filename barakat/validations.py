@@ -44,6 +44,37 @@ def validate_item_disable(doc, method):
 	)
 
 
+def validate_customer_mobile_unique(doc, method):
+	mobile = (doc.mobile_no or "").strip()
+	if not mobile:
+		return
+	company = doc.custom_company
+	if not company:
+		return
+	existing = frappe.db.sql(
+		"""
+		SELECT name, customer_name
+		FROM `tabCustomer`
+		WHERE mobile_no = %s
+		  AND custom_company = %s
+		  AND disabled = 0
+		  AND name != %s
+		LIMIT 1
+		""",
+		(mobile, company, doc.name or ""),
+		as_dict=True,
+	)
+	if existing:
+		e = existing[0]
+		frappe.throw(
+			title=_("Duplicate Mobile Number"),
+			msg=_(
+				"A customer in this company already uses the mobile number <b>{0}</b>: "
+				"<b>{1}</b> ({2}). Select that customer instead of creating a duplicate."
+			).format(mobile, e["customer_name"] or e["name"], e["name"]),
+		)
+
+
 def validate_employee_pin(doc, method):
 	pin = (doc.custom_pos_pin or "").strip()
 

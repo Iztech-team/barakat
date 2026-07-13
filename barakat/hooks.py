@@ -109,6 +109,9 @@ doc_events = {
 	"Item": {
 		"validate": "barakat.validations.validate_item_disable",
 	},
+	"Customer": {
+		"validate": "barakat.validations.validate_customer_mobile_unique",
+	},
 }
 
 doctype_js = {
