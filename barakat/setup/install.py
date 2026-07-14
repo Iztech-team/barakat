@@ -267,23 +267,35 @@ def _grant_loyalty_manager_perms():
 	frappe.clear_cache(doctype=LOYALTY_MANAGER_DOCTYPE)
 
 
-# Dedicated custom role that lets a Manager persona create/edit staff (create the
-# ERPNext `User` + set a password) WITHOUT handing out the far broader `System
-# Manager` role. Same rationale as `SETTINGS_MANAGER_ROLE` above, just scoped to the
-# `User` doctype instead of the rounding singles / Loyalty Program.
+# Dedicated custom role that lets a Manager persona create/edit staff WITHOUT handing
+# out the far broader `System Manager` role. Same rationale as `SETTINGS_MANAGER_ROLE`
+# above. The Manager creates staff by writing these doctypes DIRECTLY (no service
+# account), so the role must grant create+write on EVERY doctype the staff-create flow
+# touches — the ERPNext `User` + password, the `Employee` record, its `Designation`,
+# the branch/company `User Permission` scoping rows, and (when a salary is set) the
+# `Salary Structure Assignment`. Granting only `User` makes staff creation 403 on the
+# very first `Employee` insert.
 STAFF_MANAGER_ROLE = "Barakat Staff Manager"
 
-STAFF_MANAGER_DOCTYPE = "User"
+# doctype -> perms the role needs. Ordered by the create flow: Employee first (the
+# insert that used to 403), then the login + scoping docs.
+STAFF_MANAGER_PERMS = {
+	"User": ("read", "write", "create"),
+	"Employee": ("read", "write", "create"),
+	"Designation": ("read", "write", "create"),
+	"User Permission": ("read", "write", "create", "delete"),
+	"Salary Structure Assignment": ("read", "write", "create", "submit", "cancel"),
+}
 
 
 def _grant_staff_manager_perms():
-	"""Give `Barakat Staff Manager` create+write+read on the `User` doctype.
+	"""Give `Barakat Staff Manager` create+write on every doctype the staff-create flow writes.
 
 	Uses frappe.permissions.add_permission, which first copies the doctype's existing
 	standard DocPerms into Custom DocPerm (frappe.permissions.setup_custom_perms) before
 	adding the new row. That copy is CRITICAL: adding a Custom DocPerm otherwise REPLACES
-	the standard perms entirely, which would silently strip `System Manager`'s own
-	perms on User. Going through add_permission preserves System Manager.
+	the standard perms entirely, which would silently strip `System Manager`'s (and HR's)
+	own perms on that doctype. Going through add_permission preserves them.
 
 	Idempotent: re-adding an existing (role, permlevel) perm is a no-op, and the property
 	writes are re-asserted each run — safe to call on every migrate.
@@ -296,13 +308,13 @@ def _grant_staff_manager_perms():
 		).insert(ignore_permissions=True)
 
 	# add_permission runs setup_custom_perms(doctype) first → copies the existing
-	# System Manager DocPerm into Custom DocPerm, then adds our role's row (perm
-	# level 0). Returns None if the row already exists (idempotent).
-	add_permission(STAFF_MANAGER_DOCTYPE, STAFF_MANAGER_ROLE, 0)
-	update_permission_property(STAFF_MANAGER_DOCTYPE, STAFF_MANAGER_ROLE, 0, "create", 1, validate=False)
-	update_permission_property(STAFF_MANAGER_DOCTYPE, STAFF_MANAGER_ROLE, 0, "write", 1, validate=False)
-	update_permission_property(STAFF_MANAGER_DOCTYPE, STAFF_MANAGER_ROLE, 0, "read", 1, validate=False)
-	frappe.clear_cache(doctype=STAFF_MANAGER_DOCTYPE)
+	# standard DocPerms (System Manager, HR, …) into Custom DocPerm, then adds our
+	# role's row (perm level 0). Returns None if the row already exists (idempotent).
+	for doctype, perms in STAFF_MANAGER_PERMS.items():
+		add_permission(doctype, STAFF_MANAGER_ROLE, 0)
+		for perm in perms:
+			update_permission_property(doctype, STAFF_MANAGER_ROLE, 0, perm, 1, validate=False)
+		frappe.clear_cache(doctype=doctype)
 
 
 def _relax_demo_company_user_perm():
