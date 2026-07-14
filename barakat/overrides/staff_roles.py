@@ -32,25 +32,77 @@ PERSONAS = frozenset(
 )
 
 # The broad ERPNext role bundle every AP persona shares. Must match the proxy
-# BROAD_ERP_BUNDLE. Intentionally excludes System Manager / Administrator.
-BROAD_ERP_BUNDLE = (
-	"Manager",
+# BROAD_ERP_BUNDLE. This is the FULL set of non-disabled roles on the site
+# EXCEPT the owner/escalation roles System Manager / Administrator (and the
+# Frappe-managed base roles Guest / All), so a persona session never 403s an
+# action the admin panel allows. The list is hard-coded (not queried at runtime)
+# so it stays static and reviewable. Resolved from pos2 on 2026-07-14.
+#
+# RISK — the following included roles grant code-execution / owner-adjacent
+# reach and may want removing (flagged to the tenant owner):
+#   - "Script Manager": can create Server Scripts (arbitrary Python) = escalation.
+#   - "Report Manager": can create Query/Script Reports (embedded code).
+#   - "Baraka Owner": tenant owner role; owner-adjacent by name.
+BROAD_ERP_BUNDLE = [
+	"Academics User",
+	"Accountant",
 	"Accounts Manager",
-	"Sales Master Manager",
-	"Sales Manager",
-	"Stock Manager",
-	"Item Manager",
-	"Purchase Manager",
-	"Purchase Master Manager",
-	"HR Manager",
+	"Accounts User",
+	"Analytics",
+	"Auditor",
+	"Baraka Branch",
+	"Baraka Owner",
 	"Barakat Settings Manager",
 	"Barakat Staff Manager",
-	"Accounts User",
-	"Sales User",
-	"Stock User",
-	"Purchase User",
+	"Branch Supervisor",
+	"Cashier",
+	"Customer",
+	"Dashboard Manager",
+	"Delivery Manager",
+	"Delivery User",
+	"Desk User",
+	"Employee",
+	"Employee Self Service",
+	"Expense Approver",
+	"Fleet Manager",
+	"Fulfillment User",
+	"HR",
+	"HR Manager",
 	"HR User",
-)
+	"Inbox User",
+	"Interviewer",
+	"Inventory Keeper",
+	"Item Manager",
+	"Knowledge Base Contributor",
+	"Knowledge Base Editor",
+	"Leave Approver",
+	"Maintenance Manager",
+	"Maintenance User",
+	"Manager",
+	"Manufacturing Manager",
+	"Manufacturing User",
+	"Marketing Manager",
+	"Newsletter Manager",
+	"Prepared Report User",
+	"Projects Manager",
+	"Projects User",
+	"Purchase Manager",
+	"Purchase Master Manager",
+	"Purchase User",
+	"Quality Manager",
+	"Report Manager",
+	"Sales Manager",
+	"Sales Master Manager",
+	"Sales User",
+	"Script Manager",
+	"Stock Manager",
+	"Stock User",
+	"Supplier",
+	"Support Team",
+	"Translator",
+	"Website Manager",
+	"Workspace Manager",
+]
 
 # Roles that must never be granted by this hook and mark an owner/admin account
 # that must never be touched.
