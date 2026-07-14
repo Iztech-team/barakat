@@ -112,6 +112,13 @@ doc_events = {
 	"Customer": {
 		"validate": "barakat.validations.validate_customer_mobile_unique",
 	},
+	"Company": {
+		"after_insert": "barakat.setup.install.provision_company_loyalty_payment",
+	},
+	"Mode of Payment": {
+		"on_trash": "barakat.overrides.loyalty_payment.guard_loyalty_mode_delete",
+		"validate": "barakat.overrides.loyalty_payment.guard_loyalty_mode_rename",
+	},
 }
 
 doctype_js = {

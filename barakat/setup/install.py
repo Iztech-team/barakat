@@ -378,3 +378,8 @@ def _provision_loyalty_payment_methods() -> None:
 			_provision_loyalty_payment_for_company(company)
 		except Exception:
 			frappe.log_error(title="barakat: loyalty payment provisioning failed", message=frappe.get_traceback())
+
+
+def provision_company_loyalty_payment(doc, method):
+	"""Company after_insert: create this new shop's Loyalty Points mode immediately."""
+	_provision_loyalty_payment_for_company(doc.name)
