@@ -9,10 +9,12 @@ with elevated permissions (the same elevated path ERPNext itself uses to append
 permission.
 
 Security notes:
-- The bundle intentionally excludes `System Manager` / `Administrator`, so this
-  is not a self-escalation path.
-- Owner/admin accounts (already holding `System Manager` or `Administrator`) are
-  never modified.
+- Per the tenant owner's explicit request, the bundle now includes EVERY enabled
+  site role EXCEPT `Administrator` — INCLUDING `System Manager`. Staff personas
+  therefore intentionally receive full ERPNext admin. See the RISK note on
+  BROAD_ERP_BUNDLE below.
+- Only `Administrator` is protected: accounts already holding `Administrator` are
+  never modified, and the bundle can never contain it.
 - Only missing roles are added; nothing is ever removed.
 """
 
@@ -33,13 +35,15 @@ PERSONAS = frozenset(
 
 # The broad ERPNext role bundle every AP persona shares. Must match the proxy
 # BROAD_ERP_BUNDLE. This is the FULL set of non-disabled roles on the site
-# EXCEPT the owner/escalation roles System Manager / Administrator (and the
-# Frappe-managed base roles Guest / All), so a persona session never 403s an
-# action the admin panel allows. The list is hard-coded (not queried at runtime)
-# so it stays static and reviewable. Resolved from pos2 on 2026-07-14.
+# EXCEPT `Administrator` (and the Frappe-managed base roles Guest / All), so a
+# persona session never 403s an action the admin panel allows. The list is
+# hard-coded (not queried at runtime) so it stays static and reviewable.
+# Resolved from pos2 on 2026-07-14.
 #
-# RISK — the following included roles grant code-execution / owner-adjacent
-# reach and may want removing (flagged to the tenant owner):
+# RISK — the following included roles grant full-admin / code-execution reach and
+# may want removing (flagged to the tenant owner, who explicitly requested them):
+#   - "System Manager": full ERPNext admin (all doctypes, users, permissions,
+#     permlevel-1 role writes). Owner-equivalent; included per explicit request.
 #   - "Script Manager": can create Server Scripts (arbitrary Python) = escalation.
 #   - "Report Manager": can create Query/Script Reports (embedded code).
 #   - "Baraka Owner": tenant owner role; owner-adjacent by name.
@@ -99,18 +103,21 @@ BROAD_ERP_BUNDLE = [
 	"Stock User",
 	"Supplier",
 	"Support Team",
+	"System Manager",
 	"Translator",
 	"Website Manager",
 	"Workspace Manager",
 ]
 
-# Roles that must never be granted by this hook and mark an owner/admin account
-# that must never be touched.
-PROTECTED_ROLES = frozenset({"System Manager", "Administrator"})
+# `Administrator` is the only untouchable account: it must never be granted by
+# this hook, and accounts already holding it are never modified. (System Manager
+# is intentionally part of the bundle per the tenant owner's request, so it is
+# NOT protected here.)
+PROTECTED_ROLES = frozenset({"Administrator"})
 
-# Safety assertion: the bundle must never contain a protected role.
-assert not (set(BROAD_ERP_BUNDLE) & PROTECTED_ROLES), (
-	"BROAD_ERP_BUNDLE must not contain System Manager / Administrator"
+# Safety assertion: the bundle must never contain Administrator.
+assert "Administrator" not in set(BROAD_ERP_BUNDLE), (
+	"BROAD_ERP_BUNDLE must not contain Administrator"
 )
 
 
