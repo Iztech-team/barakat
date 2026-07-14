@@ -99,6 +99,8 @@ after_migrate = "barakat.setup.install.after_migrate"
 doc_events = {
 	"Employee": {
 		"validate": "barakat.validations.validate_employee_pin",
+		"after_insert": "barakat.overrides.staff_roles.reassert_persona_roles",
+		"on_update": "barakat.overrides.staff_roles.reassert_persona_roles",
 	},
 	"Branch": {
 		"validate": "barakat.overrides.branch.validate_branch",
