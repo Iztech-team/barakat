@@ -133,6 +133,16 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "Employee-custom_can_manage_shift",
+    "dt": "Employee",
+    "fieldname": "custom_can_manage_shift",
+    "label": "Can Manage Shift (POS)",
+    "fieldtype": "Check",
+    "default": "0",
+    "insert_after": "custom_role_preset"
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Employee-custom_pos_branches",
     "dt": "Employee",
     "fieldname": "custom_pos_branches",
