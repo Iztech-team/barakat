@@ -12,6 +12,7 @@ def after_install():
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_relax_demo_company_user_perm,
+		_provision_loyalty_payment_methods,
 	]:
 		try:
 			fn()
@@ -49,6 +50,7 @@ def after_migrate():
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_relax_demo_company_user_perm,
+		_provision_loyalty_payment_methods,
 	]:
 		try:
 			fn()
@@ -291,3 +293,88 @@ def _relax_demo_company_user_perm():
 		}
 	)
 	frappe.clear_cache(doctype="Global Defaults")
+
+
+LOYALTY_MODE_PREFIX = "Loyalty Points"
+
+
+def _loyalty_mode_name(company: str) -> str:
+	return f"{LOYALTY_MODE_PREFIX} - {company}"
+
+
+def _ensure_loyalty_expense_account(company: str) -> str | None:
+	"""Dedicated Expense account 'Loyalty Points Redemption - <abbr>' for the company.
+	Returns the account name, or None if the company has no abbr / no Expense parent."""
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	if not abbr:
+		return None
+	acct_name = f"Loyalty Points Redemption - {abbr}"
+	if frappe.db.exists("Account", acct_name):
+		return acct_name
+	# Parent = the company's top Expenses group (root_type Expense, is_group=1).
+	parent = frappe.db.get_value(
+		"Account",
+		{"company": company, "root_type": "Expense", "is_group": 1, "parent_account": ["is", "not set"]},
+		"name",
+	) or frappe.db.get_value(
+		"Account", {"company": company, "root_type": "Expense", "is_group": 1}, "name"
+	)
+	if not parent:
+		return None
+	doc = frappe.get_doc({
+		"doctype": "Account",
+		"account_name": "Loyalty Points Redemption",
+		"company": company,
+		"parent_account": parent,
+		"root_type": "Expense",
+		"report_type": "Profit and Loss",
+		"is_group": 0,
+	})
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def _provision_loyalty_payment_for_company(company: str) -> None:
+	"""Idempotently ensure the 'Loyalty Points - <company>' Mode of Payment exists
+	(type General, custom_company set, per-company account row) and is on every POS
+	Profile of that company. Safe to re-run."""
+	acct = _ensure_loyalty_expense_account(company)
+	mode_name = _loyalty_mode_name(company)
+	if not frappe.db.exists("Mode of Payment", mode_name):
+		mop = frappe.get_doc({
+			"doctype": "Mode of Payment",
+			"mode_of_payment": mode_name,
+			"type": "General",
+			"enabled": 1,
+		})
+		# custom_company is a barakat custom field on Mode of Payment (same convention
+		# as the existing "<name> - <company>" modes). Set only if the field exists.
+		if mop.meta.has_field("custom_company"):
+			mop.custom_company = company
+		if acct:
+			mop.append("accounts", {"company": company, "default_account": acct})
+		mop.insert(ignore_permissions=True)
+	else:
+		mop = frappe.get_doc("Mode of Payment", mode_name)
+		changed = False
+		if mop.meta.has_field("custom_company") and mop.custom_company != company:
+			mop.custom_company = company; changed = True
+		if acct and not any(r.company == company for r in mop.accounts):
+			mop.append("accounts", {"company": company, "default_account": acct}); changed = True
+		if changed:
+			mop.save(ignore_permissions=True)
+
+	# Add to each POS Profile of this company (non-default), idempotently.
+	for profile_name in frappe.get_all("POS Profile", filters={"company": company}, pluck="name"):
+		profile = frappe.get_doc("POS Profile", profile_name)
+		if not any(p.mode_of_payment == mode_name for p in profile.payments):
+			profile.append("payments", {"mode_of_payment": mode_name, "default": 0})
+			profile.save(ignore_permissions=True)
+
+
+def _provision_loyalty_payment_methods() -> None:
+	for company in frappe.get_all("Company", pluck="name"):
+		try:
+			_provision_loyalty_payment_for_company(company)
+		except Exception:
+			frappe.log_error(title="barakat: loyalty payment provisioning failed", message=frappe.get_traceback())
