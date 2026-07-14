@@ -204,3 +204,33 @@ def validate_pos_profile_accounts(doc, method):
 					f"<b>{actual}</b>, but it must be <b>{expected}</b>.",
 					title="Invalid Account",
 				)
+
+	validate_pos_profile_loyalty_payment_accounts(doc, method)
+
+
+# Barakat auto-creates one "Loyalty Points - <Program>" Mode of Payment per loyalty
+# program (see overrides/loyalty_payment.py). That Mode of Payment must have a
+# Mode of Payment Account row for the POS Profile's company, or redeeming points
+# at the POS has nowhere to post to.
+LOYALTY_MODE_PREFIX = "Loyalty Points - "
+
+
+def validate_pos_profile_loyalty_payment_accounts(doc, method):
+	for row in doc.payments or []:
+		mode_name = row.mode_of_payment
+		if not mode_name or not mode_name.startswith(LOYALTY_MODE_PREFIX):
+			continue
+
+		default_account = frappe.db.get_value(
+			"Mode of Payment Account",
+			{"parent": mode_name, "company": doc.company},
+			"default_account",
+		)
+		if not default_account:
+			frappe.throw(
+				title=_("Loyalty Payment Method"),
+				msg=_(
+					"The loyalty payment method '{0}' has no account set for company {1}. "
+					"Set its account before saving this POS Profile."
+				).format(mode_name, doc.company),
+			)
