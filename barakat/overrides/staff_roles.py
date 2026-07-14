@@ -33,6 +33,21 @@ PERSONAS = frozenset(
 	}
 )
 
+# Personas that manage/oversee people and must see ALL staff — so they must NOT
+# carry the "Employee = own record" User Permission. That lock scopes a user to
+# their own Employee, and because shifts / attendance / salary all link to
+# Employee, it silently hides other people's records too (e.g. a Branch
+# Supervisor seeing only their own shifts). Cashier / Inventory Keeper are NOT
+# here — they legitimately keep the own-record lock.
+SEE_ALL_PERSONAS = frozenset(
+	{
+		"Manager",
+		"Branch Supervisor",
+		"Accountant",
+		"HR",
+	}
+)
+
 # The broad ERPNext role bundle every AP persona shares. Must match the proxy
 # BROAD_ERP_BUNDLE. This is the FULL set of non-disabled roles on the site
 # EXCEPT `Administrator` (and the Frappe-managed base roles Guest / All), so a
@@ -143,12 +158,18 @@ def reassert_persona_roles(doc, method=None):
 	if existing_roles & PROTECTED_ROLES:
 		return
 
-	# Add only the bundle roles the user is actually missing. If nothing is
-	# missing, short-circuit to avoid a wasted save (and any re-fire).
-	missing = [role for role in BROAD_ERP_BUNDLE if role not in existing_roles]
-	if not missing:
-		return
+	# See-all personas must never keep the "Employee = own record" User Permission
+	# — it hides other people's shifts / attendance / salary (all link to Employee).
+	# Strip any that exist (ERPNext or a prior persona can leave one behind).
+	if preset in SEE_ALL_PERSONAS:
+		for up_name in frappe.get_all(
+			"User Permission", filters={"user": email, "allow": "Employee"}, pluck="name"
+		):
+			frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
 
-	# add_roles saves the User with ignore_permissions internally, so this
-	# bypasses the permlevel-1 gate without needing the caller's permission.
-	user.add_roles(*missing)
+	# Add only the bundle roles the user is actually missing.
+	missing = [role for role in BROAD_ERP_BUNDLE if role not in existing_roles]
+	if missing:
+		# add_roles saves the User with ignore_permissions internally, so this
+		# bypasses the permlevel-1 gate without needing the caller's permission.
+		user.add_roles(*missing)
