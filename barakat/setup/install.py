@@ -354,32 +354,41 @@ def _loyalty_mode_name(company: str) -> str:
 	return f"{LOYALTY_MODE_PREFIX} - {company}"
 
 
-def _ensure_loyalty_expense_account(company: str) -> str | None:
-	"""Dedicated Expense account 'Loyalty Points Redemption - <abbr>' for the company.
-	Returns the account name, or None if the company has no abbr / no Expense parent."""
+def _ensure_loyalty_liability_account(company: str) -> str | None:
+	"""Dedicated Liability account 'Loyalty Points Payable - <abbr>' for the company.
+	Redeemed loyalty points are money owed to customers (a liability), so the Mode of
+	Payment must settle against a Balance-Sheet liability account -- NOT a P&L expense
+	account (an expense account requires a cost center and breaks POS shift-close).
+	Returns the account name, or None if the company has no abbr / no Liability parent."""
 	abbr = frappe.db.get_value("Company", company, "abbr")
 	if not abbr:
 		return None
-	acct_name = f"Loyalty Points Redemption - {abbr}"
+	acct_name = f"Loyalty Points Payable - {abbr}"
 	if frappe.db.exists("Account", acct_name):
 		return acct_name
-	# Parent = the company's top Expenses group (root_type Expense, is_group=1).
+	# Parent = the company's Current Liabilities group, falling back to the top-level
+	# Liabilities group (root_type Liability). root_type is inherited from the parent,
+	# which is what actually keeps the account on the Balance Sheet.
 	parent = frappe.db.get_value(
 		"Account",
-		{"company": company, "root_type": "Expense", "is_group": 1, "parent_account": ["is", "not set"]},
+		{"company": company, "account_name": "Current Liabilities", "root_type": "Liability", "is_group": 1},
 		"name",
 	) or frappe.db.get_value(
-		"Account", {"company": company, "root_type": "Expense", "is_group": 1}, "name"
+		"Account",
+		{"company": company, "root_type": "Liability", "is_group": 1, "parent_account": ["is", "not set"]},
+		"name",
+	) or frappe.db.get_value(
+		"Account", {"company": company, "root_type": "Liability", "is_group": 1}, "name"
 	)
 	if not parent:
 		return None
 	doc = frappe.get_doc({
 		"doctype": "Account",
-		"account_name": "Loyalty Points Redemption",
+		"account_name": "Loyalty Points Payable",
 		"company": company,
 		"parent_account": parent,
-		"root_type": "Expense",
-		"report_type": "Profit and Loss",
+		"root_type": "Liability",
+		"report_type": "Balance Sheet",
 		"is_group": 0,
 	})
 	doc.insert(ignore_permissions=True)
@@ -390,7 +399,7 @@ def _provision_loyalty_payment_for_company(company: str) -> None:
 	"""Idempotently ensure the 'Loyalty Points - <company>' Mode of Payment exists
 	(type General, custom_company set, per-company account row) and is on every POS
 	Profile of that company. Safe to re-run."""
-	acct = _ensure_loyalty_expense_account(company)
+	acct = _ensure_loyalty_liability_account(company)
 	mode_name = _loyalty_mode_name(company)
 	if not frappe.db.exists("Mode of Payment", mode_name):
 		mop = frappe.get_doc({
@@ -411,8 +420,14 @@ def _provision_loyalty_payment_for_company(company: str) -> None:
 		changed = False
 		if mop.meta.has_field("custom_company") and mop.custom_company != company:
 			mop.custom_company = company; changed = True
-		if acct and not any(r.company == company for r in mop.accounts):
-			mop.append("accounts", {"company": company, "default_account": acct}); changed = True
+		if acct:
+			# Migrate an existing row (which may still point at the old expense account)
+			# onto the liability account, or add the row if missing.
+			row = next((r for r in mop.accounts if r.company == company), None)
+			if row is None:
+				mop.append("accounts", {"company": company, "default_account": acct}); changed = True
+			elif row.default_account != acct:
+				row.default_account = acct; changed = True
 		if changed:
 			mop.save(ignore_permissions=True)
 
