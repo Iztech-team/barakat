@@ -61,7 +61,13 @@ SEE_ALL_PERSONAS = frozenset(
 #     permlevel-1 role writes). Owner-equivalent; included per explicit request.
 #   - "Script Manager": can create Server Scripts (arbitrary Python) = escalation.
 #   - "Report Manager": can create Query/Script Reports (embedded code).
-#   - "Baraka Owner": tenant owner role; owner-adjacent by name.
+#
+# Only roles shipped by frappe/erpnext/hrms/barakat belong here. This list was
+# enumerated from pos2, which also carried the site-local "Baraka Branch" and
+# "Baraka Owner" roles; add_roles() on a site lacking them (qa-test, fatima) raises
+# LinkValidationError and fails the whole Employee save. reassert_persona_roles also
+# filters against the site's actual roles, so a site-local role can never break the
+# save again.
 BROAD_ERP_BUNDLE = [
 	"Academics User",
 	"Accountant",
@@ -69,8 +75,6 @@ BROAD_ERP_BUNDLE = [
 	"Accounts User",
 	"Analytics",
 	"Auditor",
-	"Baraka Branch",
-	"Baraka Owner",
 	"Barakat Settings Manager",
 	"Barakat Staff Manager",
 	"Branch Supervisor",
@@ -167,8 +171,16 @@ def reassert_persona_roles(doc, method=None):
 		):
 			frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
 
-	# Add only the bundle roles the user is actually missing.
-	missing = [role for role in BROAD_ERP_BUNDLE if role not in existing_roles]
+	# Add only the bundle roles the user is actually missing, and only ones this site
+	# actually has: add_roles() on an unknown role raises LinkValidationError and takes
+	# the entire Employee save down with it. Sites legitimately differ (an app may not
+	# be installed), so a missing role is not an error — it is simply not granted.
+	site_roles = set(frappe.get_all("Role", pluck="name"))
+	missing = [
+		role
+		for role in BROAD_ERP_BUNDLE
+		if role not in existing_roles and role in site_roles
+	]
 	if missing:
 		# add_roles saves the User with ignore_permissions internally, so this
 		# bypasses the permlevel-1 gate without needing the caller's permission.
