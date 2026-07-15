@@ -8,13 +8,18 @@ with elevated permissions (the same elevated path ERPNext itself uses to append
 `Employee`), bypassing the permlevel-1 gate WITHOUT granting the Manager any new
 permission.
 
+This is the single source of truth for which ERPNext roles a staff user holds. The
+proxy does not send roles — it cannot know which roles a given site defines, and a
+list duplicated across two repos only drifts. The bundle is resolved from the site's
+own Role table at runtime; see ROLE_DENY_LIST.
+
 Security notes:
-- Per the tenant owner's explicit request, the bundle now includes EVERY enabled
-  site role EXCEPT `Administrator` — INCLUDING `System Manager`. Staff personas
-  therefore intentionally receive full ERPNext admin. See the RISK note on
-  BROAD_ERP_BUNDLE below.
-- Only `Administrator` is protected: accounts already holding `Administrator` are
-  never modified, and the bundle can never contain it.
+- Per the tenant owner's explicit request, staff receive EVERY enabled site role
+  except ROLE_DENY_LIST — INCLUDING `System Manager`. Staff personas therefore
+  intentionally receive full ERPNext admin, and the admin panel's module matrix is
+  what actually constrains them. See the RISK note on ROLE_DENY_LIST below.
+- `Administrator` is protected: accounts already holding it are never modified, and
+  it can never be granted.
 - Only missing roles are added; nothing is ever removed.
 """
 
@@ -48,96 +53,56 @@ SEE_ALL_PERSONAS = frozenset(
 	}
 )
 
-# The broad ERPNext role bundle every AP persona shares. Must match the proxy
-# BROAD_ERP_BUNDLE. This is the FULL set of non-disabled roles on the site
-# EXCEPT `Administrator` (and the Frappe-managed base roles Guest / All), so a
-# persona session never 403s an action the admin panel allows. The list is
-# hard-coded (not queried at runtime) so it stays static and reviewable.
-# Resolved from pos2 on 2026-07-14.
+# Roles no persona may ever receive. Everything else enabled on the site IS granted
+# (the tenant owner's rule: every staff user gets every role, and the admin panel's
+# module matrix — not ERPNext roles — decides what they can see and do).
 #
-# RISK — the following included roles grant full-admin / code-execution reach and
-# may want removing (flagged to the tenant owner, who explicitly requested them):
+# The bundle is resolved from the site at runtime, NOT hard-coded. A hard-coded list
+# is necessarily a snapshot of ONE site: the previous list was enumerated from pos2
+# and carried its site-local "Baraka Branch" / "Baraka Owner" roles, so on every site
+# lacking them (qa-test, fatima) add_roles() raised LinkValidationError and no staff
+# could be created at all. Sites legitimately differ — apps come and go, tenants add
+# their own roles — so the only correct answer is to ask the site.
+#
+# RISK — roles granted here that carry full-admin / code-execution reach (flagged to
+# the tenant owner, who explicitly requested them):
 #   - "System Manager": full ERPNext admin (all doctypes, users, permissions,
-#     permlevel-1 role writes). Owner-equivalent; included per explicit request.
+#     permlevel-1 role writes). Owner-equivalent; granted per explicit request.
 #   - "Script Manager": can create Server Scripts (arbitrary Python) = escalation.
 #   - "Report Manager": can create Query/Script Reports (embedded code).
-#
-# Only roles shipped by frappe/erpnext/hrms/barakat belong here. This list was
-# enumerated from pos2, which also carried the site-local "Baraka Branch" and
-# "Baraka Owner" roles; add_roles() on a site lacking them (qa-test, fatima) raises
-# LinkValidationError and fails the whole Employee save. reassert_persona_roles also
-# filters against the site's actual roles, so a site-local role can never break the
-# save again.
-BROAD_ERP_BUNDLE = [
-	"Academics User",
-	"Accountant",
-	"Accounts Manager",
-	"Accounts User",
-	"Analytics",
-	"Auditor",
-	"Barakat Settings Manager",
-	"Barakat Staff Manager",
-	"Branch Supervisor",
-	"Cashier",
-	"Customer",
-	"Dashboard Manager",
-	"Delivery Manager",
-	"Delivery User",
-	"Desk User",
-	"Employee",
-	"Employee Self Service",
-	"Expense Approver",
-	"Fleet Manager",
-	"Fulfillment User",
-	"HR",
-	"HR Manager",
-	"HR User",
-	"Inbox User",
-	"Interviewer",
-	"Inventory Keeper",
-	"Item Manager",
-	"Knowledge Base Contributor",
-	"Knowledge Base Editor",
-	"Leave Approver",
-	"Maintenance Manager",
-	"Maintenance User",
-	"Manager",
-	"Manufacturing Manager",
-	"Manufacturing User",
-	"Marketing Manager",
-	"Newsletter Manager",
-	"Prepared Report User",
-	"Projects Manager",
-	"Projects User",
-	"Purchase Manager",
-	"Purchase Master Manager",
-	"Purchase User",
-	"Quality Manager",
-	"Report Manager",
-	"Sales Manager",
-	"Sales Master Manager",
-	"Sales User",
-	"Script Manager",
-	"Stock Manager",
-	"Stock User",
-	"Supplier",
-	"Support Team",
-	"System Manager",
-	"Translator",
-	"Website Manager",
-	"Workspace Manager",
-]
+ROLE_DENY_LIST = frozenset(
+	{
+		# Frappe manages these itself; they are not grantable persona roles.
+		"Administrator",
+		"All",
+		"Guest",
+		# Tenant-owner roles. These exist only on some sites (e.g. pos2) and must
+		# never land on staff — granting "every role" would otherwise make every
+		# cashier a tenant owner on the sites that define them.
+		"Baraka Owner",
+		"Baraka Branch",
+	}
+)
 
 # `Administrator` is the only untouchable account: it must never be granted by
 # this hook, and accounts already holding it are never modified. (System Manager
-# is intentionally part of the bundle per the tenant owner's request, so it is
-# NOT protected here.)
+# is intentionally granted per the tenant owner's request, so it is NOT protected.)
 PROTECTED_ROLES = frozenset({"Administrator"})
 
-# Safety assertion: the bundle must never contain Administrator.
-assert "Administrator" not in set(BROAD_ERP_BUNDLE), (
-	"BROAD_ERP_BUNDLE must not contain Administrator"
-)
+assert "Administrator" in ROLE_DENY_LIST, "Administrator must never be grantable"
+
+
+def persona_role_bundle():
+	"""Every enabled role on THIS site except the deny-list.
+
+	Queried per call rather than cached: roles change when an app is installed or a
+	tenant adds one, and a stale bundle is exactly the failure this replaced.
+	"""
+	return [
+		role
+		for role in frappe.get_all("Role", filters={"disabled": 0}, pluck="name")
+		if role not in ROLE_DENY_LIST
+	]
 
 
 def reassert_persona_roles(doc, method=None):
@@ -171,16 +136,9 @@ def reassert_persona_roles(doc, method=None):
 		):
 			frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
 
-	# Add only the bundle roles the user is actually missing, and only ones this site
-	# actually has: add_roles() on an unknown role raises LinkValidationError and takes
-	# the entire Employee save down with it. Sites legitimately differ (an app may not
-	# be installed), so a missing role is not an error — it is simply not granted.
-	site_roles = set(frappe.get_all("Role", pluck="name"))
-	missing = [
-		role
-		for role in BROAD_ERP_BUNDLE
-		if role not in existing_roles and role in site_roles
-	]
+	# Add only the roles the user is actually missing. Every role here came from this
+	# site's own Role table, so add_roles() can never hit an unknown link.
+	missing = [role for role in persona_role_bundle() if role not in existing_roles]
 	if missing:
 		# add_roles saves the User with ignore_permissions internally, so this
 		# bypasses the permlevel-1 gate without needing the caller's permission.
