@@ -118,8 +118,8 @@ def reassert_persona_roles(doc, method=None):
 	# panel's UI, not by row-level locks — see
 	# proxy-barakat/docs/superpowers/specs/2026-07-16-remove-api-permission-gates-design.md
 	#
-	# This runs on every Employee save, so it self-heals: a row reintroduced by
-	# ERPNext or any other source is cleared on the next save.
+	# For an Employee with a persona and a linked user, it re-clears on every save,
+	# so it self-heals; cleared logins and no-persona Employees are handled by backfill.
 	for up_name in frappe.get_all(
 		"User Permission", filters={"user": email, "allow": "Employee"}, pluck="name"
 	):
