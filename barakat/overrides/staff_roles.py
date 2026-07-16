@@ -38,21 +38,6 @@ PERSONAS = frozenset(
 	}
 )
 
-# Personas that manage/oversee people and must see ALL staff — so they must NOT
-# carry the "Employee = own record" User Permission. That lock scopes a user to
-# their own Employee, and because shifts / attendance / salary all link to
-# Employee, it silently hides other people's records too (e.g. a Branch
-# Supervisor seeing only their own shifts). Cashier / Inventory Keeper are NOT
-# here — they legitimately keep the own-record lock.
-SEE_ALL_PERSONAS = frozenset(
-	{
-		"Manager",
-		"Branch Supervisor",
-		"Accountant",
-		"HR",
-	}
-)
-
 # Roles no persona may ever receive. Everything else enabled on the site IS granted
 # (the tenant owner's rule: every staff user gets every role, and the admin panel's
 # module matrix — not ERPNext roles — decides what they can see and do).
@@ -127,14 +112,18 @@ def reassert_persona_roles(doc, method=None):
 	if existing_roles & PROTECTED_ROLES:
 		return
 
-	# See-all personas must never keep the "Employee = own record" User Permission
-	# — it hides other people's shifts / attendance / salary (all link to Employee).
-	# Strip any that exist (ERPNext or a prior persona can leave one behind).
-	if preset in SEE_ALL_PERSONAS:
-		for up_name in frappe.get_all(
-			"User Permission", filters={"user": email, "allow": "Employee"}, pluck="name"
-		):
-			frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
+	# No persona keeps the "Employee = own record" User Permission. It scopes the
+	# user to their own Employee across ALL doctypes, so it silently hides other
+	# people's shifts / attendance / salary too. Access is gated by the admin
+	# panel's UI, not by row-level locks — see
+	# proxy-barakat/docs/superpowers/specs/2026-07-16-remove-api-permission-gates-design.md
+	#
+	# This runs on every Employee save, so it self-heals: a row reintroduced by
+	# ERPNext or any other source is cleared on the next save.
+	for up_name in frappe.get_all(
+		"User Permission", filters={"user": email, "allow": "Employee"}, pluck="name"
+	):
+		frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
 
 	# Add only the roles the user is actually missing. Every role here came from this
 	# site's own Role table, so add_roles() can never hit an unknown link.
