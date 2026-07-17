@@ -387,5 +387,17 @@
     "fieldtype": "Link",
     "options": "Employee",
     "insert_after": "custom_device_id"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Price List-custom_company",
+    "dt": "Price List",
+    "fieldname": "custom_company",
+    "label": "Company (Barakat)",
+    "fieldtype": "Link",
+    "options": "Company",
+    "insert_after": "currency",
+    "in_list_view": 0,
+    "in_standard_filter": 1
   }
 ]
