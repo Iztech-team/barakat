@@ -17,9 +17,11 @@ class BarakatSalesInvoice(SalesInvoice):
 	Two surgical overrides fix that, and both are strict no-ops for anything that is not a
 	loyalty-bearing consolidated invoice:
 
-	* the sale books the stock redemption entry (DR redemption account / CR Debtors);
+	* the sale books the stock redemption entry (DR redemption account / CR Debtors), and
+	  its outstanding is recomputed afterwards so it is not left flagged `Partly Paid`;
 	* the return's balancing write-off is redirected to the same redemption account, so it
-	  reverses the sale's cost instead of landing in Write Off.
+	  reverses the sale's cost instead of landing in Write Off, and is allocated against
+	  the return rather than the already-settled sale.
 
 	Upstream issue: the `is_consolidated` gate is still present in erpnext (see
 	frappe/erpnext#41514, #41036, #31509) — nothing in core books POS loyalty redemptions.
@@ -146,12 +148,33 @@ class BarakatSalesInvoice(SalesInvoice):
 
 		original_account = self.write_off_account
 		self.write_off_account = account
+		before = len(gl_entries)
 		try:
 			super().make_write_off_gl_entry(gl_entries)
 		finally:
 			# Never leave the swapped account on the document — the redirect is a GL-time
 			# concern only, and later code (or a re-submit) must see the real field.
 			self.write_off_account = original_account
+
+		self._barakat_reallocate_reversal(gl_entries[before:])
+
+	def _barakat_reallocate_reversal(self, new_entries):
+		"""Point the reversal's receivable line at the return, not the original sale.
+
+		Stock sends a return's write-off line to `return_against`, which is right for a
+		real write-off: the sale is still owed, and writing part of it off settles the
+		sale. It is wrong here. Our sale already booked its own redemption entry, so it
+		self-settles to zero — dropping the reversal on top of it makes a fully paid
+		invoice read as `Partly Paid` for the redeemed value, while the credit note
+		shows a matching negative outstanding that will never be applied to anything.
+
+		The pair still nets to zero for the customer either way, so no balance moves:
+		this only decides which of the two documents the line is allocated against, and
+		the return is the document the reversal actually belongs to.
+		"""
+		for entry in new_entries:
+			if entry.get("account") == self.debit_to:
+				entry["against_voucher"] = self.name
 
 	def _barakat_loyalty_reversal_account(self):
 		"""The redemption account to reverse into, or None to leave stock behavior alone.
