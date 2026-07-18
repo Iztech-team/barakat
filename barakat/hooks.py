@@ -125,6 +125,7 @@ doctype_js = {
 override_doctype_class = {
 	"POS Opening Entry": "barakat.overrides.pos_opening_entry.BarakatPOSOpeningEntry",
 	"POS Invoice": "barakat.overrides.pos_invoice.BarakatPOSInvoice",
+	"Sales Invoice": "barakat.overrides.sales_invoice.BarakatSalesInvoice",
 }
 
 # Apps
