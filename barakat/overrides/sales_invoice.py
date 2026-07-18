@@ -106,6 +106,24 @@ class BarakatSalesInvoice(SalesInvoice):
 			or frappe.get_cached_value("Company", self.company, "cost_center")
 		)
 
+	def make_gl_entries(self, gl_entries=None, from_repost=False):
+		super().make_gl_entries(gl_entries, from_repost)
+		if not self._barakat_books_consolidated_redemption():
+			return
+		# ERPNext fixes outstanding_amount from the cash payment rows alone, before our
+		# redemption entry exists — so an invoice settled partly with points is left
+		# flagged "Partly Paid" for the redeemed value even though its own ledger shows
+		# nothing owed. Recompute from the Payment Ledger now that the entry is posted.
+		from erpnext.accounts.utils import update_voucher_outstanding
+
+		update_voucher_outstanding(
+			voucher_type=self.doctype,
+			voucher_no=self.name,
+			account=self.debit_to,
+			party_type="Customer",
+			party=self.customer,
+		)
+
 	# ── return ────────────────────────────────────────────────────────────────────
 
 	def make_write_off_gl_entry(self, gl_entries):
