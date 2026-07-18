@@ -78,7 +78,7 @@ class BarakatSalesInvoice(SalesInvoice):
 			self.get_gl_dict(
 				{
 					"account": self.loyalty_redemption_account,
-					"cost_center": self.cost_center or self.loyalty_redemption_cost_center,
+					"cost_center": self._barakat_redemption_cost_center(),
 					"against": self.customer,
 					"debit": self.loyalty_amount,
 					"debit_in_transaction_currency": self.loyalty_amount,
@@ -86,6 +86,24 @@ class BarakatSalesInvoice(SalesInvoice):
 				},
 				item=self,
 			)
+		)
+
+	def _barakat_redemption_cost_center(self):
+		"""A cost center for the redemption line, falling back to the company default.
+
+		The redemption account is a P&L account, and ERPNext refuses to post to one
+		without a cost center. Stock's version of this entry uses
+		`cost_center or loyalty_redemption_cost_center` and stops there — which is fine
+		upstream, because the entry never runs on a consolidated invoice. It does here,
+		and a consolidated invoice carries no cost center of its own while the Loyalty
+		Program's is optional and usually unset. Fall back to the company default, the
+		same way make_write_off_gl_entry does, so closing a shift can't fail on config
+		nobody was ever asked to fill in.
+		"""
+		return (
+			self.cost_center
+			or self.loyalty_redemption_cost_center
+			or frappe.get_cached_value("Company", self.company, "cost_center")
 		)
 
 	# ── return ────────────────────────────────────────────────────────────────────
