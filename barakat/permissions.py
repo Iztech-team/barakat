@@ -213,6 +213,12 @@ PERSONA_ROLE_BUNDLES = {
 
 PERSONAS = frozenset(PERSONA_ROLE_BUNDLES)
 
+# Roles never stripped from a persona user even though no bundle names them.
+# ERPNext attaches `Employee` itself when an Employee record is linked to a User,
+# and `Employee Self Service` backs the my-profile / my-payslip views. Removing
+# either would fight the framework on every save.
+PRESERVED_ROLES = frozenset({"Employee", "Employee Self Service"})
+
 # Roles that must never reach a staff persona, whatever else changes. Asserted
 # below so a careless edit to a bundle fails at import rather than in production.
 FORBIDDEN_ROLES = frozenset(

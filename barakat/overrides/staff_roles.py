@@ -31,7 +31,7 @@ holding 57 roles including `Script Manager`. Reversed 2026-07-19 — see
 
 import frappe
 
-from barakat.permissions import FORBIDDEN_ROLES, PERSONAS, bundle_for
+from barakat.permissions import FORBIDDEN_ROLES, PERSONAS, PRESERVED_ROLES, bundle_for
 
 # `Administrator` is the only untouchable account: accounts holding it are never
 # modified by this hook.
@@ -92,11 +92,17 @@ def reassert_persona_roles(doc, method=None):
 
 	# add_roles/remove_roles save the User with ignore_permissions internally, so
 	# this bypasses the permlevel-1 gate without needing the caller's permission.
-	missing = [role for role in persona_role_bundle(preset) if role not in existing_roles]
+	bundle = persona_role_bundle(preset)
+	missing = [role for role in bundle if role not in existing_roles]
 	if missing:
 		user.add_roles(*missing)
 
-	# Strip anything the old everything-minus-deny bundle left behind.
-	revoke = sorted(FORBIDDEN_ROLES & existing_roles)
+	# The bundle is AUTHORITATIVE for a persona user: anything outside it goes.
+	# Removing only the forbidden roles is not enough — a user created under the old
+	# everything-minus-deny model keeps ~50 unrelated roles (Fleet Manager, Projects
+	# Manager, Academics User…) that no persona should ever have carried. Stripping
+	# just System/Script/Report Manager would leave them looking fixed while still
+	# far outside least privilege.
+	revoke = sorted(existing_roles - set(bundle) - PRESERVED_ROLES)
 	if revoke:
 		user.remove_roles(*revoke)
