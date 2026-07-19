@@ -92,17 +92,34 @@ def reassert_persona_roles(doc, method=None):
 
 	# add_roles/remove_roles save the User with ignore_permissions internally, so
 	# this bypasses the permlevel-1 gate without needing the caller's permission.
-	bundle = persona_role_bundle(preset)
-	missing = [role for role in bundle if role not in existing_roles]
-	if missing:
-		user.add_roles(*missing)
-
-	# The bundle is AUTHORITATIVE for a persona user: anything outside it goes.
-	# Removing only the forbidden roles is not enough — a user created under the old
+	# The bundle is AUTHORITATIVE for a persona user: the roles child table is
+	# rewritten to exactly the bundle, plus any PRESERVED_ROLES already present.
+	#
+	# Adding only what is missing is not enough — a user created under the old
 	# everything-minus-deny model keeps ~50 unrelated roles (Fleet Manager, Projects
 	# Manager, Academics User…) that no persona should ever have carried. Stripping
 	# just System/Script/Report Manager would leave them looking fixed while still
 	# far outside least privilege.
-	revoke = sorted(existing_roles - set(bundle) - PRESERVED_ROLES)
-	if revoke:
-		user.remove_roles(*revoke)
+	target = set(persona_role_bundle(preset)) | (existing_roles & PRESERVED_ROLES)
+	if target == existing_roles:
+		return
+
+	# Write the child table directly and save with ignore_permissions, rather than
+	# via User.add_roles / remove_roles.
+	#
+	# `User.roles` is permlevel 1, writable only by System Manager. add_roles() ends
+	# in a plain self.save(), so for any caller without System Manager Frappe SILENTLY
+	# DROPS the roles rows — no error, the staff member is simply created with only
+	# `Employee` and cannot use the system. That went unnoticed while this file
+	# granted every persona System Manager: the Manager or HR creating the staff
+	# member happened to have permlevel-1 access themselves. Removing System Manager
+	# from the bundles broke that assumption, and the first HR-created Cashier came
+	# out with exactly one role.
+	#
+	# ignore_permissions=True is safe here precisely because it is not the caller's
+	# permission being used: the role list is computed from the persona, never from
+	# request input, so this grants the acting Manager/HR no reach of their own.
+	user.set("roles", [])
+	for role in sorted(target):
+		user.append("roles", {"role": role})
+	user.save(ignore_permissions=True)
