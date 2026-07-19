@@ -91,6 +91,26 @@ BARAKAT_ROLE_PERMS = {
 		"Currency": ("read", "write", "create"),
 		"Currency Exchange": ("read", "write", "create", "delete"),
 	},
+	# Read-only POS for Accountant (`pos: read`). POS Opening/Closing Entry read is
+	# native only to Sales Manager and System Manager, both of which carry far more.
+	# Discovered by the persona sweep: /api/pos/shifts 403'd for Accountant.
+	"Barakat POS Viewer": {
+		"POS Opening Entry": ("read",),
+		"POS Closing Entry": ("read",),
+		"POS Invoice": ("read",),
+		"POS Profile": ("read",),
+	},
+	# Read-only sales/payment reference data for personas that are `finance: none`
+	# but still need it underneath a report or a lookup list. Discovered by the
+	# persona sweep: Inventory Keeper 403'd on /api/reports/top-products and
+	# /api/suppliers/purchases/payment-modes, HR on /api/reports/staff-performance.
+	# Every native role carrying these reads also carries write on the ledger.
+	"Barakat Commerce Reader": {
+		"Sales Invoice": ("read",),
+		"POS Invoice": ("read",),
+		# Payment-mode lookup on the purchase payment form.
+		"Mode of Payment": ("read",),
+	},
 	# Read-only payroll for Accountant (`salary: read`). Every native role with
 	# Salary Slip read also carries write.
 	"Barakat Salary Viewer": {
@@ -169,6 +189,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Currency Manager",
 		"Barakat Salary Viewer",
 		"Barakat Loyalty Viewer",
+		"Barakat POS Viewer",
 	),
 	# products/inventory/warehouses/suppliers write; reports read.
 	"Inventory Keeper": (
@@ -178,6 +199,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Purchase Manager",
 		"Purchase Master Manager",
 		"Purchase User",
+		"Barakat Commerce Reader",
 	),
 	# staff/attendance/salary write; branches, roles, reports read.
 	"HR": (
@@ -185,6 +207,7 @@ PERSONA_ROLE_BUNDLES = {
 		"HR User",
 		"Barakat Staff Manager",
 		"Barakat Attendance Manager",
+		"Barakat Commerce Reader",
 	),
 }
 
