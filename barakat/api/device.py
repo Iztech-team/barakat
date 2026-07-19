@@ -1,6 +1,13 @@
 import frappe
 from frappe import _
 
+# Roles allowed to bind a till to a POS Profile. Every method here writes through
+# frappe.db.set_value / insert(ignore_permissions=True), which bypass ERPNext's
+# permission engine entirely — so this constant is the only access control on the
+# device-to-profile mapping. Held by the Cashier, Branch Supervisor and Manager
+# personas via `Barakat POS Operator`.
+POS_DEVICE_ROLES = ("Barakat POS Operator", "System Manager")
+
 
 @frappe.whitelist()
 def register_device(device_id: str, device_name: str) -> dict:
@@ -8,6 +15,7 @@ def register_device(device_id: str, device_name: str) -> dict:
 	Called on first app launch. Creates the Device record if it doesn't exist.
 	Returns the device record so the app knows if it already existed.
 	"""
+	frappe.only_for(POS_DEVICE_ROLES)
 	if not device_id or not device_name:
 		frappe.throw(_("device_id and device_name are required."))
 
@@ -35,6 +43,7 @@ def get_available_profiles(branch: str, device_id: str) -> list:
 
 	Also returns the profile currently linked to this device on this branch (if any).
 	"""
+	frappe.only_for(POS_DEVICE_ROLES)
 	if not branch or not device_id:
 		frappe.throw(_("branch and device_id are required."))
 
@@ -74,6 +83,7 @@ def select_profile(device_id: str, pos_profile: str) -> dict:
 	Links this device to the chosen POS Profile immediately.
 	Clears any previous profile this device was linked to.
 	"""
+	frappe.only_for(POS_DEVICE_ROLES)
 	if not device_id or not pos_profile:
 		frappe.throw(_("device_id and pos_profile are required."))
 
@@ -105,6 +115,7 @@ def check_device_profile(device_id: str, pos_profile: str) -> dict:
 	Called on every branch selection to verify the device-profile mapping is still valid.
 	Returns status: "ok" | "changed" | "unlinked"
 	"""
+	frappe.only_for(POS_DEVICE_ROLES)
 	if not device_id or not pos_profile:
 		frappe.throw(_("device_id and pos_profile are required."))
 

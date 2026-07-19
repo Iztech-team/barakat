@@ -27,6 +27,17 @@ fixtures = [
 					# Manager persona by the proxy; perms set by
 					# barakat.setup.install._grant_settings_manager_perms.
 					"Barakat Settings Manager",
+					"Barakat Staff Manager",
+					# Narrow roles behind the persona allow-list. Each exists
+					# because no native ERPNext role covers the capability
+					# without also handing out far more — see barakat/permissions.py.
+					# Perms set by barakat.setup.install._grant_barakat_role_perms.
+					"Barakat POS Operator",
+					"Barakat Attendance Manager",
+					"Barakat Loyalty Manager",
+					"Barakat Loyalty Viewer",
+					"Barakat Currency Manager",
+					"Barakat Salary Viewer",
 				],
 			]
 		],

@@ -1,101 +1,70 @@
-"""Re-assert the AP persona ERPNext role bundle on staff Users.
+"""Apply the AP persona ERPNext role bundle to staff Users.
 
 When a non-System-Manager Manager creates staff via the Admin Panel, ERPNext
 silently drops the User `roles` child table writes because that table is
 permlevel 1 (writable only by System Manager). New staff end up with only the
-`Employee` role. This hook re-applies the broad role bundle to the linked User
+`Employee` role. This hook applies the persona's role bundle to the linked User
 with elevated permissions (the same elevated path ERPNext itself uses to append
 `Employee`), bypassing the permlevel-1 gate WITHOUT granting the Manager any new
 permission.
 
-This is the single source of truth for which ERPNext roles a staff user holds. The
-proxy does not send roles — it cannot know which roles a given site defines, and a
-list duplicated across two repos only drifts. The bundle is resolved from the site's
-own Role table at runtime; see ROLE_DENY_LIST.
+The bundles themselves live in `barakat.permissions` — see that module for what
+each persona gets and why. The proxy does not send roles: it cannot know which
+roles a given site defines, and a list duplicated across two repos only drifts.
 
 Security notes:
-- Per the tenant owner's explicit request, staff receive EVERY enabled site role
-  except ROLE_DENY_LIST — INCLUDING `System Manager`. Staff personas therefore
-  intentionally receive full ERPNext admin, and the admin panel's module matrix is
-  what actually constrains them. See the RISK note on ROLE_DENY_LIST below.
-- `Administrator` is protected: accounts already holding it are never modified, and
-  it can never be granted.
-- Only missing roles are added; nothing is ever removed.
+- Each persona receives an explicit **allow-list** of roles. `System Manager`,
+  `Script Manager` and `Report Manager` are in no bundle and are actively removed
+  from persona users by this hook.
+- `Administrator` is protected: accounts already holding it are never modified.
+- The bundle is intersected with the roles that exist on the site, so a site
+  missing one of them is skipped rather than raising LinkValidationError. That
+  failure once broke staff creation entirely on every site lacking `Baraka
+  Branch`; see the history note below.
+
+History: this file previously granted every enabled role on the site except a
+five-name deny-list, on the tenant owner's explicit request, with the admin
+panel's client-side matrix as the only constraint. On BOM that produced HR clerks
+holding 57 roles including `Script Manager`. Reversed 2026-07-19 — see
+`proxy-barakat/docs/superpowers/specs/2026-07-19-real-roles-and-permissions-design.md`.
 """
 
 import frappe
 
-# Personas (Employee.custom_role_preset) that trigger the re-assert. Must match
-# the AP personas.
-PERSONAS = frozenset(
-	{
-		"Manager",
-		"Branch Supervisor",
-		"Cashier",
-		"Accountant",
-		"Inventory Keeper",
-		"HR",
-	}
-)
+from barakat.permissions import FORBIDDEN_ROLES, PERSONAS, bundle_for
 
-# Roles no persona may ever receive. Everything else enabled on the site IS granted
-# (the tenant owner's rule: every staff user gets every role, and the admin panel's
-# module matrix — not ERPNext roles — decides what they can see and do).
-#
-# The bundle is resolved from the site at runtime, NOT hard-coded. A hard-coded list
-# is necessarily a snapshot of ONE site: the previous list was enumerated from pos2
-# and carried its site-local "Baraka Branch" / "Baraka Owner" roles, so on every site
-# lacking them (qa-test, fatima) add_roles() raised LinkValidationError and no staff
-# could be created at all. Sites legitimately differ — apps come and go, tenants add
-# their own roles — so the only correct answer is to ask the site.
-#
-# RISK — roles granted here that carry full-admin / code-execution reach (flagged to
-# the tenant owner, who explicitly requested them):
-#   - "System Manager": full ERPNext admin (all doctypes, users, permissions,
-#     permlevel-1 role writes). Owner-equivalent; granted per explicit request.
-#   - "Script Manager": can create Server Scripts (arbitrary Python) = escalation.
-#   - "Report Manager": can create Query/Script Reports (embedded code).
-ROLE_DENY_LIST = frozenset(
-	{
-		# Frappe manages these itself; they are not grantable persona roles.
-		"Administrator",
-		"All",
-		"Guest",
-		# Tenant-owner roles. These exist only on some sites (e.g. pos2) and must
-		# never land on staff — granting "every role" would otherwise make every
-		# cashier a tenant owner on the sites that define them.
-		"Baraka Owner",
-		"Baraka Branch",
-	}
-)
-
-# `Administrator` is the only untouchable account: it must never be granted by
-# this hook, and accounts already holding it are never modified. (System Manager
-# is intentionally granted per the tenant owner's request, so it is NOT protected.)
+# `Administrator` is the only untouchable account: accounts holding it are never
+# modified by this hook.
 PROTECTED_ROLES = frozenset({"Administrator"})
 
-assert "Administrator" in ROLE_DENY_LIST, "Administrator must never be grantable"
+assert "Administrator" in FORBIDDEN_ROLES, "Administrator must never be grantable"
 
 
-def persona_role_bundle():
-	"""Every enabled role on THIS site except the deny-list.
+def persona_role_bundle(persona):
+	"""The persona's roles, restricted to those that exist on THIS site.
 
 	Queried per call rather than cached: roles change when an app is installed or a
 	tenant adds one, and a stale bundle is exactly the failure this replaced.
 	"""
-	return [
-		role
-		for role in frappe.get_all("Role", filters={"disabled": 0}, pluck="name")
-		if role not in ROLE_DENY_LIST
-	]
+	wanted = bundle_for(persona)
+	if not wanted:
+		return []
+	existing = set(
+		frappe.get_all("Role", filters={"name": ("in", list(wanted)), "disabled": 0}, pluck="name")
+	)
+	return [role for role in wanted if role in existing]
 
 
 def reassert_persona_roles(doc, method=None):
-	"""Re-apply the persona role bundle to the Employee's linked User.
+	"""Apply the persona role bundle to the Employee's linked User.
 
 	Wired on Employee after_insert and on_update. No-op unless the Employee has
-	both a recognised persona preset and a linked, existing, non-owner User that
-	is actually missing bundle roles.
+	both a recognised persona preset and a linked, existing, non-owner User.
+
+	Self-healing in both directions: missing bundle roles are added, and any
+	forbidden role the user picked up under the old everything-minus-deny model is
+	removed. Users whose Employee is never re-saved are handled by the backfill in
+	`barakat.setup.install`.
 	"""
 	preset = (doc.custom_role_preset or "").strip()
 	if preset not in PERSONAS:
@@ -114,21 +83,20 @@ def reassert_persona_roles(doc, method=None):
 
 	# No persona keeps the "Employee = own record" User Permission. It scopes the
 	# user to their own Employee across ALL doctypes, so it silently hides other
-	# people's shifts / attendance / salary too. Access is gated by the admin
-	# panel's UI, not by row-level locks — see
-	# proxy-barakat/docs/superpowers/specs/2026-07-16-remove-api-permission-gates-design.md
-	#
-	# For an Employee with a persona and a linked user, it re-clears on every save,
-	# so it self-heals; cleared logins and no-persona Employees are handled by backfill.
+	# people's shifts / attendance / salary too. Company-scoping User Permissions
+	# are left alone — those are the tenant boundary, not a role gate.
 	for up_name in frappe.get_all(
 		"User Permission", filters={"user": email, "allow": "Employee"}, pluck="name"
 	):
 		frappe.delete_doc("User Permission", up_name, ignore_permissions=True, force=True)
 
-	# Add only the roles the user is actually missing. Every role here came from this
-	# site's own Role table, so add_roles() can never hit an unknown link.
-	missing = [role for role in persona_role_bundle() if role not in existing_roles]
+	# add_roles/remove_roles save the User with ignore_permissions internally, so
+	# this bypasses the permlevel-1 gate without needing the caller's permission.
+	missing = [role for role in persona_role_bundle(preset) if role not in existing_roles]
 	if missing:
-		# add_roles saves the User with ignore_permissions internally, so this
-		# bypasses the permlevel-1 gate without needing the caller's permission.
 		user.add_roles(*missing)
+
+	# Strip anything the old everything-minus-deny bundle left behind.
+	revoke = sorted(FORBIDDEN_ROLES & existing_roles)
+	if revoke:
+		user.remove_roles(*revoke)

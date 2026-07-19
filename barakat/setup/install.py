@@ -12,6 +12,7 @@ def after_install():
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
+		_grant_barakat_role_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
@@ -50,12 +51,30 @@ def after_migrate():
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
+		_grant_barakat_role_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
 			fn()
 		except Exception as e:
 			frappe.log_error(f"barakat after_migrate: {fn.__name__} failed: {e}", "Install")
+	frappe.db.commit()
+
+
+# NOT wired into after_migrate. Everything in the lists above is purely additive
+# (new roles, new DocPerms) and therefore safe to run unattended on every tenant
+# site. `_backfill_persona_roles` is the SUBTRACTIVE step — it strips System
+# Manager / Script Manager / Report Manager from existing persona users — and a
+# `bench migrate` on an unverified tenant must not silently change what its staff
+# can do. Run it per site, deliberately, after verifying the personas there:
+#
+#   bench --site <site> execute barakat.setup.install.backfill_persona_roles
+#
+# New staff created after the migrate already get the allow-list bundle from the
+# Employee hook, so no site is left in a half-applied state by waiting.
+def backfill_persona_roles():
+	"""Public entry point for the subtractive backfill. See the note above."""
+	_backfill_persona_roles()
 	frappe.db.commit()
 
 
@@ -151,10 +170,76 @@ BARAKAT_ROLES = [
 
 
 def _provision_barakat_roles():
-	for role_name in BARAKAT_ROLES:
+	from barakat.permissions import BARAKAT_CUSTOM_ROLES
+
+	# Persona roles carry no DocPerms of their own (they exist so the Employee's
+	# custom_role_preset Link has something to point at). The custom roles below
+	# DO carry perms — granted by _grant_barakat_role_perms.
+	for role_name in (*BARAKAT_ROLES, *BARAKAT_CUSTOM_ROLES):
 		if frappe.db.exists("Role", role_name):
 			continue
-		frappe.get_doc({"doctype": "Role", "role_name": role_name}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": role_name, "desk_access": 0}
+		).insert(ignore_permissions=True)
+
+
+def _grant_barakat_role_perms():
+	"""Apply the DocPerms behind every custom `Barakat *` role.
+
+	These roles exist because no native ERPNext role covers the capability without
+	also handing out far more — see the per-role notes in `barakat.permissions`.
+
+	Uses frappe.permissions.add_permission, which first copies the doctype's existing
+	standard DocPerms into Custom DocPerm (frappe.permissions.setup_custom_perms) before
+	adding the new row. That copy is CRITICAL: adding a Custom DocPerm otherwise REPLACES
+	the standard perms entirely, which would silently strip `System Manager`'s own access.
+
+	Idempotent: re-adding an existing (role, permlevel) perm is a no-op, and the property
+	writes are re-asserted each run — safe to call on every migrate.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	from barakat.permissions import BARAKAT_ROLE_PERMS
+
+	for role, doctype_perms in BARAKAT_ROLE_PERMS.items():
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc(
+				{"doctype": "Role", "role_name": role, "desk_access": 0}
+			).insert(ignore_permissions=True)
+
+		for doctype, perms in doctype_perms.items():
+			if not frappe.db.exists("DocType", doctype):
+				continue  # app shipping that doctype not installed on this site
+			add_permission(doctype, role, 0)
+			for perm in perms:
+				update_permission_property(doctype, role, 0, perm, 1, validate=False)
+			frappe.clear_cache(doctype=doctype)
+
+
+def _backfill_persona_roles():
+	"""Bring existing persona users onto the allow-list bundle.
+
+	The hook in `barakat.overrides.staff_roles` self-heals on every Employee save,
+	but a user whose Employee is never re-saved would keep the roles the old
+	everything-minus-deny bundle gave them — including `System Manager` and
+	`Script Manager`. This closes that gap on migrate.
+
+	Reuses the hook itself rather than reimplementing the logic, so there is exactly
+	one definition of what a persona holds.
+	"""
+	from barakat.overrides.staff_roles import reassert_persona_roles
+	from barakat.permissions import PERSONAS
+
+	employees = frappe.get_all(
+		"Employee",
+		filters={"custom_role_preset": ("in", sorted(PERSONAS)), "user_id": ("is", "set")},
+		pluck="name",
+	)
+	for name in employees:
+		try:
+			reassert_persona_roles(frappe.get_doc("Employee", name))
+		except Exception as e:
+			frappe.log_error(f"barakat backfill: {name} failed: {e}", "Persona roles")
 
 
 # Dedicated custom role that carries read+write on ONLY the two singles the admin

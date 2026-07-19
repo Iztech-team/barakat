@@ -3,6 +3,13 @@ import frappe
 from frappe import _
 
 
+# Roles allowed to move stock through the RFID endpoints. These methods insert
+# and submit Stock Entries with ignore_permissions=True, so without an explicit
+# guard ANY authenticated session — a cashier's, a stolen one — could inject or
+# write off inventory. Held by the Manager and Inventory Keeper personas.
+STOCK_ROLES = ("Stock Manager", "System Manager")
+
+
 @frappe.whitelist()
 def commission_units(item_code: str, warehouse: str, epcs) -> dict:
 	"""
@@ -10,6 +17,7 @@ def commission_units(item_code: str, warehouse: str, epcs) -> dict:
 	strings; each becomes a Serial No whose name == the EPC. Tag-first: this is the
 	moment the unit enters ERPNext. Idempotent per EPC.
 	"""
+	frappe.only_for(STOCK_ROLES)
 	if isinstance(epcs, str):
 		epcs = json.loads(epcs)
 	epcs = [str(e).strip().upper() for e in (epcs or []) if str(e).strip()]
@@ -68,7 +76,9 @@ def decommission_units(epcs) -> dict:
 	that is being re-burned to a new item doesn't leave its OLD Serial No behind as
 	orphaned Active stock. `epcs` is a JSON list (or list) of tag EPC hex strings.
 	Idempotent: skips EPCs that aren't a Serial No or are already out of stock.
+	Guarded by STOCK_ROLES — see commission_units.
 	"""
+	frappe.only_for(STOCK_ROLES)
 	if isinstance(epcs, str):
 		epcs = json.loads(epcs)
 	epcs = [str(e).strip().upper() for e in (epcs or []) if str(e).strip()]
