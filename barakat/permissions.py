@@ -111,6 +111,16 @@ BARAKAT_ROLE_PERMS = {
 		# Payment-mode lookup on the purchase payment form.
 		"Mode of Payment": ("read",),
 	},
+	# Shared read-only reference data that FORMS across every module need, whatever
+	# the persona's matrix row says. `Branch` is natively readable only by HR
+	# Manager / HR User, but the customer, staff and attendance forms all render a
+	# branch picker — so a Cashier creating a customer needs it while being
+	# `branches: none`. Caught in the browser: the picker rendered with no options
+	# because /api/branches 403'd from ERPNext, not from the proxy gate.
+	# Held by every persona. Branch WRITE stays with HR Manager / HR User.
+	"Barakat Reference Reader": {
+		"Branch": ("read",),
+	},
 	# Read-only payroll for Accountant (`salary: read`). Every native role with
 	# Salary Slip read also carries write.
 	"Barakat Salary Viewer": {
@@ -153,6 +163,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Settings Manager",
 		"Barakat Staff Manager",
 		"Barakat POS Operator",
+		"Barakat Reference Reader",
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Manager",
 		"Barakat Currency Manager",
@@ -171,6 +182,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat POS Operator",
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Viewer",
+		"Barakat Reference Reader",
 	),
 	# pos + customers write, products read. Nothing else.
 	"Cashier": (
@@ -178,6 +190,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Stock User",
 		"Barakat POS Operator",
 		"Barakat Loyalty Viewer",
+		"Barakat Reference Reader",
 	),
 	# finance/accounting/suppliers write; pos, salary, customers, reports read.
 	"Accountant": (
@@ -190,6 +203,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Salary Viewer",
 		"Barakat Loyalty Viewer",
 		"Barakat POS Viewer",
+		"Barakat Reference Reader",
 	),
 	# products/inventory/warehouses/suppliers write; reports read.
 	"Inventory Keeper": (
@@ -200,6 +214,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Purchase Master Manager",
 		"Purchase User",
 		"Barakat Commerce Reader",
+		"Barakat Reference Reader",
 	),
 	# staff/attendance/salary write; branches, roles, reports read.
 	"HR": (
@@ -208,6 +223,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Staff Manager",
 		"Barakat Attendance Manager",
 		"Barakat Commerce Reader",
+		"Barakat Reference Reader",
 	),
 }
 
