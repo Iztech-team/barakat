@@ -111,6 +111,17 @@ BARAKAT_ROLE_PERMS = {
 		# Payment-mode lookup on the purchase payment form.
 		"Mode of Payment": ("read",),
 	},
+	# Customer Group CRUD. Customer Group write is natively `Sales Master Manager`
+	# only. Manager and Branch Supervisor hold that role, so they can manage groups;
+	# the Cashier persona (customers=write, but no Sales Master Manager — that role
+	# also carries Item Price / Price List write a cashier must not have) could
+	# create customers but NOT customer groups. Found by per-persona CRUD testing:
+	# POST /api/customers/groups 403'd for the Cashier while the AP shows the button
+	# (it gates on `customers`). This narrow role closes that without widening the
+	# cashier into price-list territory.
+	"Barakat Customer Group Manager": {
+		"Customer Group": ("read", "write", "create", "delete"),
+	},
 	# Shared read-only reference data that FORMS across every module need, whatever
 	# the persona's matrix row says. `Branch` is natively readable only by HR
 	# Manager / HR User, but the customer, staff and attendance forms all render a
@@ -191,6 +202,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat POS Operator",
 		"Barakat Loyalty Viewer",
 		"Barakat Reference Reader",
+		"Barakat Customer Group Manager",
 	),
 	# finance/accounting/suppliers write; pos, salary, customers, reports read.
 	"Accountant": (
