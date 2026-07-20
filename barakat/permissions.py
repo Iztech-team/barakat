@@ -117,6 +117,39 @@ BARAKAT_ROLE_PERMS = {
 		# Payment-mode lookup on the purchase payment form.
 		"Mode of Payment": ("read",),
 	},
+	# Purchase Invoice create/submit for the Inventory Keeper (`suppliers: write`),
+	# who records incoming stock and must be able to POST the payable it creates.
+	# Native Purchase Invoice create+submit is `Accounts User`/`Accounts Manager`,
+	# but both carry the whole payables/GL surface (Journal Entry, Payment Entry,
+	# GL write) a stock keeper must not have. This narrow role grants ONLY the
+	# purchase-invoice document lifecycle; the GL/stock entries it produces are
+	# system-written (ignore_permissions), and PAYING the invoice stays a finance
+	# action (Payment Entry — not in this role, so the AP's "pay" control, gated on
+	# `finance`, stays hidden for Inventory Keeper). Found by round-2 testing:
+	# Inventory Keeper 403'd creating a Purchase Invoice while the AP showed the form.
+	"Barakat Purchase Invoice Clerk": {
+		"Purchase Invoice": ("read", "write", "create", "submit", "cancel"),
+	},
+	# Mode of Payment DELETE. No native role holds it (measured on BOM: the doctype's
+	# DocPerm table has create/write but no `delete` row for anyone), so the AP's
+	# accounting page could create and edit payment modes but never remove one — a
+	# raw-API 403 for Accountant. Split out (not folded into a native role) so the
+	# grant is exactly one capability on one doctype. Held by the `accounting: write`
+	# personas (Manager, Accountant). ERPNext still blocks deleting a payment mode
+	# that is referenced by any document (LinkExistsError), surfaced as a clean error.
+	"Barakat Payment Mode Manager": {
+		"Mode of Payment": ("read", "write", "create", "delete"),
+	},
+	# Customer DELETE for the Cashier (`customers: write`). Native Customer delete is
+	# `Sales Master Manager`-only — Manager and Branch Supervisor hold it, but the
+	# Cashier (Sales User: create/write, no delete) could create and edit customers
+	# yet never remove one. This narrow role closes the gap without handing the
+	# Cashier Sales Master Manager's Item Price / Price List write. ERPNext blocks
+	# deleting a customer with transactions (LinkExistsError), surfaced as a clean
+	# error, so this only ever removes freshly-created / empty customer records.
+	"Barakat Customer Manager": {
+		"Customer": ("read", "delete"),
+	},
 	# Customer Group CRUD. Customer Group write is natively `Sales Master Manager`
 	# only. Manager and Branch Supervisor hold that role, so they can manage groups;
 	# the Cashier persona (customers=write, but no Sales Master Manager — that role
@@ -184,6 +217,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Manager",
 		"Barakat Currency Manager",
+		"Barakat Payment Mode Manager",
 	),
 	# pos/products/inventory/attendance/customers write; warehouses, branches,
 	# staff, finance, accounting, suppliers, reports read.
@@ -209,6 +243,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Loyalty Viewer",
 		"Barakat Reference Reader",
 		"Barakat Customer Group Manager",
+		"Barakat Customer Manager",
 	),
 	# finance/accounting/suppliers write; pos, salary, customers, reports read.
 	"Accountant": (
@@ -222,6 +257,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Loyalty Viewer",
 		"Barakat POS Viewer",
 		"Barakat Reference Reader",
+		"Barakat Payment Mode Manager",
 	),
 	# products/inventory/warehouses/suppliers write; reports read.
 	"Inventory Keeper": (
@@ -233,6 +269,7 @@ PERSONA_ROLE_BUNDLES = {
 		"Purchase User",
 		"Barakat Commerce Reader",
 		"Barakat Reference Reader",
+		"Barakat Purchase Invoice Clerk",
 	),
 	# staff/attendance/salary write; branches, roles, reports read.
 	"HR": (

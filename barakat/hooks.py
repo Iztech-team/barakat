@@ -38,6 +38,9 @@ fixtures = [
 					"Barakat Loyalty Viewer",
 					"Barakat Currency Manager",
 					"Barakat Salary Viewer",
+					"Barakat Purchase Invoice Clerk",
+					"Barakat Payment Mode Manager",
+					"Barakat Customer Manager",
 				],
 			]
 		],
