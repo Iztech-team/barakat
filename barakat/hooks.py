@@ -41,6 +41,7 @@ fixtures = [
 					"Barakat Purchase Invoice Clerk",
 					"Barakat Payment Mode Manager",
 					"Barakat Customer Manager",
+					"Barakat Cashier Reader",
 				],
 			]
 		],

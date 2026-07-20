@@ -179,6 +179,24 @@ BARAKAT_ROLE_PERMS = {
 		"Salary Structure Assignment": ("read",),
 		"Employee": ("read",),
 	},
+	# Read-only shop reference data for the Cashier persona, whose admin-panel login
+	# is for LOOKING THINGS UP, not managing them (they do their till work in the
+	# desktop POS under a Manager/Branch Supervisor device session, via PIN — their
+	# own ERPNext session never writes). Their native write roles (Sales User,
+	# Stock User) were replaced by this pure-read role so a Cashier cannot create or
+	# edit customers, products, groups, etc. even via /app or the raw REST API. POS,
+	# loyalty and branch reads come from Barakat POS Viewer / Loyalty Viewer /
+	# Reference Reader; this covers the rest of what the read-only AP pages render.
+	"Barakat Cashier Reader": {
+		"Customer": ("read",),
+		"Customer Group": ("read",),
+		"Contact": ("read",),
+		"Item": ("read",),
+		"Item Group": ("read",),
+		"Item Price": ("read",),
+		"UOM": ("read",),
+		"Product Bundle": ("read",),
+	},
 }
 
 BARAKAT_CUSTOM_ROLES = tuple(BARAKAT_ROLE_PERMS)
@@ -235,15 +253,18 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Loyalty Viewer",
 		"Barakat Reference Reader",
 	),
-	# pos + customers write, products read. Nothing else.
+	# READ-ONLY everywhere in the admin panel. The Cashier operates the till in the
+	# desktop POS (under a Manager/Branch Supervisor device session, via PIN), never
+	# through their own AP login — so that login only ever reads. No write role:
+	# Sales User / Stock User / Barakat POS Operator (shift open/close) / Customer
+	# Group Manager / Customer Manager were all removed. POS profiles and work
+	# periods are additionally scoped to the cashier's own branches by the proxy.
 	"Cashier": (
-		"Sales User",
-		"Stock User",
-		"Barakat POS Operator",
+		"Barakat Cashier Reader",
+		"Barakat POS Viewer",
 		"Barakat Loyalty Viewer",
 		"Barakat Reference Reader",
-		"Barakat Customer Group Manager",
-		"Barakat Customer Manager",
+		"Barakat Commerce Reader",
 	),
 	# finance/accounting/suppliers write; pos, salary, customers, reports read.
 	"Accountant": (

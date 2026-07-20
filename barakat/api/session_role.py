@@ -62,6 +62,29 @@ def get_my_pos_role() -> dict:
 
 
 @frappe.whitelist()
+def get_my_pos_branches() -> list:
+	"""Return the branch names assigned to the CURRENT user's own Employee.
+
+	Self-scoped (ignore_permissions, keyed to frappe.session.user), so a persona
+	that does NOT hold Employee read — e.g. the read-only Cashier — can still have
+	their POS profile / work-period lists filtered to their own branches by the
+	proxy. It can only ever report the caller's own branches, never anyone else's.
+	Returns [] when the caller has no Employee or no assigned branches.
+	"""
+	user = frappe.session.user
+	emp = frappe.db.get_value("Employee", {"user_id": user}, "name")
+	if not emp:
+		return []
+	rows = frappe.get_all(
+		"POS Employee Branch",
+		filters={"parent": emp, "parenttype": "Employee"},
+		fields=["branch"],
+		ignore_permissions=True,
+	)
+	return [r.get("branch") for r in rows if r.get("branch")]
+
+
+@frappe.whitelist()
 def update_my_profile_name(full_name: str) -> dict:
 	"""Rename the CURRENT user's own Employee (and, via ERPNext's Employee.on_update
 	-> update_user cascade, their linked User).
