@@ -67,8 +67,14 @@ BARAKAT_ROLE_PERMS = {
 	# Attendance without `HR User`. HR User is the only native role with Attendance
 	# write, but it also carries `Employee` write — Branch Supervisor is
 	# `staff: read` and must not be able to edit employee records.
+	#
+	# submit + cancel are REQUIRED: Attendance is a submittable doctype (docstatus 1),
+	# and the admin panel's "Record absence" flow creates AND submits in one step.
+	# Without them a persona whose only attendance grant is this role (Branch
+	# Supervisor — no native HR role) got a 403 on submit even though its matrix says
+	# attendance: write. HR is unaffected (it submits via HR Manager/HR User).
 	"Barakat Attendance Manager": {
-		"Attendance": ("read", "write", "create", "delete"),
+		"Attendance": ("read", "write", "create", "delete", "submit", "cancel"),
 		"Employee": ("read",),
 		"Branch": ("read",),
 	},
