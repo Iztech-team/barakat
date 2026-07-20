@@ -59,3 +59,31 @@ def get_my_pos_role() -> dict:
 
 	allowed = is_owner or persona in POS_LOGIN_PERSONAS
 	return {"persona": persona, "is_owner": is_owner, "allowed": allowed}
+
+
+@frappe.whitelist()
+def update_my_profile_name(full_name: str) -> dict:
+	"""Rename the CURRENT user's own Employee (and, via ERPNext's Employee.on_update
+	-> update_user cascade, their linked User).
+
+	Self-service: a user editing their OWN display name should not require holding
+	`Employee` write. Most personas (Cashier, Accountant, Inventory Keeper, Branch
+	Supervisor) do NOT — so the admin panel's profile save used to 502 for them.
+	This runs under the caller's session but writes only the Employee pinned to
+	`frappe.session.user`, with ignore_permissions, so it can never touch anyone
+	else's record. (We cannot instead grant the native "Employee Self Service" role:
+	the persona bundles deliberately drop the "own record" User Permission, so that
+	role would grant write on EVERY Employee, not just the caller's.)
+	"""
+	name = (full_name or "").strip()
+	if not name:
+		frappe.throw("Name cannot be blank.")
+	user = frappe.session.user
+	emp = frappe.db.get_value("Employee", {"user_id": user}, "name")
+	if not emp:
+		frappe.throw("Your account has no staff record, so its name cannot be changed here.")
+	doc = frappe.get_doc("Employee", emp)
+	doc.employee_name = name
+	doc.first_name = name
+	doc.save(ignore_permissions=True)
+	return {"employee": emp, "employee_name": doc.employee_name}
