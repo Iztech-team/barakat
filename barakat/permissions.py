@@ -335,3 +335,28 @@ del _persona, _roles
 def bundle_for(persona):
 	"""The roles a persona should hold. Empty tuple for an unknown persona."""
 	return PERSONA_ROLE_BUNDLES.get(persona, ())
+
+
+# ── Who may assign an Employee's persona preset ──────────────────────────────
+# `Employee.custom_role_preset` drives the whole role bundle a user receives, so
+# setting or changing it is a privileged act. Only a staff-admin (the Manager
+# persona, via STAFF_MANAGER_ROLE) or the owner/System Manager may do it — a
+# limited persona such as HR must not be able to stamp someone "Accountant" and
+# hand out GL write it does not otherwise have.
+STAFF_MANAGER_ROLE = "Barakat Staff Manager"
+
+# Roles whose holder may set/change a persona preset. Administrator bypasses
+# separately (see `may_assign_preset`).
+PRESET_ASSIGN_ROLES = frozenset({STAFF_MANAGER_ROLE, "System Manager"})
+
+
+def may_assign_preset(caller_roles, *, is_administrator=False, is_system_context=False):
+	"""Whether a caller may set or change an Employee's `custom_role_preset`.
+
+	Pure decision — no Frappe. `caller_roles` is any iterable of role names.
+	`is_administrator` covers the Administrator account; `is_system_context`
+	covers install / migrate / patch flows that run elevated.
+	"""
+	if is_administrator or is_system_context:
+		return True
+	return not PRESET_ASSIGN_ROLES.isdisjoint(set(caller_roles))
