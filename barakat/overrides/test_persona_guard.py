@@ -6,7 +6,13 @@ no Frappe dependency.
 
 import unittest
 
-from barakat.permissions import STAFF_MANAGER_ROLE, may_assign_preset
+from barakat.permissions import (
+    FORBIDDEN_ROLES,
+    PERSONA_ROLE_BUNDLES,
+    STAFF_MANAGER_ROLE,
+    bundle_for,
+    may_assign_preset,
+)
 
 
 class MayAssignPreset(unittest.TestCase):
@@ -27,6 +33,23 @@ class MayAssignPreset(unittest.TestCase):
 
     def test_system_context_bypasses(self):
         self.assertTrue(may_assign_preset([], is_system_context=True))
+
+
+class HrBundleNoLongerStaffAdmin(unittest.TestCase):
+    def test_hr_has_no_staff_admin_role(self):
+        self.assertNotIn(STAFF_MANAGER_ROLE, bundle_for("HR"))
+
+    def test_hr_keeps_payroll_roles(self):
+        hr = bundle_for("HR")
+        self.assertIn("HR Manager", hr)
+        self.assertIn("HR User", hr)
+
+    def test_manager_still_staff_admin(self):
+        self.assertIn(STAFF_MANAGER_ROLE, bundle_for("Manager"))
+
+    def test_no_bundle_leaks_forbidden_role(self):
+        for persona, roles in PERSONA_ROLE_BUNDLES.items():
+            self.assertEqual(FORBIDDEN_ROLES.intersection(roles), set(), persona)
 
 
 if __name__ == "__main__":

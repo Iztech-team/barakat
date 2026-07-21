@@ -292,11 +292,13 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Reference Reader",
 		"Barakat Purchase Invoice Clerk",
 	),
-	# staff/attendance/salary write; branches, roles, reports read.
+	# attendance/salary write; staff, branches, roles, reports read. Payroll only —
+	# the staff-admin role (Barakat Staff Manager) was removed 2026-07-22 so only the
+	# Manager persona can create logins / assign role presets. HR keeps native HR
+	# Manager/HR User for salary, attendance and slips.
 	"HR": (
 		"HR Manager",
 		"HR User",
-		"Barakat Staff Manager",
 		"Barakat Attendance Manager",
 		"Barakat Commerce Reader",
 		"Barakat Reference Reader",
