@@ -30,8 +30,15 @@ holding 57 roles including `Script Manager`. Reversed 2026-07-19 — see
 """
 
 import frappe
+from frappe import _
 
-from barakat.permissions import FORBIDDEN_ROLES, PERSONAS, PRESERVED_ROLES, bundle_for
+from barakat.permissions import (
+	FORBIDDEN_ROLES,
+	PERSONAS,
+	PRESERVED_ROLES,
+	bundle_for,
+	may_assign_preset,
+)
 
 # `Administrator` is the only untouchable account: accounts holding it are never
 # modified by this hook.
@@ -53,6 +60,34 @@ def persona_role_bundle(persona):
 		frappe.get_all("Role", filters={"name": ("in", list(wanted)), "disabled": 0}, pluck="name")
 	)
 	return [role for role in wanted if role in existing]
+
+
+def guard_role_preset(doc, method=None):
+	"""Reject setting/changing an Employee's persona preset unless the caller may.
+
+	Wired on Employee `validate`. The stamp drives the whole role bundle, so only a
+	staff-admin (the Manager persona) or the owner/System Manager may assign it. HR,
+	which no longer carries the staff-admin role, is blocked here even though native
+	`HR Manager` still gives it generic Employee write for payroll. Fires only when
+	the preset actually changes, so a salary/attendance edit is never affected.
+	"""
+	new_preset = (doc.custom_role_preset or "").strip()
+	if not new_preset:
+		return
+	if not doc.has_value_changed("custom_role_preset"):
+		return
+	if may_assign_preset(
+		frappe.get_roles(frappe.session.user),
+		is_administrator=frappe.session.user == "Administrator",
+		is_system_context=bool(
+			frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch
+		),
+	):
+		return
+	frappe.throw(
+		_("Only a manager can assign or change a staff member's role."),
+		frappe.PermissionError,
+	)
 
 
 def reassert_persona_roles(doc, method=None):
