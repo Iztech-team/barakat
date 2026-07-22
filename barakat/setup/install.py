@@ -355,18 +355,23 @@ def _grant_loyalty_manager_perms():
 # above. The Manager creates staff by writing these doctypes DIRECTLY (no service
 # account), so the role must grant create+write on EVERY doctype the staff-create flow
 # touches — the ERPNext `User` + password, the `Employee` record, its `Designation`,
-# the branch/company `User Permission` scoping rows, and (when a salary is set) the
-# `Salary Structure Assignment`. Granting only `User` makes staff creation 403 on the
-# very first `Employee` insert.
-STAFF_MANAGER_ROLE = "Barakat Staff Manager"
+# and (when a salary is set) the `Salary Structure Assignment`. Granting only `User`
+# makes staff creation 403 on the very first `Employee` insert.
+#
+# The role name is defined in `barakat.permissions` (single source of truth, shared
+# with the persona bundles and the preset guard). NOTE: a former `User Permission`
+# grant here was dropped 2026-07-22 — nothing in barakat/proxy/AP ever writes a User
+# Permission, and the grant let the role delete the tenant-boundary rows. Existing
+# sites are cleaned by patches/revoke_staff_manager_user_permission_perm.py. See
+# docs/superpowers/specs/2026-07-22-close-internal-escalation-design.md.
+from barakat.permissions import STAFF_MANAGER_ROLE
 
 # doctype -> perms the role needs. Ordered by the create flow: Employee first (the
-# insert that used to 403), then the login + scoping docs.
+# insert that used to 403), then the login and salary docs.
 STAFF_MANAGER_PERMS = {
 	"User": ("read", "write", "create"),
 	"Employee": ("read", "write", "create"),
 	"Designation": ("read", "write", "create"),
-	"User Permission": ("read", "write", "create", "delete"),
 	"Salary Structure Assignment": ("read", "write", "create", "submit", "cancel"),
 }
 

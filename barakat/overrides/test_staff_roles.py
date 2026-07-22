@@ -56,5 +56,24 @@ class GuardRolePreset(FrappeTestCase):
             guard_role_preset(_Doc("", changed=True))  # must not raise
 
 
+class StaffManagerPerms(FrappeTestCase):
+    def test_no_user_permission_grant(self):
+        # After migrate, Barakat Staff Manager must hold no DocPerm on User Permission.
+        rows = frappe.get_all(
+            "Custom DocPerm",
+            filters={"role": STAFF_MANAGER_ROLE, "parent": "User Permission"},
+            pluck="name",
+        )
+        self.assertEqual(rows, [])
+
+    def test_keeps_user_create(self):
+        rows = frappe.get_all(
+            "Custom DocPerm",
+            filters={"role": STAFF_MANAGER_ROLE, "parent": "User"},
+            pluck="name",
+        )
+        self.assertTrue(rows)
+
+
 if __name__ == "__main__":
     unittest.main()
