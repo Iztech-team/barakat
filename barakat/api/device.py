@@ -4,8 +4,10 @@ from frappe import _
 # Roles allowed to bind a till to a POS Profile. Every method here writes through
 # frappe.db.set_value / insert(ignore_permissions=True), which bypass ERPNext's
 # permission engine entirely — so this constant is the only access control on the
-# device-to-profile mapping. Held by the Cashier, Branch Supervisor and Manager
-# personas via `Barakat POS Operator`.
+# device-to-profile mapping. `Barakat POS Operator` is held by the Branch Supervisor
+# and Manager personas ONLY — the Cashier lost it in 07669ff when that persona was
+# made read-only, so a Cashier can no longer bind a device. Do not re-add it to the
+# Cashier bundle to "fix" a binding failure; bind under a supervisor/manager session.
 POS_DEVICE_ROLES = ("Barakat POS Operator", "System Manager")
 
 

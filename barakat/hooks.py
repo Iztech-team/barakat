@@ -41,7 +41,16 @@ fixtures = [
 					"Barakat Purchase Invoice Clerk",
 					"Barakat Payment Mode Manager",
 					"Barakat Customer Manager",
+					"Barakat Customer Group Manager",
 					"Barakat Cashier Reader",
+					# The rest of the Cashier's read-only bundle. Omitting these
+					# silently gave a Cashier FEWER roles than the bundle names,
+					# because persona_role_bundle() intersects with roles that
+					# exist on the site. Guarded by RoleFixtureCoverage in
+					# overrides/test_persona_guard.py.
+					"Barakat POS Viewer",
+					"Barakat Commerce Reader",
+					"Barakat Reference Reader",
 				],
 			]
 		],

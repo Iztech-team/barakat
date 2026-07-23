@@ -6,7 +6,9 @@ no Frappe dependency.
 
 import unittest
 
+from barakat import hooks
 from barakat.permissions import (
+    BARAKAT_ROLE_PERMS,
     FORBIDDEN_ROLES,
     PERSONA_ROLE_BUNDLES,
     STAFF_MANAGER_ROLE,
@@ -50,6 +52,34 @@ class HrBundleNoLongerStaffAdmin(unittest.TestCase):
     def test_no_bundle_leaks_forbidden_role(self):
         for persona, roles in PERSONA_ROLE_BUNDLES.items():
             self.assertEqual(FORBIDDEN_ROLES.intersection(roles), set(), persona)
+
+
+class RoleFixtureCoverage(unittest.TestCase):
+    """Every Barakat role a bundle or DocPerm map names must also be exported by the
+    `Role` fixture in hooks.py.
+
+    `staff_roles.persona_role_bundle` intersects a bundle with the roles that exist on
+    the site, so a role this app never ships is silently dropped — the user ends up
+    with FEWER roles and no error. Fails closed, but still a functional bug.
+    """
+
+    def _fixture_roles(self):
+        entry = next(
+            f for f in hooks.fixtures if isinstance(f, dict) and f.get("dt") == "Role"
+        )
+        return set(entry["filters"][0][2])
+
+    def test_every_referenced_barakat_role_is_exported(self):
+        referenced = set()
+        for roles in PERSONA_ROLE_BUNDLES.values():
+            referenced |= set(roles)
+        referenced |= set(BARAKAT_ROLE_PERMS)
+        missing = sorted(
+            r
+            for r in referenced
+            if r.startswith("Barakat") and r not in self._fixture_roles()
+        )
+        self.assertEqual(missing, [], f"missing from the hooks.py Role fixture: {missing}")
 
 
 if __name__ == "__main__":
