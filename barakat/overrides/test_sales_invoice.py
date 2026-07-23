@@ -18,8 +18,6 @@ The accounts/customer are discovered from whatever company on the site already h
 a full chart of accounts, so the test is not pinned to one tenant.
 """
 
-import unittest
-
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import flt
@@ -56,7 +54,15 @@ class TestLoyaltyRedemptionGL(FrappeTestCase):
         super().setUpClass()
         found = _find_test_company()
         if not found:
-            raise unittest.SkipTest("No company with a chart of accounts on this site")
+            # Deliberately an ERROR, not unittest.SkipTest. This used to skip when the
+            # site had no company, so a clean CI run printed "OK" while asserting
+            # nothing whatsoever about the money path — green that proved nothing.
+            # A site these cannot run on is a problem to fix, not a result to hide.
+            raise AssertionError(
+                "loyalty GL tests cannot run: no Company on this site has a Receivable "
+                "account, an Expense account and a cost centre. Create a company with a "
+                "chart of accounts (or point the suite at a site that has one)."
+            )
         cls.company, cls.debit_to, cls.redemption, cls.cost_center = found
         cls.customer = frappe.db.get_value("Customer", {"disabled": 0}, "name") or frappe.db.get_value(
             "Customer", {}, "name"
@@ -177,38 +183,105 @@ class TestLoyaltyRedemptionGL(FrappeTestCase):
         self.assertIsNone(ret._barakat_loyalty_reversal_account())
 
 
-def _find_loyalty_fixture():
-    """Everything the end-to-end test needs, discovered from live site data.
+def _ensure_loyalty_fixture():
+    """Everything the end-to-end tests need, seeding whatever is cheap to create.
 
-    Requires a Loyalty Program that actually has an expense (redemption) account —
-    that program's company supplies the receivable / income / cost-center context.
-    Returns a dict or None (fresh site with no configured loyalty program).
+    This used to only DISCOVER a fully-configured Loyalty Program, and the caller
+    skipped when it found none — so on any site without loyalty configured the
+    end-to-end money path was never exercised and the run still reported OK.
+
+    The one thing we refuse to invent is a Company with a chart of accounts:
+    creating one is slow and would not resemble a real tenant. The loyalty program,
+    customer and sales item are all cheap, so they are created on demand.
+    FrappeTestCase rolls the transaction back, so nothing seeded here survives.
+
+    Returns the fixture dict, or None when the site has no usable company.
     """
-    for lp in frappe.get_all(
-        "Loyalty Program", filters={"expense_account": ["is", "set"]}, fields=["name", "company", "expense_account"]
-    ):
-        company = lp.company
+    company_ctx = None
+    for company in frappe.get_all("Company", pluck="name"):
         debtors = frappe.db.get_value(
             "Account", {"company": company, "account_type": "Receivable", "is_group": 0}, "name"
         )
         income = frappe.db.get_value(
             "Account", {"company": company, "root_type": "Income", "is_group": 0}, "name"
         )
+        expense = frappe.db.get_value(
+            "Account", {"company": company, "root_type": "Expense", "is_group": 0}, "name"
+        )
         cost_center = frappe.db.get_value("Company", company, "cost_center")
-        item = frappe.db.get_value("Item", {"is_sales_item": 1, "disabled": 0, "has_variants": 0}, "name")
-        customer = frappe.db.get_value("Customer", {"disabled": 0}, "name")
-        if all([debtors, income, cost_center, item, customer]):
-            return {
-                "program": lp.name,
+        if debtors and income and expense and cost_center:
+            company_ctx = (company, debtors, income, expense, cost_center)
+            break
+    if not company_ctx:
+        return None
+
+    company, debtors, income, expense, cost_center = company_ctx
+
+    # Prefer a genuinely configured program; otherwise seed a minimal one.
+    program = frappe.db.get_value(
+        "Loyalty Program", {"company": company, "expense_account": ["is", "set"]}, "name"
+    )
+    redemption = frappe.db.get_value("Loyalty Program", program, "expense_account") if program else None
+    if not program:
+        lp = frappe.get_doc(
+            {
+                "doctype": "Loyalty Program",
+                "loyalty_program_name": "Barakat Test Loyalty",
+                "loyalty_program_type": "Single Tier Program",
                 "company": company,
-                "redemption": lp.expense_account,
-                "debtors": debtors,
-                "income": income,
+                "from_date": frappe.utils.nowdate(),
+                "conversion_factor": 1,
+                "expense_account": expense,
                 "cost_center": cost_center,
-                "item": item,
-                "customer": customer,
+                "collection_rules": [
+                    {"tier_name": "Barakat Test Tier", "collection_factor": 1, "min_spent": 0}
+                ],
             }
-    return None
+        )
+        lp.flags.ignore_permissions = True
+        lp.insert()
+        program, redemption = lp.name, expense
+
+    customer = frappe.db.get_value("Customer", {"disabled": 0}, "name")
+    if not customer:
+        cust = frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": "Barakat Test Customer",
+                "customer_type": "Individual",
+            }
+        )
+        cust.flags.ignore_permissions = True
+        cust.insert()
+        customer = cust.name
+
+    item = frappe.db.get_value("Item", {"is_sales_item": 1, "disabled": 0, "has_variants": 0}, "name")
+    if not item:
+        it = frappe.get_doc(
+            {
+                "doctype": "Item",
+                "item_code": "BARAKAT-TEST-ITEM",
+                "item_name": "Barakat Test Item",
+                "item_group": frappe.db.get_value("Item Group", {"is_group": 0}, "name"),
+                "stock_uom": frappe.db.get_value("UOM", {}, "name") or "Nos",
+                "is_sales_item": 1,
+                "is_stock_item": 0,
+            }
+        )
+        it.flags.ignore_permissions = True
+        it.insert()
+        item = it.name
+
+    return {
+        "program": program,
+        "company": company,
+        "redemption": redemption,
+        "debtors": debtors,
+        "income": income,
+        "cost_center": cost_center,
+        "item": item,
+        "customer": customer,
+    }
 
 
 class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
@@ -230,9 +303,14 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.fx = _find_loyalty_fixture()
+        cls.fx = _ensure_loyalty_fixture()
         if not cls.fx:
-            raise unittest.SkipTest("No Loyalty Program with a redemption account on this site")
+            # An ERROR, not unittest.SkipTest — see the note in TestLoyaltyRedemptionGL.
+            raise AssertionError(
+                "loyalty end-to-end tests cannot run: no Company on this site has a "
+                "Receivable, Income and Expense account plus a cost centre. Everything "
+                "else (loyalty program, customer, item) is seeded automatically."
+            )
 
     def test_sale_paid_with_points_settles_on_the_real_ledger(self):
         fx = self.fx
