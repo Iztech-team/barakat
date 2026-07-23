@@ -295,9 +295,18 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
     "Partly Paid" (the concrete bug the override exists to fix).
 
     Nothing is committed — FrappeTestCase rolls the transaction back after the test,
-    so no invoice or ledger row survives. Only the return path is left to a manual
-    reconciliation: faithfully reproducing a consolidated *credit note* requires the
-    real shift-close / merge pipeline, not a hand-built document.
+    so no invoice or ledger row survives.
+
+    The return path IS covered here as of 2026-07-23 (it used to be "left to a manual
+    reconciliation"): `test_full_refund_...` and `test_partial_return_...` submit a
+    real consolidated credit note and assert the redemption account reconciles —
+    flat after a full refund, half-reversed after a partial one.
+
+    Two things a hand-built credit note must get right or the reversal silently does
+    not happen, and the test passes for the wrong reason:
+      * `is_pos` — ERPNext gates the entire write-off entry on it, and the loyalty
+        reversal rides on that write-off.
+      * `write_off_amount` — the gap the points originally covered.
     """
 
     @classmethod
