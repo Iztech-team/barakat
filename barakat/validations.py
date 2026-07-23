@@ -128,12 +128,13 @@ def validate_employee_pin(doc, method):
 # tuple checked against the linked Account. {company} is substituted at runtime.
 SALARY_ADVANCE_FIELD = "custom_salary_advance_account"
 
-# Fields that must never point at the company's own customer-receivable control
-# account (usually "Debtors"). The generic rule below cannot express this: Debtors
-# IS `account_type = Receivable`, so it passes — and a staff advance posted there
-# lands in CUSTOMER receivables, silently corrupting the AR aging report. Checked
-# against Company.default_receivable_account in validate_pos_profile_accounts.
-DEFAULT_RECEIVABLE_FORBIDDEN_FIELDS = (SALARY_ADVANCE_FIELD,)
+# NOTE on the salary-advance account (report item HIGH 4, 2026-07-21):
+# a guard here used to also reject the company's own default receivable ("Debtors"),
+# because a staff advance posted there lands in CUSTOMER receivables and skews the AR
+# aging report. Removed 2026-07-23 by the owner's decision: the account type is the
+# constraint we enforce, and WHICH receivable account to use is the accountant's call,
+# not ours. If AR aging ever shows staff advances again, this is why — the fix is to
+# pick a dedicated employee-advances account on the POS Profile, not to re-add a rule.
 
 POS_PROFILE_ACCOUNT_RULES = {
 	"custom_cash_account": (
@@ -194,22 +195,6 @@ def validate_pos_profile_accounts(doc, method):
 				f"<b>{doc.company}</b>.",
 				title="Company Mismatch",
 			)
-
-		# See DEFAULT_RECEIVABLE_FORBIDDEN_FIELDS: "Debtors" satisfies the generic
-		# Receivable rule, so this is the only thing stopping staff advances from
-		# being booked into customer receivables.
-		if fieldname in DEFAULT_RECEIVABLE_FORBIDDEN_FIELDS and doc.company:
-			default_receivable = frappe.db.get_value(
-				"Company", doc.company, "default_receivable_account"
-			)
-			if default_receivable and account == default_receivable:
-				frappe.throw(
-					f"<b>{label}</b> cannot be the company's default receivable "
-					f"account (<b>{account}</b>). Advances posted there land in "
-					f"customer receivables and distort the AR aging report. Use a "
-					f"dedicated employee-advances account instead.",
-					title="Invalid Account",
-				)
 
 		for column, op, value in conditions:
 			actual = acc.get(column)

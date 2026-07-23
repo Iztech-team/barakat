@@ -45,11 +45,20 @@ def _doc(account):
 
 
 class SalaryAdvanceAccount(FrappeTestCase):
-    def test_rejects_company_default_receivable(self):
-        """Debtors passes the generic Receivable rule — this guard is what stops it."""
+    def test_allows_the_company_default_receivable(self):
+        """Deliberate: "Debtors" is accepted, and this test exists to keep it that way.
+
+        A guard here used to reject the company's default receivable, because a staff
+        advance posted to it lands in CUSTOMER receivables and skews AR aging (report
+        item HIGH 4). The owner removed that on 2026-07-23: we enforce the account
+        TYPE, and which receivable account to use is the accountant's decision.
+
+        This asserts the absence of the rule on purpose. If someone re-adds the guard
+        to "fix AR aging", this test fails and points them at that decision instead of
+        letting the rule quietly come back.
+        """
         with patch("frappe.db.get_value", side_effect=_lookup()):
-            with self.assertRaises(frappe.ValidationError):
-                validate_pos_profile_accounts(_doc(DEBTORS), None)
+            validate_pos_profile_accounts(_doc(DEBTORS), None)  # must not raise
 
     def test_allows_a_dedicated_advances_account(self):
         with patch("frappe.db.get_value", side_effect=_lookup()):
@@ -58,7 +67,7 @@ class SalaryAdvanceAccount(FrappeTestCase):
             )  # must not raise
 
     def test_still_rejects_a_non_receivable_account(self):
-        """The original rule must survive the new guard."""
+        """The account-TYPE rule is what we do still enforce."""
         with patch("frappe.db.get_value", side_effect=_lookup(account_type="Bank")):
             with self.assertRaises(frappe.ValidationError):
                 validate_pos_profile_accounts(_doc("Some Bank - TC"), None)
