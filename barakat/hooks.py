@@ -126,8 +126,14 @@ doc_events = {
 			"barakat.validations.validate_employee_pin",
 			"barakat.overrides.staff_roles.guard_role_preset",
 		],
-		"after_insert": "barakat.overrides.staff_roles.reassert_persona_roles",
-		"on_update": "barakat.overrides.staff_roles.reassert_persona_roles",
+		"after_insert": [
+			"barakat.overrides.staff_roles.reassert_persona_roles",
+			"barakat.overrides.staff_roles.reassert_company_user_permission",
+		],
+		"on_update": [
+			"barakat.overrides.staff_roles.reassert_persona_roles",
+			"barakat.overrides.staff_roles.reassert_company_user_permission",
+		],
 	},
 	"Branch": {
 		"validate": "barakat.overrides.branch.validate_branch",

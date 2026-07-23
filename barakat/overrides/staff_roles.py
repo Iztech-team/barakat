@@ -62,6 +62,45 @@ def persona_role_bundle(persona):
 	return [role for role in wanted if role in existing]
 
 
+def reassert_company_user_permission(doc, method=None):
+	"""Ensure the Employee's linked user keeps their company User Permission.
+
+	This is the tenant boundary. ERPNext creates it in
+	`erpnext/setup/doctype/employee/employee.py::update_user_permissions`, but only
+	when `user_id` or the `create_user_permission` checkbox CHANGES — and it DELETES
+	both the Employee and the Company permission when that box is unticked. The
+	checkbox's description says only "This will restrict user access to other employee
+	records", so unticking it silently unscopes the user from every other company's
+	data. Measured on BOM: a scoped user sees 0 of 190 POS invoices; an unscoped one
+	sees all of them.
+
+	Re-asserting here splits the two concerns the checkbox conflates: it keeps owning
+	the own-employee-record restriction, we own the tenant restriction.
+
+	ADD-ONLY. Never removes a permission: staff may legitimately span shops, and a
+	second company granted by hand must survive.
+	"""
+	from frappe.permissions import add_user_permission
+
+	preset = (doc.custom_role_preset or "").strip()
+	if preset not in PERSONAS:
+		return
+
+	email = (doc.user_id or "").strip()
+	company = (doc.company or "").strip()
+	if not email or not company or email == "Administrator":
+		return
+	if not frappe.db.exists("User", email):
+		return
+
+	if frappe.db.exists(
+		"User Permission", {"user": email, "allow": "Company", "for_value": company}
+	):
+		return
+
+	add_user_permission("Company", company, email)
+
+
 def guard_role_preset(doc, method=None):
 	"""Reject setting/changing an Employee's persona preset unless the caller may.
 

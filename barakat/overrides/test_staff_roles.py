@@ -11,7 +11,10 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from barakat.overrides.staff_roles import guard_role_preset
+from barakat.overrides.staff_roles import (
+    guard_role_preset,
+    reassert_company_user_permission,
+)
 from barakat.permissions import STAFF_MANAGER_ROLE
 
 
@@ -73,6 +76,67 @@ class StaffManagerPerms(FrappeTestCase):
             pluck="name",
         )
         self.assertTrue(rows)
+
+
+class ReassertCompanyUserPermission(FrappeTestCase):
+    """The tenant boundary must not depend on Employee.create_user_permission.
+
+    ERPNext deletes the Company User Permission when that checkbox is unticked, and
+    its label only mentions employee records — so the company wall can be dropped by
+    accident. This hook re-asserts it on every save, add-only.
+    """
+
+    def _emp(self, preset="Cashier", user="staff@example.com", company="ACME"):
+        return frappe._dict(
+            {"custom_role_preset": preset, "user_id": user, "company": company}
+        )
+
+    def _exists(self, permission_present):
+        def side_effect(doctype, *args, **kwargs):
+            if doctype == "User":
+                return True
+            if doctype == "User Permission":
+                return permission_present
+            return False
+
+        return side_effect
+
+    def test_creates_the_permission_when_missing(self):
+        with patch("frappe.db.exists", side_effect=self._exists(False)), patch(
+            "frappe.permissions.add_user_permission"
+        ) as add:
+            reassert_company_user_permission(self._emp())
+        add.assert_called_once_with("Company", "ACME", "staff@example.com")
+
+    def test_is_a_noop_when_already_present(self):
+        with patch("frappe.db.exists", side_effect=self._exists(True)), patch(
+            "frappe.permissions.add_user_permission"
+        ) as add:
+            reassert_company_user_permission(self._emp())
+        add.assert_not_called()
+
+    def test_skips_unrecognised_preset(self):
+        with patch("frappe.db.exists", side_effect=self._exists(False)), patch(
+            "frappe.permissions.add_user_permission"
+        ) as add:
+            reassert_company_user_permission(self._emp(preset="Not A Persona"))
+        add.assert_not_called()
+
+    def test_skips_when_no_login_or_no_company(self):
+        with patch("frappe.db.exists", side_effect=self._exists(False)), patch(
+            "frappe.permissions.add_user_permission"
+        ) as add:
+            reassert_company_user_permission(self._emp(user=""))
+            reassert_company_user_permission(self._emp(company=""))
+        add.assert_not_called()
+
+    def test_never_removes_a_permission(self):
+        """Add-only: an area manager's hand-granted second company must survive."""
+        with patch("frappe.db.exists", side_effect=self._exists(True)), patch(
+            "frappe.permissions.remove_user_permission"
+        ) as remove:
+            reassert_company_user_permission(self._emp())
+        remove.assert_not_called()
 
 
 if __name__ == "__main__":
