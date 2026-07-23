@@ -312,6 +312,138 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
                 "else (loyalty program, customer, item) is seeded automatically."
             )
 
+    # ── helpers: build the real documents a shift close produces ────────────────
+
+    def _submit_redeeming_sale(self, qty=2, rate=REDEEM_AMOUNT / 2):
+        """Submit a consolidated sale settled with points. Returns the invoice.
+
+        Inserted as an ordinary invoice first so ERPNext computes the totals, THEN
+        flipped to the consolidated redemption shape a shift close produces —
+        building it consolidated from the start skips total calculation and leaves
+        grand_total unset.
+        """
+        fx = self.fx
+        si = frappe.new_doc("Sales Invoice")
+        si.company = fx["company"]
+        si.customer = fx["customer"]
+        si.debit_to = fx["debtors"]
+        si.set_posting_time = 1
+        si.posting_date = frappe.utils.nowdate()
+        si.append(
+            "items",
+            {
+                "item_code": fx["item"],
+                "qty": qty,
+                "rate": rate,
+                "income_account": fx["income"],
+                "cost_center": fx["cost_center"],
+            },
+        )
+        si.flags.ignore_permissions = True
+        si.insert()
+        si.is_consolidated = 1
+        si.redeem_loyalty_points = 1
+        si.loyalty_program = fx["program"]
+        si.loyalty_points = flt(qty) * flt(rate)
+        si.loyalty_amount = flt(qty) * flt(rate)
+        si.loyalty_redemption_account = fx["redemption"]
+        si.loyalty_redemption_cost_center = fx["cost_center"]
+        si.flags.ignore_validate_update_after_submit = True
+        si.submit()
+        return si
+
+    def _submit_consolidated_return(self, original, qty, rate, reverse_amount):
+        """Submit the consolidated credit note a refund produces, against `original`."""
+        fx = self.fx
+        ret = frappe.new_doc("Sales Invoice")
+        ret.company = fx["company"]
+        ret.customer = fx["customer"]
+        ret.debit_to = fx["debtors"]
+        ret.is_return = 1
+        ret.return_against = original.name
+        ret.set_posting_time = 1
+        ret.posting_date = frappe.utils.nowdate()
+        ret.append(
+            "items",
+            {
+                "item_code": fx["item"],
+                "qty": -abs(qty),
+                "rate": rate,
+                "income_account": fx["income"],
+                "cost_center": fx["cost_center"],
+            },
+        )
+        ret.flags.ignore_permissions = True
+        ret.insert()
+        ret.is_consolidated = 1
+        ret.write_off_amount = -abs(reverse_amount)
+        ret.loyalty_redemption_account = fx["redemption"]
+        ret.loyalty_redemption_cost_center = fx["cost_center"]
+        ret.flags.ignore_validate_update_after_submit = True
+        ret.submit()
+        return ret
+
+    def _gl(self, voucher):
+        return frappe.get_all(
+            "GL Entry",
+            filters={"voucher_no": voucher, "is_cancelled": 0},
+            fields=["account", "debit", "credit", "against_voucher"],
+        )
+
+    def _net(self, rows, account):
+        """Debit-positive net movement on `account`."""
+        return sum(flt(r.debit) - flt(r.credit) for r in rows if r.account == account)
+
+    # ── worked example: full refund reverses the redemption ─────────────────────
+
+    def test_full_refund_reverses_the_redemption_on_the_real_ledger(self):
+        """Sale then full refund must leave the redemption account at zero.
+
+        This is the reconciled worked example the return path never had: the sale
+        books the redeemed value INTO the redemption account, the credit note takes
+        exactly the same value back out, and the pair nets to nothing.
+        """
+        fx = self.fx
+        sale = self._submit_redeeming_sale()
+        sale_net = self._net(self._gl(sale.name), fx["redemption"])
+        self.assertEqual(sale_net, REDEEM_AMOUNT, "sale should debit the redemption account")
+
+        ret = self._submit_consolidated_return(sale, qty=2, rate=REDEEM_AMOUNT / 2, reverse_amount=REDEEM_AMOUNT)
+        ret_rows = self._gl(ret.name)
+        ret_net = self._net(ret_rows, fx["redemption"])
+
+        # The reversal comes back OUT of the redemption account.
+        self.assertEqual(ret_net, -REDEEM_AMOUNT, "refund should credit the redemption account")
+
+        # Reconciled: across both vouchers the redemption account is flat.
+        self.assertEqual(sale_net + ret_net, 0.0, "sale + full refund must net to zero")
+
+        # And the reversal is allocated against the RETURN, not the original.
+        debtors_rows = [r for r in ret_rows if r.account == fx["debtors"]]
+        self.assertTrue(debtors_rows, "return should touch the receivable")
+        self.assertTrue(
+            all(r.against_voucher == ret.name for r in debtors_rows),
+            f"reversal must be allocated against the return itself, got "
+            f"{[r.against_voucher for r in debtors_rows]}",
+        )
+
+    # ── worked example: partial return reverses only what came back ─────────────
+
+    def test_partial_return_reverses_only_the_returned_portion(self):
+        """Returning half the sale reverses half the redemption, not all of it."""
+        fx = self.fx
+        half = REDEEM_AMOUNT / 2
+        sale = self._submit_redeeming_sale()
+        sale_net = self._net(self._gl(sale.name), fx["redemption"])
+        self.assertEqual(sale_net, REDEEM_AMOUNT)
+
+        ret = self._submit_consolidated_return(sale, qty=1, rate=REDEEM_AMOUNT / 2, reverse_amount=half)
+        ret_net = self._net(self._gl(ret.name), fx["redemption"])
+
+        self.assertEqual(ret_net, -half, "partial refund should reverse only the returned half")
+        # Reconciled: the un-returned half stays recognised in the redemption account.
+        self.assertEqual(sale_net + ret_net, half, "half the redemption must remain")
+
     def test_sale_paid_with_points_settles_on_the_real_ledger(self):
         fx = self.fx
         si = frappe.new_doc("Sales Invoice")
