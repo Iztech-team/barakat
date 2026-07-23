@@ -263,7 +263,9 @@ SETTINGS_MANAGER_DOCTYPES = ("System Settings", "Global Defaults")
 
 
 def _grant_settings_manager_perms():
-	"""Give `Barakat Settings Manager` read+write on the two rounding singles.
+	"""Give `Barakat Settings Manager` READ on the two rounding singles.
+
+	Read only — writes go through `barakat.api.settings.set_rounding_settings`.
 
 	Uses frappe.permissions.add_permission, which first copies the doctype's existing
 	standard DocPerms into Custom DocPerm (frappe.permissions.setup_custom_perms) before
@@ -287,7 +289,13 @@ def _grant_settings_manager_perms():
 		# level 0). Returns None if the row already exists (idempotent).
 		add_permission(doctype, SETTINGS_MANAGER_ROLE, 0)
 		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "read", 1, validate=False)
-		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "write", 1, validate=False)
+		# READ only. Write is explicitly re-asserted to 0 on every migrate rather than
+		# merely omitted, so sites that already granted it correct themselves without a
+		# patch. DocPerms are per-doctype, so write here would also hand a Manager
+		# session policy, password policy and every other global setting — see New-C in
+		# the 2026-07-21 review. The Rounding page's two fields are written instead by
+		# barakat.api.settings.set_rounding_settings, elevated and role-checked.
+		update_permission_property(doctype, SETTINGS_MANAGER_ROLE, 0, "write", 0, validate=False)
 		frappe.clear_cache(doctype=doctype)
 
 
