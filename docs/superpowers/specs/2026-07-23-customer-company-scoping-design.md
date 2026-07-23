@@ -94,6 +94,31 @@ defensive — it must never blank a value it does not understand:
 with an **empty** company stays visible to everyone. On `bom` that is 1 customer today. Filling
 blanks is therefore part of the fix, not cosmetic.
 
+### 5. Re-assert the Company User Permission on every Employee save
+
+The whole boundary proved above rests on one tickbox: `Employee.create_user_permission`
+("User Details" section, next to User ID, default 1). ERPNext's `update_user_permissions()`:
+
+- runs **only** when `user_id` or the checkbox itself changed — it is not re-asserted on
+  ordinary saves, so a permission lost any other way is never restored; and
+- **deletes** both the Employee and the **Company** permission when the box is unticked —
+  while its UI description says only *"This will restrict user access to other employee
+  records"*. Nothing warns that unticking also unlocks every other company's data.
+
+New hook `reassert_company_user_permission(doc, method=None)` in
+`barakat/overrides/staff_roles.py`, wired on the same `Employee` `after_insert` / `on_update`
+events as `reassert_persona_roles`:
+
+- No-op unless the Employee has a recognised persona preset **and** a linked, existing,
+  non-Administrator user **and** a company — same guards as the role hook.
+- Ensures a `User Permission (allow="Company", for_value=doc.company)` exists for that user.
+- **Add-only. It never deletes.** A second company granted by hand to an area manager
+  survives untouched — required, since staff may legitimately span shops.
+
+This deliberately splits the two concerns the checkbox currently conflates: the checkbox keeps
+owning the *own-employee-record* restriction, while barakat owns the *tenant* restriction. So
+unticking it still does what its label promises, without silently dropping the company wall.
+
 ## Risks
 
 - **Link validation on future saves.** Once the field is a `Link`, saving a Customer whose
@@ -115,13 +140,15 @@ blanks is therefore part of the fix, not cosmetic.
 - **On-bench:** re-run the measurement as a company-scoped user and assert
   `visible < total` for Customer, alongside the existing Item control. Green means the leak is closed.
 - **Patch:** idempotent — running it twice changes nothing on the second run.
+- **Company re-assert hook:** with the permission deleted, saving the Employee recreates it;
+  saving again is a no-op (no duplicate row); an extra hand-granted company is still present
+  afterwards; and an Employee with no preset / no login / no company is untouched.
 
 ## Out of scope
 
 - `permission_query_conditions` / `has_permission` hooks — unnecessary; the native mechanism is
   proven to work on every other doctype.
-- Hardening the `create_user_permission` checkbox. Unticking it makes ERPNext **delete** both the
-  Employee and Company permissions (`employee.py:208-210`), silently unscoping that person. Real,
-  found during this review, but a separate concern from the Customer field type.
 - `apply_strict_user_permissions` (would also hide blank-marker rows). A site-wide setting with a
   much wider blast radius; revisit after this lands.
+- Changing the `create_user_permission` field itself (label, default, or read-only). Re-asserting
+  from our own hook achieves the goal without editing a core ERPNext field.
