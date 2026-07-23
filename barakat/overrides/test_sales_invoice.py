@@ -376,6 +376,12 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
         ret.flags.ignore_permissions = True
         ret.insert()
         ret.is_consolidated = 1
+        # `is_pos` is REQUIRED, not decoration. ERPNext gates the whole write-off
+        # entry on it (sales_invoice.py, make_write_off_gl_entry: "applicable if only
+        # pos"), and the loyalty reversal rides on that write-off — so without this
+        # the credit note posts with no reversal at all and the redemption account
+        # silently keeps the sale's debit. A real shift-close credit note is is_pos.
+        ret.is_pos = 1
         ret.write_off_amount = -abs(reverse_amount)
         ret.loyalty_redemption_account = fx["redemption"]
         ret.loyalty_redemption_cost_center = fx["cost_center"]
