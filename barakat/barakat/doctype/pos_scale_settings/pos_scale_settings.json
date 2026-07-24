@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "autoname": "field:branch",
+ "creation": "2026-07-24 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["branch","custom_company","has_balances","scale_barcode_enabled",
+   "scale_barcode_prefix","scale_barcode_code_length","scale_barcode_value_type",
+   "scale_barcode_value_length","scale_barcode_decimals"],
+ "fields": [
+  {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1,"unique":1},
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company (Barakat)","options":"Company"},
+  {"fieldname":"has_balances","fieldtype":"Check","label":"Has Electrical Balances","default":"0"},
+  {"fieldname":"scale_barcode_enabled","fieldtype":"Check","label":"Scale Barcode Enabled","default":"0"},
+  {"fieldname":"scale_barcode_prefix","fieldtype":"Data","label":"Barcode Prefix","default":"2"},
+  {"fieldname":"scale_barcode_code_length","fieldtype":"Int","label":"Code Length","default":"7"},
+  {"fieldname":"scale_barcode_value_type","fieldtype":"Select","label":"Value Type","options":"price\nweight","default":"price"},
+  {"fieldname":"scale_barcode_value_length","fieldtype":"Int","label":"Value Length","default":"5"},
+  {"fieldname":"scale_barcode_decimals","fieldtype":"Int","label":"Decimals","default":"2"}
+ ],
+ "links": [],
+ "modified": "2026-07-24 00:00:00",
+ "module": "Barakat",
+ "name": "POS Scale Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
