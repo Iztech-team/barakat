@@ -413,5 +413,17 @@
     "insert_after": "currency",
     "in_list_view": 0,
     "in_standard_filter": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "UOM-custom_company",
+    "dt": "UOM",
+    "fieldname": "custom_company",
+    "label": "Company (Barakat)",
+    "fieldtype": "Link",
+    "options": "Company",
+    "insert_after": "enabled",
+    "in_list_view": 0,
+    "in_standard_filter": 1
   }
 ]

@@ -66,6 +66,12 @@ class CompanyMarkersAreEnforceable(unittest.TestCase):
         self.assertEqual(f["fieldtype"], "Link")
         self.assertEqual(f["options"], "Company")
 
+    def test_uom_has_enforceable_company_marker(self):
+        f = _by_name(self.rows, "UOM-custom_company")
+        self.assertIsNotNone(f, "UOM must carry a custom_company marker")
+        self.assertEqual(f["fieldtype"], "Link")
+        self.assertEqual(f["options"], "Company")
+
 
 if __name__ == "__main__":
     unittest.main()
