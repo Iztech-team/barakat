@@ -188,3 +188,24 @@ AP UOM list shows only that company's units.
 - **Electrobun pulls before app deploy** (units still bare): `isScaleKgUom` +
   name-keyed whole-number set both handle bare names, so an out-of-order deploy
   degrades gracefully, never breaks the till.
+
+## Corrections applied during implementation
+
+Two changes vs. the design above, found while building (see commits):
+
+1. **Always copy+repoint; never rename.** The "rename-safe" path had a
+   multi-company ordering hazard: after company C copies+repoints a shared unit
+   (e.g. `Kg`), company D would see `Kg` as "only D references it" and rename the
+   global — corrupting it system-wide. Every used unit now gets a scoped COPY and
+   the global original is always left intact. Orphaned globals are invisible (the
+   picker filters on `custom_company`), so this costs nothing.
+
+2. **Item Price is scoped via its Item, not a `custom_company` column.** `Item
+   Price` has no `custom_company` field; the patch joins `Item Price.item_code →
+   Item.name` and filters `Item.custom_company`. Verified against real bm data
+   (1,021 items + 1,694 prices repointed off bare `Kg` in a rolled-back dry-run).
+
+3. **Electrobun has no literal kg-string check** to replace — the scan guard keys
+   on `stockUomWholeNumber` (already naming-agnostic once scoped whole-number
+   names are pulled). `isScaleKgUom` is added as the foundation Piece 2's
+   per-branch balance UOM will consume.
