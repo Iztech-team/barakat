@@ -13,3 +13,4 @@ barakat.patches.make_sales_invoice_external_id_non_unique
 barakat.patches.revoke_staff_manager_user_permission_perm
 barakat.patches.scope_customer_company_markers
 barakat.patches.scope_uom_company
+barakat.patches.enforce_scale_unit_consistency

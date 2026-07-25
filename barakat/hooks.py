@@ -138,6 +138,9 @@ doc_events = {
 	"Branch": {
 		"validate": "barakat.overrides.branch.validate_branch",
 	},
+	"Company": {
+		"on_update": "barakat.scale_unit.company_on_update",
+	},
 	"POS Profile": {
 		"validate": "barakat.validations.validate_pos_profile_accounts",
 	},
