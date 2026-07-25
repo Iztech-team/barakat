@@ -11,10 +11,37 @@ See docs/superpowers/specs/2026-07-24-uom-company-scoping-design.md
 """
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from barakat.patches._uom_scope_logic import classify_unit, scoped_name
 
 SKIP_SITES = {"petromall.iztech.net"}
+
+
+def _ensure_uom_company_column():
+    """bench migrate runs patches BEFORE fixtures sync, so on a site's first
+    migrate the UOM.custom_company column this patch reads does not exist yet
+    (caught live on qa-test: OperationalError 1054). Create the field here with
+    the exact definition the fixture ships — sync_fixtures later matches it by
+    name (UOM-custom_company) and leaves it in place."""
+    if frappe.db.has_column("UOM", "custom_company"):
+        return
+    create_custom_fields(
+        {
+            "UOM": [
+                dict(
+                    fieldname="custom_company",
+                    label="Company (Barakat)",
+                    fieldtype="Link",
+                    options="Company",
+                    insert_after="enabled",
+                    in_list_view=0,
+                    in_standard_filter=1,
+                )
+            ]
+        },
+        update=True,
+    )
 
 
 def _used_units(company):
@@ -59,6 +86,8 @@ def execute():
     if frappe.local.site in SKIP_SITES:
         print(f"[barakat] scope_uom_company: skipping non-barakat site {frappe.local.site}")
         return
+
+    _ensure_uom_company_column()
 
     for company in frappe.get_all("Company", pluck="name"):
         created = repointed = skipped = 0
