@@ -13,6 +13,7 @@ def after_install():
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
+		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
@@ -52,6 +53,7 @@ def after_migrate():
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
+		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
 	]:
 		try:
@@ -214,6 +216,34 @@ def _grant_barakat_role_perms():
 			for perm in perms:
 				update_permission_property(doctype, role, 0, perm, 1, validate=False)
 			frappe.clear_cache(doctype=doctype)
+
+
+def _grant_owner_payment_mode_perms():
+	"""Give `System Manager` full CRUD on Mode of Payment — the owner's delete gap.
+
+	ERPNext ships Mode of Payment with DocPerm rows for Accounts Manager/User and
+	HR Manager/User only — no `System Manager` row at all, and no `delete` for
+	anyone. Persona staff delete through `Barakat Payment Mode Manager` (see
+	barakat.permissions), but an OWNER account holds no persona: it acts under its
+	own native roles, so the AP payment-modes page showed the owner a delete
+	control (owners bypass the AP/proxy gates) that then 403'd in ERPNext.
+	Measured 2026-07-25: has_permission("Mode of Payment", "delete") was False for
+	the tenant owner on every site while create was True.
+
+	Granting System Manager the full set closes that asymmetry for owners only —
+	no persona bundle contains System Manager, so staff reach is unchanged.
+
+	Uses frappe.permissions.add_permission, which copies the doctype's existing
+	standard DocPerms into Custom DocPerm first, so nothing is stripped.
+	Idempotent: safe to re-assert on every migrate.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	doctype = "Mode of Payment"
+	add_permission(doctype, "System Manager", 0)
+	for perm in ("read", "write", "create", "delete"):
+		update_permission_property(doctype, "System Manager", 0, perm, 1, validate=False)
+	frappe.clear_cache(doctype=doctype)
 
 
 def _backfill_persona_roles():
