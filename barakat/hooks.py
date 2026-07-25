@@ -62,6 +62,9 @@ fixtures = [
 				"name",
 				"in",
 				[
+					# Company (per-shop rounding — see barakat.api.settings notes)
+					"Company-custom_disable_rounded_total",
+					"Company-custom_rounding_method",
 					# Branch
 					"Branch-custom_pos_company",
 					"Branch-custom_pos_profiles",

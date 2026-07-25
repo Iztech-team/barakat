@@ -1,6 +1,29 @@
 [
   {
     "doctype": "Custom Field",
+    "name": "Company-custom_disable_rounded_total",
+    "dt": "Company",
+    "fieldname": "custom_disable_rounded_total",
+    "label": "Disable Rounded Total",
+    "fieldtype": "Check",
+    "default": "0",
+    "insert_after": "round_off_account",
+    "description": "Per-shop rounding: when checked, this company's orders/invoices skip the rounded grand total. The AP Rounding page owns this field; the proxy fans the value out to the company's POS Profiles so ERPNext's shift-close consolidation agrees."
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Company-custom_rounding_method",
+    "dt": "Company",
+    "fieldname": "custom_rounding_method",
+    "label": "Rounding Method",
+    "fieldtype": "Select",
+    "options": "Banker's Rounding (legacy)\nBanker's Rounding\nCommercial Rounding",
+    "default": "Commercial Rounding",
+    "insert_after": "custom_disable_rounded_total",
+    "description": "Per-shop rounding method for this company's POS tills. NOTE: ERPNext still reads System Settings.rounding_method globally when it consolidates invoices at shift close, so a shop using a different method than the rest can round an exact-half total differently on the server."
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Branch-custom_pos_company",
     "dt": "Branch",
     "fieldname": "custom_pos_company",
