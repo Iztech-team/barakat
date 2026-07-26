@@ -97,14 +97,26 @@ BARAKAT_ROLE_PERMS = {
 		"Currency": ("read", "write", "create"),
 		"Currency Exchange": ("read", "write", "create", "delete"),
 	},
-	# Read-only POS for Accountant (`pos: read`). POS Opening/Closing Entry read is
-	# native only to Sales Manager and System Manager, both of which carry far more.
-	# Discovered by the persona sweep: /api/pos/shifts 403'd for Accountant.
+	# Read-only POS for Accountant (`pos: read`) and Cashier (`pos: read` — their AP
+	# login only ever looks things up, see the Cashier bundle note below).
+	# POS Opening/Closing Entry read is native only to Sales Manager and System
+	# Manager, both of which carry far more. Discovered by the persona sweep:
+	# /api/pos/shifts 403'd for Accountant.
+	#
+	# Pricing Rule read was added here (not a new role) for the same reason: the
+	# proxy's getInvoiceItems resolves a discounted line's Pricing Rule name to its
+	# title under the CALLER's own session (`list('Pricing Rule', ...)`), and
+	# neither Cashier nor Accountant carries any role with Pricing Rule access —
+	# `Sales Manager` (which does) is deliberately excluded from both. Without this
+	# the lookup 403s and the promotion title silently comes back null, which is
+	# indistinguishable from "no promotion applied". Read-only: a Cashier or
+	# Accountant must still not be able to edit promotions.
 	"Barakat POS Viewer": {
 		"POS Opening Entry": ("read",),
 		"POS Closing Entry": ("read",),
 		"POS Invoice": ("read",),
 		"POS Profile": ("read",),
+		"Pricing Rule": ("read",),
 	},
 	# Read-only sales/payment reference data for personas that are `finance: none`
 	# but still need it underneath a report or a lookup list. Discovered by the

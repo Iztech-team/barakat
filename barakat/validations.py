@@ -103,6 +103,14 @@ def validate_pricing_rule_disable(doc, method):
 	if not doc.disable:
 		return
 
+	# `validate` also runs on insert, and Frappe assigns `doc.name` before
+	# run_before_save_methods() — so a brand-new document already has a name and
+	# frappe.db.get_value below would return None, indistinguishable from "was
+	# enabled before". Creating an already-disabled rule during an open shift is
+	# harmless (no till has ever seen it, so none can grant it), so let it save.
+	if doc.is_new():
+		return
+
 	was_disabled_before = frappe.db.get_value("Pricing Rule", doc.name, "disable")
 	if was_disabled_before:
 		return
