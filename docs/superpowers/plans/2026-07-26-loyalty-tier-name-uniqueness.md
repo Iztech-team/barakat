@@ -281,17 +281,20 @@ class LoyaltyProgramTierNames(FrappeTestCase):
         validate_loyalty_program_tier_names(frappe._dict({}), "validate")
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Confirm the test cannot pass yet**
 
-This one needs a bench — it imports `frappe`. On the test box:
+This test imports `frappe`, so it cannot run on the Windows dev box, and it must NOT be run
+by SSH-ing to the test bench: that box has the `test` branch checked out, and pulling `dev`
+onto it would merge unpromoted code into the server's tracked branch. **Bench verification
+for this task is the controller's job**, in one pass after Task 3.
+
+Instead, confirm locally that the test targets code that does not exist yet:
 
 ```bash
-ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_validations"
+python -c "import ast,sys; src=open('barakat/validations.py',encoding='utf-8').read(); print('validate_loyalty_program_tier_names' in src)"
 ```
 
-Expected: `ImportError: cannot import name 'validate_loyalty_program_tier_names'`.
-
-(The code is not on the box yet. Either push the branch and pull it there, or run this step after Step 3 and confirm the tests pass on the first bench run — but do read the failure message once, so you know the test is actually exercising the new function.)
+Expected: `False` before Step 3, `True` after.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -337,15 +340,17 @@ In `barakat/hooks.py`, add a new entry to `doc_events`, after the `"Customer"` b
 	},
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Check what can be checked locally**
 
-Push the branch, pull it on the test box, restart, and run:
+The bench run happens in the Bench Verification step after Task 3. Locally, confirm the
+module still parses and the new symbol is importable in isolation:
 
 ```bash
-ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe git -C apps/barakat pull upstream dev && sudo -u frappe /home/frappe/.local/bin/bench restart && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_validations"
+python -c "import ast; ast.parse(open('barakat/validations.py',encoding='utf-8').read()); ast.parse(open('barakat/hooks.py',encoding='utf-8').read()); print('parse ok')"
+python -m unittest barakat.test_loyalty_tier_names
 ```
 
-Expected: `OK`. The pre-existing POS Profile tests in that module must still pass.
+Expected: `parse ok`, and Task 1's 13 tests still `OK` (this task must not disturb them).
 
 - [ ] **Step 5: Commit**
 
@@ -462,13 +467,16 @@ class DedupeLoyaltyTierNames(FrappeTestCase):
         self.assertEqual([r.tier_name for r in self._rows()], ["Bronze", "Gold"])
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Confirm the test cannot pass yet**
+
+Same rule as Task 2: this test imports `frappe`, and the bench run is the controller's job
+in the Bench Verification step below. Do not SSH to the test box. Confirm locally:
 
 ```bash
-ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_dedupe_loyalty_tier_names"
+python -c "import os; print(os.path.exists('barakat/patches/dedupe_loyalty_tier_names.py'))"
 ```
 
-Expected: `ModuleNotFoundError: No module named 'barakat.patches.dedupe_loyalty_tier_names'`.
+Expected: `False` before Step 3, `True` after.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -536,13 +544,14 @@ Register it in `barakat/patches.txt` — append as the last line under `[post_mo
 barakat.patches.dedupe_loyalty_tier_names
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Check what can be checked locally**
 
 ```bash
-ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe git -C apps/barakat pull upstream dev && sudo -u frappe /home/frappe/.local/bin/bench restart && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_dedupe_loyalty_tier_names"
+python -c "import ast; ast.parse(open('barakat/patches/dedupe_loyalty_tier_names.py',encoding='utf-8').read()); print('parse ok')"
+python -c "print(open('barakat/patches.txt',encoding='utf-8').read().rstrip().endswith('barakat.patches.dedupe_loyalty_tier_names'))"
 ```
 
-Expected: `OK`, 3 tests.
+Expected: `parse ok`, then `True`.
 
 - [ ] **Step 5: Commit**
 
@@ -550,6 +559,38 @@ Expected: `OK`, 3 tests.
 git add barakat/patches/dedupe_loyalty_tier_names.py barakat/patches.txt barakat/test_dedupe_loyalty_tier_names.py
 git commit -m "feat(loyalty): patch renaming duplicate tier names"
 ```
+
+---
+
+### Bench Verification (controller-run, after Task 3)
+
+Tasks 2 and 3 write tests that need a real bench. Neither implementer runs them: the test
+EC2 has the `test` branch checked out, so the only correct way to get code onto it is the
+normal promotion, not a `dev` pull. The controller does this once, for both modules.
+
+- [ ] **Step 1: Promote barakat `dev` to `test` and push**
+
+```bash
+git checkout test && git merge dev && git push && git checkout dev
+```
+
+Safe for this repo: nothing deploys on push — the bench only changes when someone pulls.
+
+- [ ] **Step 2: Pull `test` on the test box and restart**
+
+```bash
+ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe git -C apps/barakat pull upstream test && sudo -u frappe /home/frappe/.local/bin/bench restart"
+```
+
+- [ ] **Step 3: Run both new test modules**
+
+```bash
+ssh -i ~/.ssh/barakat-test.pem ubuntu@52.59.253.35 "cd /home/frappe/erp_project && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_validations && sudo -u frappe /home/frappe/.local/bin/bench --site qa-test.test.barakat.iztech.net run-tests --module barakat.test_dedupe_loyalty_tier_names"
+```
+
+Expected: `OK` from both. `test_validations` must still pass its pre-existing POS Profile
+cases, not just the new tier-name ones. Any failure here is a fix round against whichever
+task owns the failing module.
 
 ---
 
@@ -866,11 +907,22 @@ barakat — `barakat/__init__.py`: `__version__ = "1.4.0"` (minor: new validatio
 AP — `package.json`: `"version": "1.5.0"` (minor: a new save-time rule users see).
 POS — `electrobun.config.ts`: `version: "2.3.1"` (patch: a crash fix, no new behaviour).
 
-Commit in each repo:
+Commit in each repo, adding **only** the version file. Never `git commit -am` here: the
+AP working tree carries unrelated modified files (`shifts-table/columns.tsx`,
+`date-locale.ts`, `settings-erpnext.tsx`) that belong to someone else's work, and `-am`
+would sweep them into a release commit and deploy them.
 
 ```bash
-git commit -am "chore: bump <component> to <version> (loyalty tier-name uniqueness)"
+# barakat
+git add barakat/__init__.py && git commit -m "chore: bump barakat to 1.4.0 (loyalty tier-name uniqueness)"
+# AP
+git add package.json && git commit -m "chore: bump AP to 1.5.0 (loyalty tier-name uniqueness)"
+# POS
+git add electrobun.config.ts && git commit -m "chore: bump POS to 2.3.1 (loyalty tier-name uniqueness)"
 ```
+
+Before promoting the AP, confirm those three unrelated files are still uncommitted and
+untouched: `git status --porcelain` should show exactly `M` on those three and nothing else.
 
 - [ ] **Step 2: Push `dev` in all three repos**
 
