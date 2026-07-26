@@ -14,7 +14,11 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from barakat.validations import SALARY_ADVANCE_FIELD, validate_pos_profile_accounts
+from barakat.validations import (
+    SALARY_ADVANCE_FIELD,
+    validate_loyalty_program_tier_names,
+    validate_pos_profile_accounts,
+)
 
 COMPANY = "Test Co"
 DEBTORS = "Debtors - TC"
@@ -76,6 +80,38 @@ class SalaryAdvanceAccount(FrappeTestCase):
         doc = frappe._dict({"company": None, SALARY_ADVANCE_FIELD: DEBTORS})
         with patch("frappe.db.get_value", side_effect=_lookup()):
             validate_pos_profile_accounts(doc, None)  # must not raise
+
+
+class LoyaltyProgramTierNames(FrappeTestCase):
+    """The rule that keeps a program's tier names distinct.
+
+    Duplicate tier names are legal in ERPNext and fatal to the POS, whose local
+    tier table is keyed on (site_url, program, tier_name).
+    """
+
+    def _doc(self, *names):
+        return frappe._dict(
+            {"collection_rules": [frappe._dict({"tier_name": n}) for n in names]}
+        )
+
+    def test_distinct_names_save(self):
+        validate_loyalty_program_tier_names(self._doc("Bronze", "Gold"), "validate")
+
+    def test_exact_duplicate_is_rejected(self):
+        with self.assertRaises(frappe.ValidationError):
+            validate_loyalty_program_tier_names(
+                self._doc("vip vip", "vip vip"), "validate"
+            )
+
+    def test_case_or_space_only_difference_is_rejected(self):
+        with self.assertRaises(frappe.ValidationError):
+            validate_loyalty_program_tier_names(self._doc("VIP", " vip "), "validate")
+
+    def test_blank_name_does_not_trip_this_rule(self):
+        validate_loyalty_program_tier_names(self._doc("", ""), "validate")
+
+    def test_program_with_no_tiers_is_fine(self):
+        validate_loyalty_program_tier_names(frappe._dict({}), "validate")
 
 
 if __name__ == "__main__":

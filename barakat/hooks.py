@@ -153,6 +153,9 @@ doc_events = {
 	"Customer": {
 		"validate": "barakat.validations.validate_customer_mobile_unique",
 	},
+	"Loyalty Program": {
+		"validate": "barakat.validations.validate_loyalty_program_tier_names",
+	},
 }
 
 doctype_js = {

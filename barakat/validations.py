@@ -3,6 +3,8 @@ import re
 import frappe
 from frappe import _
 
+from barakat.loyalty_tier_names import first_duplicate_tier_name
+
 
 def validate_item_disable(doc, method):
 	if not doc.disabled:
@@ -214,3 +216,28 @@ def validate_pos_profile_accounts(doc, method):
 					f"<b>{actual}</b>, but it must be <b>{expected}</b>.",
 					title="Invalid Account",
 				)
+
+
+def validate_loyalty_program_tier_names(doc, method):
+	"""No two tiers in one program may share a name.
+
+	ERPNext allows it; the POS cannot survive it. Its local `loyalty_tiers` table
+	is keyed on (site_url, program, tier_name) and every program is written in one
+	transaction, so a single duplicate rolls back the whole set and — being a
+	SQLite error rather than a network one — never retries. One mistyped tier name
+	takes a till's entire loyalty sync down permanently.
+
+	Compared trimmed and case-insensitively: `VIP` beside `vip ` is a typo, not a
+	second tier.
+	"""
+	names = [row.tier_name for row in (doc.get("collection_rules") or [])]
+	duplicate = first_duplicate_tier_name(names)
+	if not duplicate:
+		return
+	frappe.throw(
+		title=_("Duplicate Tier Name"),
+		msg=_(
+			"This loyalty program already has a tier named <b>{0}</b>. "
+			"Give each tier its own name."
+		).format(duplicate),
+	)
