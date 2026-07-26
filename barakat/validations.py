@@ -46,6 +46,80 @@ def validate_item_disable(doc, method):
 	)
 
 
+def open_shifts_for_company(company):
+	"""Open POS Opening Entries for a company, or across all companies when
+	`company` is falsy — a Pricing Rule with no company applies site-wide, so
+	any open shift can still be honouring it."""
+	if company:
+		return frappe.db.sql(
+			"""
+			SELECT name, pos_profile, company
+			FROM `tabPOS Opening Entry`
+			WHERE status = 'Open'
+			  AND company = %s
+			LIMIT 5
+			""",
+			(company,),
+			as_dict=True,
+		)
+	return frappe.db.sql(
+		"""
+		SELECT name, pos_profile, company
+		FROM `tabPOS Opening Entry`
+		WHERE status = 'Open'
+		LIMIT 5
+		""",
+		as_dict=True,
+	)
+
+
+def _shift_lines(open_shifts):
+	return "".join(
+		f"<li><b>{s['name']}</b> — {s['pos_profile']} ({s['company']})</li>"
+		for s in open_shifts
+	)
+
+
+def guard_pricing_rule_delete(doc, method):
+	"""A till applies promotions from its own mirror, refreshed on sync. Deleting
+	a rule mid-shift leaves tills granting a promotion that no longer exists, and
+	the invoices they push reference it by name."""
+	open_shifts = open_shifts_for_company(doc.company)
+	if not open_shifts:
+		return
+
+	frappe.throw(
+		title=_("Cannot Delete Promotion"),
+		msg=_(
+			"You cannot delete this promotion while there are open POS shifts. "
+			"Please close all open POS Opening Entries first:<ul>{0}</ul>"
+		).format(_shift_lines(open_shifts)),
+	)
+
+
+def validate_pricing_rule_disable(doc, method):
+	"""Same reasoning as the delete guard: tills honour `disable` only as of
+	their last sync, so switching a rule off mid-shift still lets it be granted."""
+	if not doc.disable:
+		return
+
+	was_disabled_before = frappe.db.get_value("Pricing Rule", doc.name, "disable")
+	if was_disabled_before:
+		return
+
+	open_shifts = open_shifts_for_company(doc.company)
+	if not open_shifts:
+		return
+
+	frappe.throw(
+		title=_("Cannot Disable Promotion"),
+		msg=_(
+			"You cannot disable this promotion while there are open POS shifts. "
+			"Please close all open POS Opening Entries first:<ul>{0}</ul>"
+		).format(_shift_lines(open_shifts)),
+	)
+
+
 def validate_customer_mobile_unique(doc, method):
 	mobile = (doc.mobile_no or "").strip()
 	if not mobile:

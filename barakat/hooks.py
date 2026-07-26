@@ -156,6 +156,10 @@ doc_events = {
 	"Loyalty Program": {
 		"validate": "barakat.validations.validate_loyalty_program_tier_names",
 	},
+	"Pricing Rule": {
+		"validate": "barakat.validations.validate_pricing_rule_disable",
+		"on_trash": "barakat.validations.guard_pricing_rule_delete",
+	},
 }
 
 doctype_js = {
