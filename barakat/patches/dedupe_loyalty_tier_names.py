@@ -31,7 +31,7 @@ def execute():
         rows = frappe.db.sql(
             """select name, tier_name from `tabLoyalty Program Collection`
                where parent = %s and parenttype = 'Loyalty Program'
-               order by idx""",
+               order by idx, name""",
             parent,
             as_dict=True,
         )

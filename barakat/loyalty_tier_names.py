@@ -14,6 +14,30 @@ rename a tier on a program that works.
 """
 
 
+# Frappe's `tier_name` field is a `Data` fieldtype, which MariaDB stores as
+# varchar(140). This is not an arbitrary choice: it is the actual column
+# width, and a rename that exceeds it either raises `Data too long` (strict
+# sql_mode, aborting `bench migrate` for the whole site with the patch left
+# unrecorded) or gets silently truncated back to the original duplicate
+# (non-strict sql_mode, so the patch never converges). Python's `len()` and
+# slicing operate on characters, matching how MariaDB counts a varchar's
+# length, so no extra care is needed here beyond respecting the constant.
+TIER_NAME_MAX_LENGTH = 140
+
+
+def _capped_rename(base, counter):
+    """`<base> (<counter>)`, truncating `base` so the result never exceeds
+    TIER_NAME_MAX_LENGTH characters.
+
+    The suffix widens as `counter` reaches double, then triple digits, so the
+    truncation point is recomputed for every counter value rather than fixed
+    once.
+    """
+    suffix = f" ({counter})"
+    base_limit = max(TIER_NAME_MAX_LENGTH - len(suffix), 0)
+    return f"{base[:base_limit]}{suffix}"
+
+
 def normalize_tier_name(name):
     """Save-time comparison key: surrounding space and case are noise."""
     return (name or "").strip().casefold()
@@ -43,6 +67,9 @@ def resolve_exact_duplicates(names):
 
     Keeps the first occurrence and renames each later one to `<name> (2)`, `(3)`,
     ... incrementing until the candidate matches no other name in the program.
+    Every candidate is capped at TIER_NAME_MAX_LENGTH characters (truncating
+    `name`, never skipping the row) so the rename can never overflow the
+    `tier_name` column.
 
     `taken` is seeded with EVERY name up front, not filled in as we go. A name
     further down the list can already be `a (2)`, and handing that string to an
@@ -56,10 +83,11 @@ def resolve_exact_duplicates(names):
             seen.add(name)
             continue
         counter = 2
-        while f"{name} ({counter})" in taken:
+        candidate = _capped_rename(name, counter)
+        while candidate in taken:
             counter += 1
-        renamed = f"{name} ({counter})"
-        taken.add(renamed)
-        seen.add(renamed)
-        renames[index] = renamed
+            candidate = _capped_rename(name, counter)
+        taken.add(candidate)
+        seen.add(candidate)
+        renames[index] = candidate
     return renames
