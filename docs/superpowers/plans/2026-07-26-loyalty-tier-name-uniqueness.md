@@ -1028,6 +1028,292 @@ Expected: empty status, and `dev`, `test`, `main` all pointing at the same commi
 
 ---
 
+### Task 7: Give the duplicate a stable error code (proxy)
+
+Repo: `C:\Users\IzTech-OTbaileh\Desktop\barakat-repos\proxy-barakat`, branch `dev`.
+
+**Why this task exists.** Shipping Tasks 1-3 exposed a gap found in live testing on
+`bom.iztech.net`: the barakat hook rejects the duplicate correctly, but the user sees
+"Something went wrong... please try again" instead of which tier to rename. The proxy's
+`LEAK_RE` guard (`src/app.ts:54`) masks any upstream message containing backend internals,
+and the hook's message trips it twice — the literal phrase `loyalty program`, and `<[^>]+>`
+matching the `<b>` tag around the tier name. That guard is correct and must not be
+weakened: it exists so users never see raw English backend text in an RTL UI.
+
+The fix is the pattern this module already uses. `assertTiers` validates tiers *before*
+calling ERPNext and throws `AppError(status, message, CODE)`; the FE maps the code to a
+localized string. `duplicateMinSpentIndex` is the exact sibling of what is needed here. The
+barakat hook stays as the backstop for the desk and raw API.
+
+**Files:**
+- Modify: `src/modules/loyalty/helpers.ts`
+- Modify: `src/modules/loyalty/service.ts`
+- Test: `src/modules/loyalty/helpers.test.ts`
+- Modify: `package.json` (`2.1.0` → `2.2.0`)
+
+**Interfaces:**
+- Produces: `duplicateTierNameIndex(tiers: { tierName?: string }[]) -> number` — index of the
+  first colliding tier, or `-1`. And the error code string `LOYALTY_TIER_DUPLICATE_NAME`,
+  which Task 8 maps in the AP.
+
+**Working-tree warning.** This repo has unrelated uncommitted work from another session in
+`src/modules/pos/index.ts`, `src/modules/pos/service.ts` and
+`src/modules/pos/invoice-totals.spec.ts`. Never `git commit -a` here. Stage only the four
+files above by name.
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `src/modules/loyalty/helpers.test.ts` — extend the existing import to include
+`duplicateTierNameIndex`, then append:
+
+```ts
+describe('duplicateTierNameIndex', () => {
+  test('distinct names are clean', () => {
+    expect(
+      duplicateTierNameIndex([{ tierName: 'Bronze' }, { tierName: 'Gold' }])
+    ).toBe(-1)
+  })
+  test('an exact repeat returns the second tier index', () => {
+    expect(
+      duplicateTierNameIndex([{ tierName: 'vip vip' }, { tierName: 'vip vip' }])
+    ).toBe(1)
+  })
+  test('a case-or-whitespace-only difference still collides', () => {
+    expect(
+      duplicateTierNameIndex([{ tierName: 'VIP' }, { tierName: ' vip ' }])
+    ).toBe(1)
+  })
+  test('arabic names compare intact once trimmed', () => {
+    expect(
+      duplicateTierNameIndex([{ tierName: 'شريحة' }, { tierName: ' شريحة ' }])
+    ).toBe(1)
+  })
+  test('blank names are skipped, not reported as duplicates of each other', () => {
+    expect(duplicateTierNameIndex([{ tierName: '' }, { tierName: '  ' }])).toBe(-1)
+  })
+  test('the first collision wins when there are several', () => {
+    expect(
+      duplicateTierNameIndex([
+        { tierName: 'a' },
+        { tierName: 'b' },
+        { tierName: 'b' },
+        { tierName: 'a' },
+      ])
+    ).toBe(2)
+  })
+})
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+```bash
+bun test src/modules/loyalty/helpers.test.ts
+```
+
+Expected: a failure importing `duplicateTierNameIndex` (not exported yet).
+
+- [ ] **Step 3: Add the helper**
+
+In `src/modules/loyalty/helpers.ts`, directly after `duplicateMinSpentIndex`:
+
+```ts
+/**
+ * Two tiers sharing a NAME break the POS outright: it mirrors tiers into a local
+ * table keyed on (site, program, tier name) and writes every program in one
+ * transaction, so the duplicate collides and takes that till's whole loyalty sync
+ * down until someone fixes the data.
+ *
+ * The barakat app's `validate` hook rejects this too — the desk and the raw API
+ * need that backstop — but its message names a doctype and wraps the tier name in
+ * `<b>`, so `LEAK_RE` in app.ts masks it and the user gets the generic "try again".
+ * Catching it here gives the FE a stable code to localize instead.
+ *
+ * Compared trimmed and case-insensitively: `VIP` beside `vip ` is one tier to
+ * everyone except the database. That matches the AP form rule and the barakat hook.
+ * Only the unattended REPAIR paths (the rename patch, the POS pull) compare exact
+ * strings, because those must not touch a program that works.
+ *
+ * Returns the index of the first colliding tier, or -1.
+ */
+export function duplicateTierNameIndex(tiers: { tierName?: string }[]): number {
+  const seen = new Set<string>()
+  for (const [i, tier] of tiers.entries()) {
+    const key = (tier.tierName ?? '').trim().toLowerCase()
+    // A blank name is the required-field check's business, not ours; two blanks
+    // must not be reported as duplicates of each other.
+    if (!key) continue
+    if (seen.has(key)) return i
+    seen.add(key)
+  }
+  return -1
+}
+```
+
+- [ ] **Step 4: Enforce it in `assertTiers`**
+
+In `src/modules/loyalty/service.ts`, add `duplicateTierNameIndex` to the existing import
+from `./helpers`, then append to `assertTiers`, after the `duplicateMinSpentIndex` block:
+
+```ts
+  if (duplicateTierNameIndex(tiers) !== -1)
+    throw new AppError(
+      400,
+      'Each tier must have a different name.',
+      'LOYALTY_TIER_DUPLICATE_NAME'
+    )
+```
+
+- [ ] **Step 5: Verify**
+
+```bash
+bun test src/modules/loyalty/
+bun run tsc
+```
+
+Expected: all loyalty tests pass, typecheck clean. Note `assertTiers` is reached by both
+create and update, so both paths are covered by this one guard.
+
+- [ ] **Step 6: Bump and commit**
+
+Set `"version": "2.2.0"` in `package.json` (minor — a new validation code the FE consumes).
+
+```bash
+git add src/modules/loyalty/helpers.ts src/modules/loyalty/helpers.test.ts src/modules/loyalty/service.ts package.json
+git commit -m "feat(loyalty): reject duplicate tier names with a stable code"
+```
+
+---
+
+### Task 8: Localized message and inline error (AP)
+
+Repo: `C:\Users\IzTech-OTbaileh\Desktop\barakat-repos\admin_panel_barakat`, branch `dev`.
+
+This is the original Task 4 plus the code mapping that makes Task 7 visible. Two layers: the
+zod rule stops the duplicate before any request is sent, and the code mapping localizes the
+message for anything that still reaches the server.
+
+**Files:**
+- Modify: `src/schemas/pages/customers/loyalty-program.ts`
+- Modify: `src/hooks/pages/_app/customers/loyalty-manipulate.ts`
+- Modify: `src/utils/api-error.ts`
+- Modify: `src/i18n/locales/en.json`, `ar.json`, `he.json`
+- Modify: `package.json` (`1.4.0` → `1.5.0`)
+
+**Consumes from Task 7:** the proxy now returns HTTP 400 with code
+`LOYALTY_TIER_DUPLICATE_NAME` when two tiers share a name.
+
+**Working-tree warning.** This repo has unrelated uncommitted work from another session in
+`src/@types/generated/api.ts`, `src/components/pages/pos/shifts-table/columns.tsx`,
+`src/lib/date-locale.ts`, `src/pages/app/pos/pos-shift-detail.tsx` and
+`src/pages/settings/settings-erpnext.tsx`. Never `git commit -a` here, and do not run
+`typegen` or repo-wide prettier. Stage only the seven files above by name.
+
+- [ ] **Step 1: Map the error code**
+
+In `src/utils/api-error.ts`, in `ERROR_CODE_KEYS`, directly after the
+`LOYALTY_TIER_DUPLICATE_MIN_SPENT` line:
+
+```ts
+  LOYALTY_TIER_DUPLICATE_NAME: 'loyalty.validationDuplicateTierName',
+```
+
+- [ ] **Step 2: Add the three strings**
+
+Each goes directly after the existing `validationDuplicateMinSpent` entry in its file,
+keeping the surrounding indentation.
+
+`src/i18n/locales/en.json`:
+
+```json
+    "validationDuplicateTierName": "Each tier must have a different name",
+```
+
+`src/i18n/locales/ar.json`:
+
+```json
+    "validationDuplicateTierName": "يجب أن يكون لكل شريحة اسم مختلف",
+```
+
+`src/i18n/locales/he.json`:
+
+```json
+    "validationDuplicateTierName": "לכל דרגה חייב להיות שם שונה",
+```
+
+- [ ] **Step 3: Add the message to the schema's message interface**
+
+In `src/schemas/pages/customers/loyalty-program.ts`, add to
+`LoyaltyProgramSchemaMessages` directly after `duplicateMinSpent`:
+
+```ts
+  duplicateTierName: string;
+```
+
+- [ ] **Step 4: Add the inline rule**
+
+Same file, inside `.superRefine(...)`, inside the existing `if (vals.tiers.length > 0) {`
+block, immediately after the `mins.forEach(...)` duplicate-minSpent loop:
+
+```ts
+        // Two tiers with the same name are legal in ERPNext and fatal to the POS:
+        // it keys its local tier table on (site, program, tier name), so the
+        // second row collides and takes that till's whole loyalty sync down.
+        // Compared trimmed and case-insensitively — `VIP` next to `vip ` reads as
+        // one tier to everyone except the database. Flag the second occurrence on
+        // the row itself, for the same reason the minSpent rule does.
+        const seenNames = new Set<string>();
+        vals.tiers.forEach((tier, index) => {
+          const key = tier.tierName.trim().toLowerCase();
+          if (!key) return;
+          if (seenNames.has(key)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['tiers', index, 'tierName'],
+              message: msgs.duplicateTierName
+            });
+          }
+          seenNames.add(key);
+        });
+```
+
+- [ ] **Step 5: Placeholder in the default schema**
+
+Same file, in the `loyaltyProgramSchema` export, after `duplicateMinSpent: 'invalid',`:
+
+```ts
+  duplicateTierName: 'invalid',
+```
+
+- [ ] **Step 6: Wire the translated message**
+
+In `src/hooks/pages/_app/customers/loyalty-manipulate.ts`, inside `useSchema()`, after the
+`duplicateMinSpent` line:
+
+```ts
+    duplicateTierName: t('loyalty.validationDuplicateTierName'),
+```
+
+- [ ] **Step 7: Verify**
+
+```bash
+bun run tsc && bun run lint
+bun run prettier:check
+```
+
+If `prettier:check` flags only your changed files, run prettier on **those files only** —
+never repo-wide.
+
+- [ ] **Step 8: Bump and commit**
+
+Set `"version": "1.5.0"` in `package.json` (minor — a new save-time rule the user sees).
+
+```bash
+git add src/schemas/pages/customers/loyalty-program.ts src/hooks/pages/_app/customers/loyalty-manipulate.ts src/utils/api-error.ts src/i18n/locales/en.json src/i18n/locales/ar.json src/i18n/locales/he.json package.json
+git commit -m "feat(loyalty): block duplicate tier names in the program form"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage** — every section maps to a task: the shared rule → Task 1; Layer 1 (AP) → Task 4; Layer 2 (validation) → Task 2; Layer 3 (patch) → Task 3; Layer 4 (POS) → Task 5; Testing → the test steps in Tasks 1–5; Rollout → Task 6. The petromall exclusion appears in Global Constraints and again in both migration steps.
