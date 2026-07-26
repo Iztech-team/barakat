@@ -15,3 +15,4 @@ barakat.patches.scope_customer_company_markers
 barakat.patches.seed_company_rounding_fields
 barakat.patches.scope_uom_company
 barakat.patches.enforce_scale_unit_consistency
+barakat.patches.dedupe_loyalty_tier_names
