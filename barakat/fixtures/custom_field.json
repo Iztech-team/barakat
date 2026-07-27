@@ -472,6 +472,17 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "Company-custom_barakat_opening_account",
+    "dt": "Company",
+    "fieldname": "custom_barakat_opening_account",
+    "label": "Opening Stock Account (Barakat)",
+    "fieldtype": "Link",
+    "options": "Account",
+    "insert_after": "stock_adjustment_account",
+    "description": "Where the value of stock the shop already owned is recorded when it starts using the system. ERPNext refuses a Profit-and-Loss account for an opening entry and only exposes the choice per-document as the Stock Reconciliation's Difference Account; holding it on the Company lets the setup walkthrough ask for it once and stops the proxy guessing. Any Balance Sheet account qualifies - the standard chart ships Temporary Opening."
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Attendance-custom_branch",
     "dt": "Attendance",
     "fieldname": "custom_branch",
