@@ -183,6 +183,22 @@ BARAKAT_ROLE_PERMS = {
 	"Barakat Reference Reader": {
 		"Branch": ("read",),
 	},
+	# The supplier statement (AP report `reports.suppliers`) is a GL Entry query on
+	# the supplier's party rows. GL Entry read is natively `Accounts User` /
+	# `Accounts Manager` / `Auditor` only — all three carry the whole payables,
+	# journal and GL-write surface an Inventory Keeper (`finance: none`,
+	# `accounting: none`) must not have. This role grants GL Entry READ and nothing
+	# else, and `barakat.overrides.gl_entry` narrows its holders to
+	# `party_type = 'Supplier'` rows, so the grant matches the role's name: a
+	# supplier ledger, not the ledger.
+	#
+	# Found 2026-07-27: the AP route guard and the proxy gate both let Inventory
+	# Keeper onto /reports/suppliers (its matrix says `reports.suppliers: read`),
+	# and the page then showed "error loading data" because the GL Entry list 403'd
+	# underneath. Accountant and Manager were unaffected — both hold `Accounts User`.
+	"Barakat Supplier Ledger Reader": {
+		"GL Entry": ("read",),
+	},
 	# Read-only payroll for Accountant (`salary: read`). Every native role with
 	# Salary Slip read also carries write.
 	"Barakat Salary Viewer": {
@@ -212,6 +228,35 @@ BARAKAT_ROLE_PERMS = {
 }
 
 BARAKAT_CUSTOM_ROLES = tuple(BARAKAT_ROLE_PERMS)
+
+
+# ── GL Entry row scoping for the supplier-ledger role ────────────────────────
+# `Barakat Supplier Ledger Reader` is a DocPerm grant, and a DocPerm is all-or-
+# nothing per doctype: it would hand a stock keeper every sales, payroll and
+# journal line in the ledger. The row filter below (wired up in hooks.py through
+# `barakat.overrides.gl_entry`) is what keeps the grant to supplier rows only.
+SUPPLIER_LEDGER_ROLE = "Barakat Supplier Ledger Reader"
+
+# Callers whose GL access does NOT come from the narrow role are never narrowed —
+# these already read the whole ledger natively, so filtering them would silently
+# break the accounting pages and the desk's own reports.
+GL_UNRESTRICTED_ROLES = frozenset(
+	{"Accounts User", "Accounts Manager", "Auditor", "System Manager", "Administrator"}
+)
+
+
+def gl_entry_scope_for(caller_roles):
+	"""'supplier' when this caller's only route to GL Entry is the supplier-ledger
+	role, else None (read the ledger unfiltered / not at all, as DocPerms decide).
+
+	Pure decision — no Frappe — so it is unit-testable off a bench.
+	"""
+	roles = set(caller_roles)
+	if SUPPLIER_LEDGER_ROLE not in roles:
+		return None
+	if roles & GL_UNRESTRICTED_ROLES:
+		return None
+	return "supplier"
 
 
 # --------------------------------------------------------------------------
@@ -303,6 +348,9 @@ PERSONA_ROLE_BUNDLES = {
 		"Barakat Commerce Reader",
 		"Barakat Reference Reader",
 		"Barakat Purchase Invoice Clerk",
+		# `reports.suppliers: read` in the matrix — the supplier statement reads
+		# GL Entry, which no other role in this bundle carries.
+		"Barakat Supplier Ledger Reader",
 	),
 	# attendance/salary write; staff, branches, roles, reports read. Payroll only —
 	# the staff-admin role (Barakat Staff Manager) was removed 2026-07-22 so only the

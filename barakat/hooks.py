@@ -39,6 +39,7 @@ fixtures = [
 					"Barakat Currency Manager",
 					"Barakat Salary Viewer",
 					"Barakat Purchase Invoice Clerk",
+					"Barakat Supplier Ledger Reader",
 					"Barakat Payment Mode Manager",
 					"Barakat Customer Manager",
 					"Barakat Customer Group Manager",
@@ -295,13 +296,17 @@ override_doctype_class = {
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# `Barakat Supplier Ledger Reader` holds a plain GL Entry read DocPerm, which is
+# per-doctype and would therefore expose the whole ledger. These two hooks narrow
+# its holders to supplier rows; everyone else is returned untouched. See
+# barakat/overrides/gl_entry.py and barakat.permissions.gl_entry_scope_for.
+permission_query_conditions = {
+	"GL Entry": "barakat.overrides.gl_entry.get_permission_query_conditions",
+}
+
+has_permission = {
+	"GL Entry": "barakat.overrides.gl_entry.has_permission",
+}
 
 # Document Events
 # ---------------

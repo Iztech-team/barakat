@@ -12,7 +12,9 @@ from barakat.permissions import (
     FORBIDDEN_ROLES,
     PERSONA_ROLE_BUNDLES,
     STAFF_MANAGER_ROLE,
+    SUPPLIER_LEDGER_ROLE,
     bundle_for,
+    gl_entry_scope_for,
     may_assign_preset,
 )
 
@@ -52,6 +54,36 @@ class HrBundleNoLongerStaffAdmin(unittest.TestCase):
     def test_no_bundle_leaks_forbidden_role(self):
         for persona, roles in PERSONA_ROLE_BUNDLES.items():
             self.assertEqual(FORBIDDEN_ROLES.intersection(roles), set(), persona)
+
+
+class SupplierLedgerRole(unittest.TestCase):
+    """The Inventory Keeper's supplier statement (`reports.suppliers: read`) reads
+    GL Entry, which no other role in its bundle carries — the page failed with
+    "error loading data" until this role existed. The scope helper is what keeps the
+    grant to supplier rows instead of the whole ledger.
+    """
+
+    def test_inventory_keeper_holds_the_role(self):
+        self.assertIn(SUPPLIER_LEDGER_ROLE, bundle_for("Inventory Keeper"))
+
+    def test_role_grants_gl_entry_read_only(self):
+        self.assertEqual(BARAKAT_ROLE_PERMS[SUPPLIER_LEDGER_ROLE], {"GL Entry": ("read",)})
+
+    def test_holder_is_scoped_to_supplier_rows(self):
+        self.assertEqual(
+            gl_entry_scope_for(["Stock Manager", SUPPLIER_LEDGER_ROLE]), "supplier"
+        )
+
+    def test_native_accounts_holder_is_not_scoped(self):
+        self.assertIsNone(gl_entry_scope_for(["Accounts User", SUPPLIER_LEDGER_ROLE]))
+
+    def test_caller_without_the_role_is_not_scoped(self):
+        self.assertIsNone(gl_entry_scope_for(["Stock Manager"]))
+        self.assertIsNone(gl_entry_scope_for([]))
+
+    def test_personas_without_the_supplier_report_do_not_hold_it(self):
+        for persona in ("Cashier", "HR", "Branch Supervisor"):
+            self.assertNotIn(SUPPLIER_LEDGER_ROLE, bundle_for(persona), persona)
 
 
 class RoleFixtureCoverage(unittest.TestCase):
