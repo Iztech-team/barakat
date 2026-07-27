@@ -114,6 +114,7 @@ fixtures = [
 					"POS Opening Entry-custom_opened_by_staff",
 					"POS Closing Entry-custom_device_id",
 					"POS Closing Entry-custom_closed_by_staff",
+					"POS Closing Entry-custom_closed_by_user",
 					# Attendance
 					"Attendance-custom_branch",
 				],
@@ -176,6 +177,7 @@ doctype_js = {
 
 override_doctype_class = {
 	"POS Opening Entry": "barakat.overrides.pos_opening_entry.BarakatPOSOpeningEntry",
+	"POS Closing Entry": "barakat.overrides.pos_closing_entry.BarakatPOSClosingEntry",
 	"POS Invoice": "barakat.overrides.pos_invoice.BarakatPOSInvoice",
 	"Sales Invoice": "barakat.overrides.sales_invoice.BarakatSalesInvoice",
 }

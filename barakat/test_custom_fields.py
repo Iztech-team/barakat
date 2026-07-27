@@ -79,5 +79,33 @@ class CompanyMarkersAreEnforceable(unittest.TestCase):
         self.assertEqual(f["options"], "UOM")
 
 
+class ClosingEntryRecordsBothIdentities(unittest.TestCase):
+    """A shift's closing side must name the PIN staff AND the signing account.
+
+    ERPNext's own `user` field is a read-only fetch from the opening entry, so it
+    always names the OPENER. Without custom_closed_by_user there is no record
+    anywhere of which account actually performed the close — which matters now
+    that any signed-in account may close a shift on its till.
+    """
+
+    def setUp(self):
+        self.rows = _rows()
+
+    def test_closed_by_user_field_exists(self):
+        f = _by_name(self.rows, "POS Closing Entry-custom_closed_by_user")
+        self.assertIsNotNone(f, "POS Closing Entry-custom_closed_by_user is missing")
+
+    def test_closed_by_user_is_a_link_to_user(self):
+        f = _by_name(self.rows, "POS Closing Entry-custom_closed_by_user")
+        self.assertEqual(f["fieldtype"], "Link")
+        self.assertEqual(f["options"], "User")
+        self.assertEqual(f["dt"], "POS Closing Entry")
+
+    def test_closed_by_staff_still_exists(self):
+        f = _by_name(self.rows, "POS Closing Entry-custom_closed_by_staff")
+        self.assertIsNotNone(f, "POS Closing Entry-custom_closed_by_staff is missing")
+        self.assertEqual(f["options"], "Employee")
+
+
 if __name__ == "__main__":
     unittest.main()

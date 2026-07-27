@@ -1,5 +1,63 @@
 import frappe
 from frappe import _
+from erpnext.accounts.doctype.pos_closing_entry.pos_closing_entry import get_payments, get_taxes
+
+
+@frappe.whitelist()
+def get_shift_invoices(opening_entry: str) -> dict:
+	"""Unconsolidated POS Invoices for a shift, whoever rang them up.
+
+	ERPNext's own `pos_closing_entry.get_invoices` filters by invoice `owner`, so
+	when two accounts sold on one shift it returns only one account's invoices
+	and the rest are never consolidated — they simply vanish from the books.
+
+	Barakat scopes by the POS Profile and the opening entry's OWN period
+	instead. A profile is claimed by one device at a time
+	(`POS Profile.custom_device`, enforced in `barakat.api.device.select_profile`),
+	so that pair identifies one till's trade without needing the owner.
+
+	Taking the window from the opening entry rather than from the caller also
+	stops invoices being orphaned when the device's local record disagrees about
+	when the shift began — a device that adopted an already-open shift records
+	its own, later start time.
+
+	Returns the same {invoices, payments, taxes} shape as ERPNext's version, so
+	it is a drop-in replacement for the POS.
+	"""
+	if not opening_entry:
+		frappe.throw(_("opening_entry is required."))
+
+	opening = frappe.db.get_value(
+		"POS Opening Entry",
+		opening_entry,
+		["pos_profile", "period_start_date"],
+		as_dict=True,
+	)
+	if not opening:
+		frappe.throw(_("POS Opening Entry {0} not found.").format(opening_entry))
+
+	invoices = frappe.db.sql(
+		"""
+		SELECT name, customer, posting_date, posting_time, grand_total, net_total,
+		       total_qty, total_taxes_and_charges, is_return, return_against,
+		       'POS Invoice' AS invoice_type,
+		       TIMESTAMP(posting_date, posting_time) AS timestamp
+		FROM `tabPOS Invoice`
+		WHERE docstatus = 1
+		  AND IFNULL(consolidated_invoice, '') = ''
+		  AND pos_profile = %(profile)s
+		  AND TIMESTAMP(posting_date, posting_time) >= %(start)s
+		ORDER BY TIMESTAMP(posting_date, posting_time)
+		""",
+		{"profile": opening.pos_profile, "start": opening.period_start_date},
+		as_dict=True,
+	)
+
+	return {
+		"invoices": invoices,
+		"payments": get_payments(invoices),
+		"taxes": get_taxes(invoices),
+	}
 
 
 @frappe.whitelist()

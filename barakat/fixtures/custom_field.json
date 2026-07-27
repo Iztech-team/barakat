@@ -427,6 +427,17 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "POS Closing Entry-custom_closed_by_user",
+    "dt": "POS Closing Entry",
+    "fieldname": "custom_closed_by_user",
+    "label": "Closed By User",
+    "fieldtype": "Link",
+    "options": "User",
+    "insert_after": "custom_closed_by_staff",
+    "read_only": 1
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Price List-custom_company",
     "dt": "Price List",
     "fieldname": "custom_company",
