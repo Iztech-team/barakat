@@ -41,25 +41,32 @@ def _invoice(consolidated=None, profile="Main", docstatus=1, owner="someone-else
 
 class OwnerIsNotChecked(FrappeTestCase):
 	def test_accepts_an_invoice_owned_by_a_different_user(self):
+		# Build the doc BEFORE patching: `frappe.db.get_values` is also how Frappe
+		# loads doctype Meta, so a patch that spans new_doc() breaks the framework
+		# rather than the code under test.
+		doc = _doc()
 		with patch("frappe.db.get_values", return_value=_invoice()):
-			_doc().validate_pos_invoices()  # must not raise
+			doc.validate_pos_invoices()  # must not raise
 
 
 class TheRemainingChecksStillFire(FrappeTestCase):
 	def test_rejects_an_already_consolidated_invoice(self):
+		doc = _doc()
 		with patch("frappe.db.get_values", return_value=_invoice(consolidated="ACC-SINV-0001")):
 			with self.assertRaises(frappe.ValidationError):
-				_doc().validate_pos_invoices()
+				doc.validate_pos_invoices()
 
 	def test_rejects_an_invoice_from_another_pos_profile(self):
+		doc = _doc()
 		with patch("frappe.db.get_values", return_value=_invoice(profile="Other")):
 			with self.assertRaises(frappe.ValidationError):
-				_doc().validate_pos_invoices()
+				doc.validate_pos_invoices()
 
 	def test_rejects_an_unsubmitted_invoice(self):
+		doc = _doc()
 		with patch("frappe.db.get_values", return_value=_invoice(docstatus=0)):
 			with self.assertRaises(frappe.ValidationError):
-				_doc().validate_pos_invoices()
+				doc.validate_pos_invoices()
 
 
 if __name__ == "__main__":
