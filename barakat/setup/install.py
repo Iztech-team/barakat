@@ -26,7 +26,6 @@ def after_install():
 def after_setup_wizard(args=None):
 	for fn in [
 		_create_misc_item,
-		_fix_stock_adjustment_accounts,
 	]:
 		try:
 			fn()
@@ -47,7 +46,6 @@ def after_migrate():
 	# grant survives future migrations (it's re-asserted, idempotently, each run).
 	for fn in [
 		_create_misc_item,
-		_fix_stock_adjustment_accounts,
 		_provision_barakat_roles,
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
@@ -98,23 +96,23 @@ def _set_session_expiry():
 	frappe.db.set_single_value("System Settings", "session_expiry", "8760:00")
 
 
-def _fix_stock_adjustment_accounts():
-	# On a brand-new company the Stock Adjustment account can land under a P&L
-	# (Expense) root. That blocks Bin / Stock Ledger creation when items are added,
-	# so a fresh site with no demo data can't take products. Force it to an
-	# Asset / Balance Sheet account so items create cleanly. Idempotent — the loop
-	# is empty until a company (chart of accounts) exists.
-	for acc in frappe.get_all(
-		"Account",
-		filters={"account_type": "Stock Adjustment"},
-		fields=["name", "root_type", "report_type"],
-	):
-		if acc.root_type != "Asset" or acc.report_type != "Balance Sheet":
-			frappe.db.set_value(
-				"Account",
-				acc.name,
-				{"root_type": "Asset", "report_type": "Balance Sheet"},
-			)
+# _fix_stock_adjustment_accounts lived here. It forced every Stock Adjustment
+# account on the site to root_type=Asset / report_type=Balance Sheet via
+# frappe.db.set_value (bypassing Account.validate), on install, on setup-wizard
+# completion, and after EVERY migrate.
+#
+# It was written to stop `OpeningEntryAccountError` when adding a product to a
+# fresh site. That diagnosis was wrong. ERPNext raises it only when the
+# reconciliation's purpose is "Opening Stock" OR the SITE has zero Stock Ledger
+# Entries (stock_reconciliation.py, validate_expense_account) — a once-per-site
+# condition, not per company and not per fiscal year. The real trigger was the
+# product form submitting a fake qty=1 stock count to force a Bin into existence,
+# which made product creation the site's first stock transaction.
+#
+# The cost was permanent: stock adjustments are an expense, so with the account
+# forced onto the Balance Sheet, damage and count losses never reduced profit on
+# any shop. See docs/superpowers/specs/2026-07-27-stock-story-design.md (proxy
+# repo) and the repair patch in barakat/patches/repair_stock_adjustment_accounts.py.
 
 
 def _create_misc_item():
