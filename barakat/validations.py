@@ -323,3 +323,54 @@ def validate_loyalty_program_tier_names(doc, method):
 			"Give each tier its own name."
 		).format(duplicate),
 	)
+
+
+def employee_branches(employee: str) -> list[str]:
+	"""Every branch an employee works at — the native `branch` plus the POS ones.
+
+	ERPNext's Employee carries a single `branch` link, so Barakat stores the rest
+	in the `custom_pos_branches` child table and keeps `branch` pointed at the
+	first one for native branch filtering (payroll, reports). Callers that ask
+	"may this employee be recorded against branch X?" must consult both.
+	"""
+	native = frappe.db.get_value("Employee", employee, "branch")
+	rows = frappe.get_all(
+		"POS Employee Branch",
+		filters={"parent": employee, "parenttype": "Employee"},
+		pluck="branch",
+	)
+	branches = [b for b in rows if b]
+	if native and native not in branches:
+		branches.append(native)
+	return branches
+
+
+def validate_attendance_branch(doc, method):
+	"""An attendance record may only name a branch its employee actually works at.
+
+	`custom_branch` exists because native Attendance has no branch field at all —
+	only company and department, both fetched read-only from the Employee. It is
+	descriptive ("where he worked that day"), never a second dimension of the
+	record: ERPNext's own `validate_duplicate_record` still allows exactly one
+	attendance per employee per date, so this cannot be used to mark someone
+	present in one branch and absent in another on the same day.
+
+	Left empty the record simply doesn't say which branch — which is the honest
+	answer for staff who have no branch assigned at all.
+	"""
+	branch = (doc.get("custom_branch") or "").strip()
+	if not branch:
+		return
+
+	allowed = employee_branches(doc.employee)
+	if branch in allowed:
+		return
+
+	frappe.throw(
+		title=_("Wrong Branch"),
+		msg=_(
+			"<b>{0}</b> does not work at <b>{1}</b>. Assign the branch on the "
+			"employee first, or record the attendance against one of their "
+			"branches."
+		).format(doc.employee_name or doc.employee, branch),
+	)

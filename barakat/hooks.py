@@ -114,6 +114,8 @@ fixtures = [
 					"POS Opening Entry-custom_opened_by_staff",
 					"POS Closing Entry-custom_device_id",
 					"POS Closing Entry-custom_closed_by_staff",
+					# Attendance
+					"Attendance-custom_branch",
 				],
 			]
 		],
@@ -138,6 +140,9 @@ doc_events = {
 			"barakat.overrides.staff_roles.reassert_persona_roles",
 			"barakat.overrides.staff_roles.reassert_company_user_permission",
 		],
+	},
+	"Attendance": {
+		"validate": "barakat.validations.validate_attendance_branch",
 	},
 	"Branch": {
 		"validate": "barakat.overrides.branch.validate_branch",

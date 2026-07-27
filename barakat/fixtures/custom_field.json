@@ -458,5 +458,18 @@
     "fieldtype": "Link",
     "options": "UOM",
     "insert_after": "default_finance_book"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_branch",
+    "dt": "Attendance",
+    "fieldname": "custom_branch",
+    "label": "Branch (Barakat)",
+    "fieldtype": "Link",
+    "options": "Branch",
+    "description": "Which branch the employee worked at on this day. Barakat staff can be assigned to several branches, and native Attendance only carries company + department, so the branch has nowhere else to live. Still one record per employee per day — ERPNext forbids more.",
+    "insert_after": "department",
+    "in_list_view": 0,
+    "in_standard_filter": 1
   }
 ]
