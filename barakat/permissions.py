@@ -58,11 +58,39 @@ BARAKAT_ROLE_PERMS = {
 	# POS shift lifecycle without `Sales Manager`. Sales Manager is the only native
 	# role holding POS Opening/Closing Entry, but it also carries `Pricing Rule`
 	# write — a Cashier must not be able to edit promotions.
+	#
+	# It also carries the READ-ONLY device configuration a till pulls at sync time.
+	# Held only by Manager and Branch Supervisor — the two personas that may log a
+	# POS device in (see barakat.api.session_role.get_my_pos_role) — so this is the
+	# right home for "what a till reads about itself".
+	#
+	# Every doctype below shipped readable by `System Manager` ONLY, which no persona
+	# holds, so these pulls 403'd for EVERY POS login. The desktop app wraps each pull
+	# in a try/catch, so nothing crashed — the till silently fell back to defaults,
+	# which is why this went unnoticed. Measured 2026-07-28 on the fatima test site:
+	#   - POS Scale Settings  -> scale barcodes never parsed, `has_balances` always 0,
+	#                            so weighed items rang up as plain units on every till.
+	#   - Device              -> the paired device name never resolved (always null).
+	#   - System Settings /   -> Branch Supervisor only (Manager reads them through
+	#     Global Defaults        `Barakat Settings Manager`). These are the FALLBACK
+	#                            for rounding + the site currency; without them a
+	#                            Branch Supervisor till dropped to hard-coded defaults
+	#                            (legacy rounding, "ILS") while a Manager till on the
+	#                            same shop used the configured values — the same sale
+	#                            could round differently depending on who opened the
+	#                            till. READ only: rounding is still WRITTEN through
+	#                            barakat.api.settings.set_rounding_settings, which is
+	#                            role-checked against ROUNDING_WRITER_ROLES, and this
+	#                            role is not in it.
 	"Barakat POS Operator": {
 		"POS Opening Entry": ("read", "write", "create", "submit", "cancel"),
 		"POS Closing Entry": ("read", "write", "create", "submit", "cancel"),
 		"POS Invoice": ("read",),
 		"POS Profile": ("read",),
+		"POS Scale Settings": ("read",),
+		"Device": ("read",),
+		"System Settings": ("read",),
+		"Global Defaults": ("read",),
 	},
 	# Attendance without `HR User`. HR User is the only native role with Attendance
 	# write, but it also carries `Employee` write — Branch Supervisor is
