@@ -85,6 +85,63 @@ def get_my_pos_branches() -> list:
 
 
 @frappe.whitelist()
+def get_my_companies() -> dict:
+	"""Return the companies the CURRENT user is entitled to, for the proxy's company switch.
+
+	This exists to give the admin panel a SECOND, independent lock on
+	`POST /api/auth/set-company`. Today that route only asks ERPNext whether the
+	requested Company exists, under the caller's own session — and that already
+	refuses a foreign company, because Frappe applies a `Company` User Permission
+	to the Company list itself (measured on qa-test: a cashier scoped to "E2E Shop"
+	sees 1 of 20 companies, and a filtered lookup of another company returns []).
+
+	The problem is that this is the ONLY mechanism. The same User Permission gates
+	the company picker, the switch, and every data read, and ERPNext deletes it
+	whenever someone unticks `create_user_permission` on the Employee — a checkbox
+	whose description only mentions restricting *employee records*. Untick it and
+	all three open at once.
+
+	`Employee.company` survives that untick, so it is a genuinely independent
+	signal. Union it with any Company User Permissions the user holds, because
+	staff may legitimately span shops via a hand-granted second permission
+	(`reassert_company_user_permission` is add-only for exactly that reason) and
+	those extra shops are not on the Employee record.
+
+	Shape:
+	  {
+	    "is_owner": <bool>,        # System Manager / Administrator: unrestricted
+	    "companies": [<name>, …],  # empty means "no opinion", not "none allowed"
+	  }
+
+	Self-scoped: every lookup is pinned to `frappe.session.user`, so this can only
+	ever report on the caller. `ignore_permissions` is required — no persona holds
+	read on `User Permission`, and most hold none on `Employee` either.
+	"""
+	user = frappe.session.user
+	roles = set(frappe.get_roles(user))
+	is_owner = any(r in roles for r in OWNER_ROLES)
+
+	companies = set()
+
+	emp_company = frappe.db.get_value("Employee", {"user_id": user}, "company")
+	if emp_company:
+		companies.add(emp_company)
+
+	rows = frappe.get_all(
+		"User Permission",
+		filters={"user": user, "allow": "Company"},
+		fields=["for_value"],
+		ignore_permissions=True,
+	)
+	for row in rows:
+		value = (row.get("for_value") or "").strip()
+		if value:
+			companies.add(value)
+
+	return {"is_owner": is_owner, "companies": sorted(companies)}
+
+
+@frappe.whitelist()
 def update_my_profile_name(full_name: str) -> dict:
 	"""Rename the CURRENT user's own Employee (and, via ERPNext's Employee.on_update
 	-> update_user cascade, their linked User).
