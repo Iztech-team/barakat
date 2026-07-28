@@ -472,6 +472,17 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "Company-custom_barakat_salary_expense_account",
+    "dt": "Company",
+    "fieldname": "custom_barakat_salary_expense_account",
+    "label": "Salary Expense Account (Barakat)",
+    "fieldtype": "Link",
+    "options": "Account",
+    "insert_after": "default_payroll_payable_account",
+    "description": "The expense account staff wages are charged to. ERPNext keeps this per-company inside the shared Salary Component's accounts table, which no Barakat screen exposes - so it was never set and salary slips posted nothing at all. Holding it on the Company lets the setup walkthrough ask once and lets the accrual refuse rather than guess. Any Expense account qualifies."
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Company-custom_barakat_opening_account",
     "dt": "Company",
     "fieldname": "custom_barakat_opening_account",
