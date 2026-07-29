@@ -57,7 +57,7 @@ and are not listed individually.
 | Inventory Keeper | `Customer`, `Contact`, `Territory` read/write | `customers: none` |
 | Inventory Keeper | `Currency`, `Currency Exchange`, `Fiscal Year` read | `accounting: none`, `finance: none` |
 | Cashier | `Sales Invoice` read | `reports: none` — the Cashier's POS pages read `POS Invoice`, which it keeps |
-| All | `Sales Invoice` write+submit | No AP route creates a Sales Invoice. The till writes `POS Invoice`; consolidation into a Sales Invoice is a scheduled system job running with `ignore_permissions`. **This is the one removal to confirm on the bench** — see below. |
+| Cashier, Accountant, HR, Inventory Keeper | `Sales Invoice` write+submit | `pos: read` / `pos: none`. Manager and Branch Supervisor KEEP it — they close shifts, which consolidates under their own session. See the resolved item below. |
 
 ## Open item for bench verification — RESOLVED 2026-07-29
 
