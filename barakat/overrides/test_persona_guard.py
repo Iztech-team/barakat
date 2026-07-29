@@ -14,8 +14,11 @@ from barakat.permissions import (
     STAFF_MANAGER_ROLE,
     SUPPLIER_LEDGER_ROLE,
     MODULE_ROLE_PERMS,
+    PRESERVED_ROLES,
     READER_PERMS,
+    SELF_SERVICE_ROLE,
     WRITER_PERMS,
+    self_scope_applies,
     bundle_for,
     gl_entry_scope_for,
     may_assign_preset,
@@ -53,10 +56,14 @@ class HrBundleNoLongerStaffAdmin(unittest.TestCase):
     def test_hr_has_no_staff_admin_role(self):
         self.assertNotIn(STAFF_MANAGER_ROLE, bundle_for("HR"))
 
-    def test_hr_keeps_payroll_roles(self):
+    def test_hr_keeps_payroll_capability(self):
+        # Was "keeps HR Manager / HR User". Those native roles are gone by design as of
+        # 2026-07-29 — they carried unscoped Employee and Salary Slip read for every
+        # persona that held them. HR keeps the CAPABILITY through the generated roles.
         hr = bundle_for("HR")
-        self.assertIn("HR Manager", hr)
-        self.assertIn("HR User", hr)
+        self.assertIn("Barakat Salary Writer", hr)
+        self.assertIn("Barakat Attendance Writer", hr)
+        self.assertIn("Barakat Staff Reader", hr)
 
     def test_manager_still_staff_admin(self):
         self.assertIn(STAFF_MANAGER_ROLE, bundle_for("Manager"))
@@ -190,6 +197,104 @@ class GeneratedModuleRoles(unittest.TestCase):
 
     def test_generated_names_never_collide_with_hand_written_roles(self):
         self.assertEqual(set(BARAKAT_ROLE_PERMS).intersection(MODULE_ROLE_PERMS), set())
+
+
+NATIVE_ROLE_MARKERS = (
+    "Accounts Manager", "Accounts User", "Sales Manager", "Sales Master Manager",
+    "Sales User", "Stock Manager", "Stock User", "Item Manager", "Purchase Manager",
+    "Purchase Master Manager", "Purchase User", "HR Manager", "HR User",
+    "Employee", "Employee Self Service",
+)
+
+
+class BundlesDerivedFromMatrix(unittest.TestCase):
+    def test_no_native_role_in_any_bundle(self):
+        for persona, roles in PERSONA_ROLE_BUNDLES.items():
+            leaked = set(roles).intersection(NATIVE_ROLE_MARKERS)
+            self.assertEqual(leaked, set(), f"{persona} still holds native roles: {sorted(leaked)}")
+
+    def test_bundle_is_the_matrix_row(self):
+        for persona, row in PERSONA_MATRIX.items():
+            expected = {role_name_for(m, lvl) for m, lvl in row.items()}
+            expected.discard(None)
+            actual = set(PERSONA_ROLE_BUNDLES[persona])
+            generated = {r for r in actual if r in MODULE_ROLE_PERMS}
+            self.assertEqual(generated, expected, persona)
+
+    def test_cashier_gets_no_salary_or_staff_role(self):
+        cashier = set(PERSONA_ROLE_BUNDLES["Cashier"])
+        self.assertNotIn("Barakat Salary Reader", cashier)
+        self.assertNotIn("Barakat Salary Writer", cashier)
+        self.assertNotIn("Barakat Staff Reader", cashier)
+        self.assertNotIn("Barakat Staff Writer", cashier)
+
+    def test_hr_keeps_salary_write(self):
+        self.assertIn("Barakat Salary Writer", PERSONA_ROLE_BUNDLES["HR"])
+
+    def test_till_personas_keep_the_pos_operator_role(self):
+        for persona in ("Manager", "Branch Supervisor"):
+            self.assertIn("Barakat POS Operator", PERSONA_ROLE_BUNDLES[persona], persona)
+
+    def test_every_bundle_role_is_provisioned(self):
+        """A role no one mints is silently dropped by persona_role_bundle."""
+        from barakat.permissions import ALL_ROLE_PERMS, EXTERNALLY_PERMED_ROLES
+
+        known = set(ALL_ROLE_PERMS) | EXTERNALLY_PERMED_ROLES
+        for persona, roles in PERSONA_ROLE_BUNDLES.items():
+            for role in roles:
+                self.assertIn(role, known, f"{persona} names unprovisioned {role}")
+
+    def test_no_bundle_leaks_forbidden_role(self):
+        for persona, roles in PERSONA_ROLE_BUNDLES.items():
+            self.assertEqual(FORBIDDEN_ROLES.intersection(roles), set(), persona)
+
+
+class SelfServiceScope(unittest.TestCase):
+    """The replacement for the native Employee / Employee Self Service roles."""
+
+    def test_self_service_only_caller_is_scoped(self):
+        self.assertTrue(self_scope_applies("Salary Slip", [SELF_SERVICE_ROLE]))
+        self.assertTrue(self_scope_applies("Employee", [SELF_SERVICE_ROLE]))
+
+    def test_hr_is_not_scoped(self):
+        # THE trap: a permission_query_conditions hook applies to EVERY user of that
+        # doctype. Scoping HR to its own record breaks payroll outright.
+        hr = PERSONA_ROLE_BUNDLES["HR"]
+        self.assertFalse(self_scope_applies("Salary Slip", hr))
+        self.assertFalse(self_scope_applies("Employee", hr))
+
+    def test_manager_is_not_scoped(self):
+        manager = PERSONA_ROLE_BUNDLES["Manager"]
+        self.assertFalse(self_scope_applies("Salary Slip", manager))
+        self.assertFalse(self_scope_applies("Employee", manager))
+
+    def test_cashier_is_scoped_on_both(self):
+        cashier = PERSONA_ROLE_BUNDLES["Cashier"]
+        self.assertTrue(self_scope_applies("Salary Slip", cashier))
+        self.assertTrue(self_scope_applies("Employee", cashier))
+
+    def test_accountant_reads_salary_unscoped_but_staff_scoped(self):
+        # Accountant is salary: read (payroll reporting) but staff: none.
+        accountant = PERSONA_ROLE_BUNDLES["Accountant"]
+        self.assertFalse(self_scope_applies("Salary Slip", accountant))
+        self.assertTrue(self_scope_applies("Employee", accountant))
+
+    def test_caller_without_self_service_is_untouched(self):
+        # An owner / System Manager holds neither role: the hook must stand down so
+        # its query is exactly what it was before the hook existed.
+        self.assertFalse(self_scope_applies("Employee", ["System Manager"]))
+        self.assertFalse(self_scope_applies("Employee", []))
+
+    def test_unrelated_doctype_never_scoped(self):
+        self.assertFalse(self_scope_applies("Item", [SELF_SERVICE_ROLE]))
+
+    def test_every_persona_holds_self_service(self):
+        for persona, roles in PERSONA_ROLE_BUNDLES.items():
+            self.assertIn(SELF_SERVICE_ROLE, roles, persona)
+
+    def test_preserved_roles_no_longer_carry_the_leak(self):
+        self.assertNotIn("Employee", PRESERVED_ROLES)
+        self.assertNotIn("Employee Self Service", PRESERVED_ROLES)
 
 
 if __name__ == "__main__":

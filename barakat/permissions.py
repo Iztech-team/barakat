@@ -260,7 +260,80 @@ BARAKAT_ROLE_PERMS = {
 		"UOM": ("read",),
 		"Product Bundle": ("read",),
 	},
+	# Every persona's OWN profile and OWN payslips. The DocPerm here is doctype-wide;
+	# what makes it "own" is the row scoping in overrides/self_service.py. Read-only:
+	# editing your own employee record or payslip is not a self-service action.
+	#
+	# `select` on Employee is required — the AP renders an employee picker on forms
+	# a persona can open, and Frappe's list query accepts select OR read.
+	"Barakat Self Service": {
+		"Employee": ("read", "select"),
+		"Salary Slip": ("read",),
+	},
 }
+
+
+# ── Self service ─────────────────────────────────────────────────────────────
+# Replaces the native `Employee` and `Employee Self Service` roles, which were pinned
+# to EVERY persona through PRESERVED_ROLES and granted UNSCOPED read on Employee and
+# Salary Slip. Measured on prod 2026-07-29: a Cashier read every salary slip
+# (net_pay 2884.62) and all 138 employee records, on a site where the matrix says
+# `salary: none, staff: none`.
+#
+# Stock ERPNext pairs those roles with a User Permission pinning the user to their own
+# Employee record. barakat deletes that permission deliberately (see the note in
+# overrides/staff_roles.py) because it scoped the user across EVERY doctype and hid
+# other people's shifts and attendance from managers. Removing the leash without
+# removing the role is what left the read unrestricted.
+#
+# Row scoping lives in overrides/self_service.py — a DocPerm is per-doctype and
+# cannot express "only my own".
+SELF_SERVICE_ROLE = "Barakat Self Service"
+
+# Roles whose holders read these doctypes UNSCOPED.
+#
+# A `permission_query_conditions` hook applies to EVERY user of that doctype, not just
+# the persona it was written for. Without this stand-down list the hook would narrow HR
+# and Manager to their own record and break payroll outright — the exact "forgot a
+# permission someone needs" failure this redesign exists to avoid.
+UNSCOPED_BY_DOCTYPE = {
+	"Employee": frozenset(
+		{
+			"Barakat Staff Reader",
+			"Barakat Staff Writer",
+			"Barakat Reports Staff Reader",
+			"Barakat Attendance Manager",
+			"Barakat Salary Viewer",
+			"System Manager",
+			"Administrator",
+		}
+	),
+	"Salary Slip": frozenset(
+		{
+			"Barakat Salary Reader",
+			"Barakat Salary Writer",
+			"Barakat Reports Salary Reader",
+			"Barakat Salary Viewer",
+			"System Manager",
+			"Administrator",
+		}
+	),
+}
+
+
+def self_scope_applies(doctype, roles):
+	"""True when this caller must be narrowed to their own rows on `doctype`.
+
+	Pure decision — no Frappe — so it is unit-testable off a bench.
+	"""
+	unscoped = UNSCOPED_BY_DOCTYPE.get(doctype)
+	if unscoped is None:
+		return False
+	role_set = set(roles)
+	if role_set & unscoped:
+		return False
+	return SELF_SERVICE_ROLE in role_set
+
 
 # --------------------------------------------------------------------------
 # Generated module-capability roles
@@ -275,6 +348,11 @@ BARAKAT_ROLE_PERMS = {
 READER_PERMS = ("read", "select")
 WRITER_PERMS = ("read", "select", "write", "create", "delete")
 
+# Module keys that are acronyms. Role names show in the ERPNext desk's role list, and
+# a plain .capitalize() renders "pos" as "Pos" — which reads as a typo next to the
+# hand-written `Barakat POS Operator` / `Barakat POS Viewer`.
+_ACRONYMS = {"pos": "POS"}
+
 
 def role_name_for(module, level):
 	"""The generated role for a (module, level) cell, or None when nothing is granted.
@@ -286,7 +364,7 @@ def role_name_for(module, level):
 		return None
 	if not MODULE_DOCTYPES.get(module):
 		return None
-	words = " ".join(part.capitalize() for part in module.split("."))
+	words = " ".join(_ACRONYMS.get(part, part.capitalize()) for part in module.split("."))
 	return f"Barakat {words} {'Writer' if level == 'write' else 'Reader'}"
 
 
@@ -311,6 +389,26 @@ assert not _OVERLAP, f"generated role name collides with a hand-written one: {so
 ALL_ROLE_PERMS = {**BARAKAT_ROLE_PERMS, **MODULE_ROLE_PERMS}
 
 BARAKAT_CUSTOM_ROLES = tuple(ALL_ROLE_PERMS)
+
+# Barakat roles whose DocPerms are granted by their OWN dedicated installer function
+# rather than by the ALL_ROLE_PERMS loop, because what they grant is conditional or
+# permlevel-sensitive:
+#   - Barakat Settings Manager -> _grant_settings_manager_perms (read+write on two
+#     singles, and it must NOT get write on System Settings)
+#   - Barakat Staff Manager    -> _grant_staff_manager_perms (User write at permlevel 0
+#     only; see the permlevel-1 note in overrides/staff_roles.py)
+# They are real roles and must still be exported in the hooks.py fixture.
+EXTERNALLY_PERMED_ROLES = frozenset({"Barakat Settings Manager", "Barakat Staff Manager"})
+
+# Persona preset names (Employee.custom_role_preset points at a Role of the same name).
+PERSONA_PRESET_ROLES = ("Branch Supervisor", "Cashier", "Accountant", "Inventory Keeper", "HR")
+
+# Every Role this app must ship in its hooks.py fixture. Computed, never hand-listed:
+# a role that is not exported is silently dropped by persona_role_bundle(), leaving the
+# user with fewer roles and no error anywhere.
+EXPORTED_ROLE_NAMES = sorted(
+	{*PERSONA_PRESET_ROLES, *ALL_ROLE_PERMS, *EXTERNALLY_PERMED_ROLES}
+)
 
 
 # ── GL Entry row scoping for the supplier-ledger role ────────────────────────
@@ -352,109 +450,103 @@ def gl_entry_scope_for(caller_roles):
 # src/modules/roles/catalog.ts) crossed with the site's actual DocPerm table.
 # Roles are NEVER granted here that carry full-admin or code-execution reach:
 # `System Manager`, `Script Manager` and `Report Manager` appear in no bundle.
-PERSONA_ROLE_BUNDLES = {
-	# Everything write, reports read. The tenant's day-to-day administrator.
+# Hand-written roles a persona keeps ON TOP of its generated matrix roles. These are
+# capabilities the matrix cannot express:
+#   - Barakat POS Operator: the shift lifecycle (submit/cancel) plus the till's own
+#     device reads (TILL_REQUIRED_READS). Only Manager and Branch Supervisor may log a
+#     POS device in, so only they hold it.
+#   - Barakat Self Service: the caller's OWN profile and payslips, row-scoped by
+#     barakat.overrides.self_service. Replaces the native Employee / Employee Self
+#     Service roles, which granted the same reads UNSCOPED to every persona.
+#   - Barakat Staff Manager: creating logins / assigning role presets. Manager only.
+#   - Barakat Purchase Invoice Clerk: Purchase Invoice submit+cancel, which the
+#     generated suppliers Writer cannot grant (the generator has no submit).
+#   - Barakat Supplier Ledger Reader: GL Entry filtered to supplier rows, for the
+#     supplier statement without handing over the whole ledger.
+#   - Barakat Attendance Manager: Attendance submit+cancel (a submittable doctype -
+#     the AP's "record absence" flow creates AND submits in one step).
+#   - Barakat Loyalty Manager / Viewer, Currency Manager, Payment Mode Manager,
+#     Settings Manager: capabilities whose native equivalents carry far more.
+EXTRA_ROLES = {
 	"Manager": (
-		"Accounts Manager",
-		"Accounts User",
-		"Sales Manager",
-		"Sales Master Manager",
-		"Sales User",
-		"Stock Manager",
-		"Stock User",
-		"Item Manager",
-		"Purchase Manager",
-		"Purchase Master Manager",
-		"Purchase User",
-		"HR Manager",
-		"HR User",
-		"Barakat Settings Manager",
-		"Barakat Staff Manager",
 		"Barakat POS Operator",
-		"Barakat Reference Reader",
+		"Barakat Staff Manager",
+		"Barakat Self Service",
+		"Barakat Purchase Invoice Clerk",
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Manager",
 		"Barakat Currency Manager",
 		"Barakat Payment Mode Manager",
+		"Barakat Settings Manager",
 	),
-	# pos/products/inventory/attendance/customers write; warehouses, branches,
-	# staff, finance, accounting, suppliers, reports read.
 	"Branch Supervisor": (
-		"Sales Manager",
-		"Sales Master Manager",
-		"Sales User",
-		"Stock Manager",
-		"Stock User",
-		"Item Manager",
-		"Accounts User",
-		"Purchase User",
 		"Barakat POS Operator",
+		"Barakat Self Service",
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Viewer",
-		"Barakat Reference Reader",
 	),
-	# READ-ONLY everywhere in the admin panel. The Cashier operates the till in the
-	# desktop POS (under a Manager/Branch Supervisor device session, via PIN), never
-	# through their own AP login — so that login only ever reads. No write role:
-	# Sales User / Stock User / Barakat POS Operator (shift open/close) / Customer
-	# Group Manager / Customer Manager were all removed. POS profiles and work
-	# periods are additionally scoped to the cashier's own branches by the proxy.
 	"Cashier": (
-		"Barakat Cashier Reader",
-		"Barakat POS Viewer",
+		"Barakat Self Service",
 		"Barakat Loyalty Viewer",
-		"Barakat Reference Reader",
-		"Barakat Commerce Reader",
 	),
-	# finance/accounting/suppliers write; pos, salary, customers, reports read.
 	"Accountant": (
-		"Accounts Manager",
-		"Accounts User",
-		"Purchase Manager",
-		"Purchase Master Manager",
-		"Purchase User",
-		"Barakat Currency Manager",
-		"Barakat Salary Viewer",
-		"Barakat Loyalty Viewer",
-		"Barakat POS Viewer",
-		"Barakat Reference Reader",
-		"Barakat Payment Mode Manager",
-	),
-	# products/inventory/warehouses/suppliers write; reports read.
-	"Inventory Keeper": (
-		"Item Manager",
-		"Stock Manager",
-		"Stock User",
-		"Purchase Manager",
-		"Purchase Master Manager",
-		"Purchase User",
-		"Barakat Commerce Reader",
-		"Barakat Reference Reader",
+		"Barakat Self Service",
 		"Barakat Purchase Invoice Clerk",
-		# `reports.suppliers: read` in the matrix — the supplier statement reads
-		# GL Entry, which no other role in this bundle carries.
+		"Barakat Currency Manager",
+		"Barakat Payment Mode Manager",
+		"Barakat Loyalty Viewer",
+	),
+	"Inventory Keeper": (
+		"Barakat Self Service",
+		"Barakat Purchase Invoice Clerk",
 		"Barakat Supplier Ledger Reader",
 	),
-	# attendance/salary write; staff, branches, roles, reports read. Payroll only —
-	# the staff-admin role (Barakat Staff Manager) was removed 2026-07-22 so only the
-	# Manager persona can create logins / assign role presets. HR keeps native HR
-	# Manager/HR User for salary, attendance and slips.
 	"HR": (
-		"HR Manager",
-		"HR User",
+		"Barakat Self Service",
 		"Barakat Attendance Manager",
-		"Barakat Commerce Reader",
-		"Barakat Reference Reader",
 	),
 }
+
+
+def _build_persona_bundles():
+	"""Transcribe each matrix row into generated roles, then add the extras.
+
+	This is the whole point of the redesign: the bundle is no longer hand-picked from
+	native ERPNext roles (which bundle far more than the matrix intends) but derived
+	mechanically from PERSONA_MATRIX. `test_bundle_is_the_matrix_row` guards it.
+	"""
+	out = {}
+	for persona, row in PERSONA_MATRIX.items():
+		roles = []
+		for module in MODULE_KEYS:
+			name = role_name_for(module, row[module])
+			if name and name not in roles:
+				roles.append(name)
+		for name in EXTRA_ROLES.get(persona, ()):
+			if name not in roles:
+				roles.append(name)
+		out[persona] = tuple(roles)
+	return out
+
+
+PERSONA_ROLE_BUNDLES = _build_persona_bundles()
 
 PERSONAS = frozenset(PERSONA_ROLE_BUNDLES)
 
 # Roles never stripped from a persona user even though no bundle names them.
-# ERPNext attaches `Employee` itself when an Employee record is linked to a User,
-# and `Employee Self Service` backs the my-profile / my-payslip views. Removing
-# either would fight the framework on every save.
-PRESERVED_ROLES = frozenset({"Employee", "Employee Self Service"})
+#
+# EMPTY as of 2026-07-29. This used to hold {"Employee", "Employee Self Service"} on
+# the reasoning that ERPNext re-attaches `Employee` when an Employee record links to a
+# User, and that `Employee Self Service` backed the my-profile / my-payslip views.
+# Both roles grant UNSCOPED read on Employee and Salary Slip, so preserving them handed
+# every persona — including the Cashier — the whole staff directory and every salary.
+# That was measured on production, not theorised.
+#
+# The my-profile / my-payslip views are now served by SELF_SERVICE_ROLE, which grants
+# the same reads scoped to the caller's own rows. ERPNext may still re-attach
+# `Employee` on an Employee save; `reassert_persona_roles` rewrites the roles child
+# table to exactly the bundle, so it is stripped again on the next save.
+PRESERVED_ROLES = frozenset()
 
 # Roles that must never reach a staff persona, whatever else changes. Asserted
 # below so a careless edit to a bundle fails at import rather than in production.

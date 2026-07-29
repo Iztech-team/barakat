@@ -5,6 +5,8 @@ app_description = "Barakat custom ERP configuration and extensions"
 app_email = "osamatbaileh@iztechvalley.ps"
 app_license = "mit"
 
+from barakat.permissions import EXPORTED_ROLE_NAMES
+
 fixtures = [
 	{
 		"dt": "DocType",
@@ -12,49 +14,12 @@ fixtures = [
 	},
 	{
 		"dt": "Role",
-		"filters": [
-			[
-				"name",
-				"in",
-				[
-					"Branch Supervisor",
-					"Cashier",
-					"Accountant",
-					"Inventory Keeper",
-					"HR",
-					# Dedicated role granting read+write on System Settings /
-					# Global Defaults only (rounding page). Bundled into the
-					# Manager persona by the proxy; perms set by
-					# barakat.setup.install._grant_settings_manager_perms.
-					"Barakat Settings Manager",
-					"Barakat Staff Manager",
-					# Narrow roles behind the persona allow-list. Each exists
-					# because no native ERPNext role covers the capability
-					# without also handing out far more — see barakat/permissions.py.
-					# Perms set by barakat.setup.install._grant_barakat_role_perms.
-					"Barakat POS Operator",
-					"Barakat Attendance Manager",
-					"Barakat Loyalty Manager",
-					"Barakat Loyalty Viewer",
-					"Barakat Currency Manager",
-					"Barakat Salary Viewer",
-					"Barakat Purchase Invoice Clerk",
-					"Barakat Supplier Ledger Reader",
-					"Barakat Payment Mode Manager",
-					"Barakat Customer Manager",
-					"Barakat Customer Group Manager",
-					"Barakat Cashier Reader",
-					# The rest of the Cashier's read-only bundle. Omitting these
-					# silently gave a Cashier FEWER roles than the bundle names,
-					# because persona_role_bundle() intersects with roles that
-					# exist on the site. Guarded by RoleFixtureCoverage in
-					# overrides/test_persona_guard.py.
-					"Barakat POS Viewer",
-					"Barakat Commerce Reader",
-					"Barakat Reference Reader",
-				],
-			]
-		],
+		# Computed, never hand-listed. There are now ~55 Barakat roles (40 generated
+		# from the module matrix), and a role this app fails to export is SILENTLY
+		# dropped: persona_role_bundle() intersects a bundle with the roles that exist
+		# on the site, so the user ends up with fewer roles and no error anywhere.
+		# Guarded by RoleFixtureCoverage in overrides/test_persona_guard.py.
+		"filters": [["name", "in", EXPORTED_ROLE_NAMES]],
 	},
 	{
 		"dt": "Custom Field",
@@ -309,10 +274,17 @@ override_doctype_class = {
 # barakat/overrides/gl_entry.py and barakat.permissions.gl_entry_scope_for.
 permission_query_conditions = {
 	"GL Entry": "barakat.overrides.gl_entry.get_permission_query_conditions",
+	# Scope `Barakat Self Service` holders to their own rows. Both this and the
+	# has_permission entry below are required — the query condition covers lists, the
+	# controller hook covers opening one document directly.
+	"Employee": "barakat.overrides.self_service.employee_query_conditions",
+	"Salary Slip": "barakat.overrides.self_service.salary_slip_query_conditions",
 }
 
 has_permission = {
 	"GL Entry": "barakat.overrides.gl_entry.has_permission",
+	"Employee": "barakat.overrides.self_service.employee_has_permission",
+	"Salary Slip": "barakat.overrides.self_service.salary_slip_has_permission",
 }
 
 # Document Events
