@@ -83,8 +83,19 @@ class TestIsAbbreviationAvailable(FrappeTestCase):
 
 		frappe.set_user(user)
 		try:
-			# A permission-scoped read cannot see it …
-			self.assertEqual(frappe.get_all("Company", filters={"abbr": FIXTURE_ABBR}), [])
+			# A permission-scoped read cannot see it. `get_list`, not `get_all`:
+			# `get_all` bypasses permissions by design, so it would prove nothing.
+			# `get_list` is the analogue of the REST list the proxy would have
+			# issued — either it filters the row out or it refuses outright, and
+			# both mean "this caller cannot see the collision".
+			try:
+				visible = [
+					c["name"] for c in frappe.get_list("Company", filters={"abbr": FIXTURE_ABBR})
+				]
+			except frappe.PermissionError:
+				visible = []
+			self.assertEqual(visible, [])
+
 			# … but the check must.
 			self.assertEqual(is_abbreviation_available(FIXTURE_ABBR), {"available": False})
 		finally:
