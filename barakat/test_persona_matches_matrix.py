@@ -72,21 +72,25 @@ def _matrix_allows(persona, doctype):
 
 class PersonaMatchesMatrix(FrappeTestCase):
 	def test_no_persona_exceeds_its_matrix(self):
+		# Collected, not asserted per-item: stopping at the first violation hides the
+		# rest, and these are only worth reviewing as a complete list.
+		violations = []
 		for persona in PERSONA_ROLE_BUNDLES:
 			for doctype, perms in effective_perms(persona).items():
 				if doctype in ALLOWED_EXTRA.get(persona, set()):
 					continue
 				may_read, may_write = _matrix_allows(persona, doctype)
-				self.assertTrue(
-					may_read,
-					f"{persona} reaches {doctype} ({sorted(perms)}) "
-					f"with no matrix module granting it",
-				)
-				if perms & WRITE_PERMS:
-					self.assertTrue(
-						may_write,
-						f"{persona} WRITES {doctype} but its matrix says read-only",
+				if not may_read:
+					violations.append(
+						f"{persona} reaches {doctype} ({sorted(perms)}) "
+						f"with no matrix module granting it"
 					)
+				elif perms & WRITE_PERMS and not may_write:
+					violations.append(
+						f"{persona} WRITES {doctype} ({sorted(perms & WRITE_PERMS)}) "
+						f"but its matrix says read-only"
+					)
+		self.assertEqual(violations, [], "\n  " + "\n  ".join(violations))
 
 	def test_every_matrix_grant_is_actually_reachable(self):
 		"""A bundle that is too NARROW fails silently. Catch it here, not in the shop."""
