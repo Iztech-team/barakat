@@ -22,6 +22,7 @@ from barakat.persona_matrix import (
 	MODULE_DOCTYPES,
 	PERSONA_MATRIX,
 	READ_ONLY_DOCTYPES,
+	SHARED_PICKER_READS,
 	TILL_REQUIRED_READS,
 )
 from barakat.scripts.perm_audit import effective_perms
@@ -58,15 +59,24 @@ ALLOWED_EXTRA = {
 
 
 def _matrix_allows(persona, doctype):
-	"""(may_read, may_write) for this doctype under the persona's matrix row."""
+	"""(may_read, may_write) for this doctype under the persona's matrix row.
+
+	WRITE is bounded strictly by the doctypes a module OWNS. READ additionally allows
+	the module's declared SHARED_PICKER_READS — a form legitimately reads the doctypes
+	its pickers list, and the proxy widens its own route gate for exactly the same
+	reason (`viewAny` in middleware/permission.ts). Declared, per module, and read-only:
+	the widening cannot become a write.
+	"""
 	may_read = may_write = False
 	for module, level in PERSONA_MATRIX[persona].items():
-		if doctype not in MODULE_DOCTYPES.get(module, ()):
+		if level == "none":
 			continue
-		if level in ("read", "write"):
+		if doctype in MODULE_DOCTYPES.get(module, ()):
 			may_read = True
-		if level == "write":
-			may_write = True
+			if level == "write":
+				may_write = True
+		elif doctype in SHARED_PICKER_READS.get(module, ()):
+			may_read = True
 	return may_read, may_write
 
 

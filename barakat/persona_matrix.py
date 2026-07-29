@@ -202,7 +202,12 @@ SHARED_PICKER_READS = {
 	"suppliers": ("Item", "Warehouse", "Account", "Mode of Payment", "Company"),
 	"inventory": ("Item", "Warehouse", "Company", "UOM", "Branch"),
 	"products": ("Company", "Warehouse"),
-	"pos": ("Customer", "Branch", "Warehouse", "Mode of Payment", "Price List", "Company"),
+	# Warehouse is deliberately ABSENT. The proxy makes the same call explicitly:
+	# `GET /api/warehouses` is viewAny(['warehouses','inventory','suppliers']) and its
+	# comment records that including the catalogue "handed a Cashier the warehouse list
+	# for nothing". The till reads warehouses under a Manager / Branch Supervisor
+	# session, and both own the `warehouses` module already.
+	"pos": ("Customer", "Branch", "Mode of Payment", "Price List", "Company"),
 	"staff": ("Branch", "Company"),
 	"salary": ("Employee", "Account", "Company", "Mode of Payment"),
 	"attendance": ("Employee", "Branch"),
