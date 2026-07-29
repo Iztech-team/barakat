@@ -17,6 +17,7 @@ Two directions are checked, and the second matters as much as the first:
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from barakat.overrides.staff_roles import persona_role_bundle
 from barakat.permissions import PERSONA_ROLE_BUNDLES
 from barakat.persona_matrix import (
 	MODULE_DOCTYPES,
@@ -179,4 +180,48 @@ class PersonaMatchesMatrix(FrappeTestCase):
 			self.assertTrue(
 				effective.get(doctype, set()) & {"read", "select"},
 				f"Manager cannot read {doctype}; the setup walkthrough will stall on it",
+			)
+
+	def test_every_persona_can_actually_log_in(self):
+		"""Every persona must resolve to a System User, or login is impossible.
+
+		The gateway's verify_user_credentials logs into the tenant and accepts ONLY the
+		response "Logged In". Frappe returns "No App" for a Website User, so the
+		gateway reports "email or password is incorrect" — with a perfectly correct
+		password. `User.user_type` is DERIVED: System User iff any held role has
+		desk_access=1.
+
+		Regression guard for 2026-07-29, when all 40 generated roles were minted with
+		desk_access=0 and Branch Supervisor, Cashier and HR were locked out of the
+		admin panel entirely. desk_access is not a security control (the DocPerms are);
+		it is the switch that decides whether a persona can sign in.
+		"""
+		for persona in PERSONA_ROLE_BUNDLES:
+			bundle = persona_role_bundle(persona)
+			self.assertTrue(bundle, f"{persona} resolves to no roles on this site")
+			desk = frappe.get_all(
+				"Role",
+				filters={"name": ("in", list(bundle)), "desk_access": 1},
+				pluck="name",
+			)
+			self.assertTrue(
+				desk,
+				f"{persona} holds no role with desk_access -> its users become "
+				f"Website Users and CANNOT LOG IN",
+			)
+
+	def test_persona_users_are_system_users(self):
+		"""The same thing, checked against the users that actually exist here."""
+		for emp in frappe.get_all(
+			"Employee",
+			filters={"custom_role_preset": ("in", sorted(PERSONA_ROLE_BUNDLES)), "user_id": ("is", "set")},
+			fields=["user_id", "custom_role_preset"],
+		):
+			email = (emp.user_id or "").strip()
+			if not email or email == "Administrator" or not frappe.db.exists("User", email):
+				continue
+			self.assertEqual(
+				frappe.db.get_value("User", email, "user_type"),
+				"System User",
+				f"{email} ({emp.custom_role_preset}) is not a System User and cannot log in",
 			)

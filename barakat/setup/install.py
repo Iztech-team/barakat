@@ -9,6 +9,7 @@ def after_install():
 		_set_commercial_rounding,
 		_create_default_customer,
 		_provision_barakat_roles,
+		_ensure_persona_desk_access,
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
@@ -47,6 +48,7 @@ def after_migrate():
 	for fn in [
 		_create_misc_item,
 		_provision_barakat_roles,
+		_ensure_persona_desk_access,
 		_grant_settings_manager_perms,
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
@@ -177,17 +179,66 @@ BARAKAT_ROLES = list(PERSONA_PRESET_ROLES)
 
 
 def _provision_barakat_roles():
-	from barakat.permissions import BARAKAT_CUSTOM_ROLES
+	from barakat.permissions import BARAKAT_CUSTOM_ROLES, MODULE_ROLE_PERMS
 
 	# Persona roles carry no DocPerms of their own (they exist so the Employee's
 	# custom_role_preset Link has something to point at). The custom roles below
 	# DO carry perms — granted by _grant_barakat_role_perms.
+	#
+	# desk_access on the GENERATED module roles must be 1. It is not a security
+	# setting — `frappe/handler.py` consults has_desk_access() only to limit upload
+	# mimetypes, and the DocPerms are what actually restrict data. What it DOES
+	# control is `User.user_type`: `User.set_system_user()` recomputes it on every
+	# save as "System User if any role has desk_access else Website User".
+	#
+	# And login depends on that. The gateway's verify_user_credentials logs into each
+	# tenant and accepts ONLY the literal response "Logged In" — Frappe returns
+	# "No App" for a Website User. So a persona whose bundle is entirely
+	# desk_access=0 roles becomes a Website User and CANNOT LOG IN AT ALL.
+	# Measured on osa 2026-07-29: Branch Supervisor, Cashier and HR were locked out.
 	for role_name in (*BARAKAT_ROLES, *BARAKAT_CUSTOM_ROLES):
 		if frappe.db.exists("Role", role_name):
 			continue
 		frappe.get_doc(
-			{"doctype": "Role", "role_name": role_name, "desk_access": 0}
+			{
+				"doctype": "Role",
+				"role_name": role_name,
+				"desk_access": 1 if role_name in MODULE_ROLE_PERMS else 0,
+			}
 		).insert(ignore_permissions=True)
+
+
+def _ensure_persona_desk_access():
+	"""Repair `desk_access` on generated roles, and `user_type` on persona users.
+
+	Separate from _provision_barakat_roles because that one only touches roles it
+	CREATES — a site migrated before this fix already has the 40 generated roles at
+	desk_access=0, and its staff already flipped to Website User. Both need repairing
+	in place. Idempotent; safe on every migrate.
+	"""
+	from barakat.permissions import MODULE_ROLE_PERMS, PERSONAS
+
+	changed = False
+	for role in MODULE_ROLE_PERMS:
+		if frappe.db.exists("Role", role) and not frappe.db.get_value("Role", role, "desk_access"):
+			frappe.db.set_value("Role", role, "desk_access", 1)
+			changed = True
+	if changed:
+		frappe.clear_cache()
+
+	for emp in frappe.get_all(
+		"Employee",
+		filters={"custom_role_preset": ("in", sorted(PERSONAS)), "user_id": ("is", "set")},
+		fields=["user_id"],
+	):
+		email = (emp.user_id or "").strip()
+		if not email or not frappe.db.exists("User", email):
+			continue
+		# Never touch the owner/Administrator.
+		if email == "Administrator":
+			continue
+		if frappe.db.get_value("User", email, "user_type") != "System User":
+			frappe.db.set_value("User", email, "user_type", "System User")
 
 
 def _grant_barakat_role_perms():
