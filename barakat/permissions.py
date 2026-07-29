@@ -45,6 +45,13 @@ naming a custom role per split multiplies the surface that has to stay correct.
 gone from every persona.
 """
 
+from barakat.persona_matrix import (
+	MODULE_DOCTYPES,
+	MODULE_KEYS,
+	PERSONA_MATRIX,
+	TILL_REQUIRED_READS,
+)
+
 # --------------------------------------------------------------------------
 # Custom roles
 # --------------------------------------------------------------------------
@@ -255,7 +262,55 @@ BARAKAT_ROLE_PERMS = {
 	},
 }
 
-BARAKAT_CUSTOM_ROLES = tuple(BARAKAT_ROLE_PERMS)
+# --------------------------------------------------------------------------
+# Generated module-capability roles
+# --------------------------------------------------------------------------
+
+# `select` is granted alongside `read` on purpose. Frappe's list query permits
+# `select` OR `read` (DatabaseQuery.check_read_permission), and link-field pickers
+# rely on `select` alone. Measured on niveen1 2026-07-29: a cashier lists 98 account
+# NAMES with read denied and the document open refused — that behaviour is correct and
+# must survive. Dropping `select` empties dropdowns with no error in the AP and no
+# error in the till.
+READER_PERMS = ("read", "select")
+WRITER_PERMS = ("read", "select", "write", "create", "delete")
+
+
+def role_name_for(module, level):
+	"""The generated role for a (module, level) cell, or None when nothing is granted.
+
+	Returns None for `none`, and for modules that map to no ERPNext doctype
+	(`dashboard`, `reports`, `roles` — AP-only gates).
+	"""
+	if level not in ("read", "write"):
+		return None
+	if not MODULE_DOCTYPES.get(module):
+		return None
+	words = " ".join(part.capitalize() for part in module.split("."))
+	return f"Barakat {words} {'Writer' if level == 'write' else 'Reader'}"
+
+
+def _build_module_role_perms():
+	out = {}
+	for module, doctypes in MODULE_DOCTYPES.items():
+		if not doctypes:
+			continue
+		for level, perms in (("read", READER_PERMS), ("write", WRITER_PERMS)):
+			out[role_name_for(module, level)] = {dt: perms for dt in doctypes}
+	return out
+
+
+MODULE_ROLE_PERMS = _build_module_role_perms()
+
+# A generated name must never shadow a hand-written role — the hand-written one carries
+# capabilities the generator cannot express (submit/cancel, row scoping).
+_OVERLAP = set(BARAKAT_ROLE_PERMS).intersection(MODULE_ROLE_PERMS)
+assert not _OVERLAP, f"generated role name collides with a hand-written one: {sorted(_OVERLAP)}"
+
+# Hand-written first, generated second. This is what setup/install.py provisions.
+ALL_ROLE_PERMS = {**BARAKAT_ROLE_PERMS, **MODULE_ROLE_PERMS}
+
+BARAKAT_CUSTOM_ROLES = tuple(ALL_ROLE_PERMS)
 
 
 # ── GL Entry row scoping for the supplier-ledger role ────────────────────────

@@ -199,9 +199,9 @@ def _grant_barakat_role_perms():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	from barakat.permissions import BARAKAT_ROLE_PERMS
+	from barakat.permissions import ALL_ROLE_PERMS
 
-	for role, doctype_perms in BARAKAT_ROLE_PERMS.items():
+	for role, doctype_perms in ALL_ROLE_PERMS.items():
 		if not frappe.db.exists("Role", role):
 			frappe.get_doc(
 				{"doctype": "Role", "role_name": role, "desk_access": 0}

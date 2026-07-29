@@ -13,9 +13,13 @@ from barakat.permissions import (
     PERSONA_ROLE_BUNDLES,
     STAFF_MANAGER_ROLE,
     SUPPLIER_LEDGER_ROLE,
+    MODULE_ROLE_PERMS,
+    READER_PERMS,
+    WRITER_PERMS,
     bundle_for,
     gl_entry_scope_for,
     may_assign_preset,
+    role_name_for,
 )
 from barakat.persona_matrix import (
     MODULE_DOCTYPES,
@@ -149,6 +153,43 @@ class PersonaMatrixData(unittest.TestCase):
         with open(path, encoding="utf-8") as fh:
             snapshot = json.load(fh)
         self.assertEqual(snapshot, PERSONA_MATRIX)
+
+
+class GeneratedModuleRoles(unittest.TestCase):
+    def test_role_naming(self):
+        self.assertEqual(role_name_for("products", "write"), "Barakat Products Writer")
+        self.assertEqual(role_name_for("products", "read"), "Barakat Products Reader")
+
+    def test_dotted_module_naming(self):
+        self.assertEqual(role_name_for("reports.salary", "read"), "Barakat Reports Salary Reader")
+
+    def test_none_grants_no_role(self):
+        self.assertIsNone(role_name_for("products", "none"))
+
+    def test_module_without_doctypes_grants_no_role(self):
+        # `dashboard`, `reports` and `roles` are AP-only gates with no ERPNext doctype.
+        self.assertIsNone(role_name_for("dashboard", "write"))
+        self.assertIsNone(role_name_for("reports", "read"))
+        self.assertIsNone(role_name_for("roles", "read"))
+
+    def test_reader_grants_select_alongside_read(self):
+        # Frappe's list query accepts `select` OR `read`; link pickers run on `select`
+        # alone. Losing it empties dropdowns with no error anywhere.
+        self.assertIn("select", READER_PERMS)
+        self.assertEqual(set(MODULE_ROLE_PERMS["Barakat Products Reader"]["Item"]), set(READER_PERMS))
+
+    def test_writer_grants_the_full_lifecycle(self):
+        self.assertEqual(set(MODULE_ROLE_PERMS["Barakat Products Writer"]["Item"]), set(WRITER_PERMS))
+
+    def test_generated_roles_cover_every_module_with_doctypes(self):
+        for key, doctypes in MODULE_DOCTYPES.items():
+            if not doctypes:
+                continue
+            self.assertIn(role_name_for(key, "read"), MODULE_ROLE_PERMS, key)
+            self.assertIn(role_name_for(key, "write"), MODULE_ROLE_PERMS, key)
+
+    def test_generated_names_never_collide_with_hand_written_roles(self):
+        self.assertEqual(set(BARAKAT_ROLE_PERMS).intersection(MODULE_ROLE_PERMS), set())
 
 
 if __name__ == "__main__":

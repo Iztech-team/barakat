@@ -101,7 +101,13 @@ MODULE_DOCTYPES = {
 	"reports.staff": ("Employee", "Attendance"),
 	"reports.pos": ("POS Invoice", "POS Closing Entry", "Branch"),
 	"reports.salary": ("Salary Slip",),
-	"reports.suppliers": ("GL Entry", "Supplier"),
+	# GL Entry is deliberately NOT here. The supplier statement is a GL query, but a
+	# module grant would be unscoped — handing the Inventory Keeper (finance: none)
+	# every sales, payroll and journal line. It comes instead from the hand-written
+	# `Barakat Supplier Ledger Reader`, whose rows are filtered to party_type=Supplier
+	# by barakat.overrides.gl_entry. The Accountant reads the full ledger legitimately
+	# through `finance: write`, which does carry GL Entry.
+	"reports.suppliers": ("Supplier",),
 }
 
 # The desktop till pulls these under a Manager / Branch Supervisor device session.
