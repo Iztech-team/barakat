@@ -48,12 +48,26 @@ MODULE_DOCTYPES = {
 	# `POS Employee Branch` is deliberately absent: it is a child table (istable=1) and
 	# inherits its parent's permissions. Granting perms on one is a no-op that reads
 	# like coverage.
+	# `Sales Invoice` + `POS Invoice Merge Log` are here because CLOSING a shift
+	# consolidates the day's POS Invoices into a Sales Invoice, and ERPNext does that
+	# under the closing user's own session:
+	#   erpnext/accounts/doctype/pos_invoice_merge_log/pos_invoice_merge_log.py:157
+	#     sales_invoice.save(); sales_invoice.submit()   <- no ignore_permissions,
+	#                                                       on a fresh frappe.new_doc
+	# The work is enqueued as a background job, but frappe.enqueue defaults to running
+	# as the enqueueing user. Verified against the ERPNext source on the test bench
+	# 2026-07-29, after the removal diff flagged Sales Invoice as a loss and the
+	# assumption "consolidation is a system job" turned out to be wrong.
+	#
+	# Without these, every shift close silently fails to produce books.
 	"pos": (
 		"POS Invoice",
 		"POS Opening Entry",
 		"POS Closing Entry",
 		"POS Profile",
 		"Device",
+		"Sales Invoice",
+		"POS Invoice Merge Log",
 	),
 	"products": (
 		"Item",
@@ -170,6 +184,7 @@ SUBMITTABLE_DOCTYPES = frozenset(
 		"Salary Structure Assignment",
 		"Attendance",
 		"Holiday List Assignment",
+		"POS Invoice Merge Log",
 	}
 )
 

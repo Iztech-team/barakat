@@ -59,14 +59,26 @@ and are not listed individually.
 | Cashier | `Sales Invoice` read | `reports: none` — the Cashier's POS pages read `POS Invoice`, which it keeps |
 | All | `Sales Invoice` write+submit | No AP route creates a Sales Invoice. The till writes `POS Invoice`; consolidation into a Sales Invoice is a scheduled system job running with `ignore_permissions`. **This is the one removal to confirm on the bench** — see below. |
 
-## Open item for bench verification
+## Open item for bench verification — RESOLVED 2026-07-29
 
-`Sales Invoice` write+submit is removed from every persona, including Manager. The
-reasoning above is sound but rests on reading the code, not on running it. Before this
-ships, confirm on a bench that:
+`Sales Invoice` write+submit was removed from every persona on the reasoning that
+consolidation is a system job. **That reasoning was wrong**, verified against the ERPNext
+source on the test bench:
 
-1. a POS sale still submits end to end, and
-2. POS-invoice consolidation still produces a Sales Invoice.
+```
+erpnext/accounts/doctype/pos_invoice_merge_log/pos_invoice_merge_log.py:156-157
+    sales_invoice.save()
+    sales_invoice.submit()      # no ignore_permissions, on a fresh frappe.new_doc
+```
 
-If consolidation runs under the user's session rather than as a system job, Manager needs
-`Sales Invoice` write+submit back — add it to `MODULE_DOCTYPES["pos"]`.
+The merge log itself is saved with `ignore_permissions=True`, but the Sales Invoice it
+produces is a new document with its own flags. The work is enqueued as a background job,
+and `frappe.enqueue` defaults to running as the enqueueing user — so closing a shift
+creates and submits the Sales Invoice under the **closing user's own session**.
+
+`Sales Invoice` and `POS Invoice Merge Log` are therefore owned by the `pos` module.
+Manager and Branch Supervisor (`pos: write`) get create/write/submit/cancel; Cashier
+(`pos: read`) gets read only. Without this, every shift close would silently fail to
+produce books.
+
+This is the single most valuable thing the removal diff found.

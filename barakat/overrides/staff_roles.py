@@ -62,6 +62,42 @@ def persona_role_bundle(persona):
 	return [role for role in wanted if role in existing]
 
 
+def site_is_provisioned(persona):
+	"""True when THIS site has every role the persona's bundle names.
+
+	A bench serves many sites from ONE app checkout, but roles and DocPerms live in each
+	site's own database. So the moment the code is updated, every site on the bench runs
+	the new bundle — while only the sites that have actually been migrated have the roles
+	it names.
+
+	`persona_role_bundle` intersects the bundle with the roles that exist here, and
+	`reassert_persona_roles` then rewrites the child table to that intersection. On a
+	site that has not migrated yet, the intersection is nearly empty: saving one Employee
+	would strip that user down to almost no roles, with no error anywhere.
+
+	Returning False leaves such a user completely untouched. That is what makes a
+	one-site-at-a-time rollout safe — migrate a site and its staff move to the new
+	bundles; every other site on the bench keeps working exactly as before until its own
+	migrate runs.
+	"""
+	wanted = set(bundle_for(persona))
+	if not wanted:
+		return False
+	present = set(
+		frappe.get_all("Role", filters={"name": ("in", list(wanted))}, pluck="name")
+	)
+	missing = wanted - present
+	if missing:
+		# Debug-level, not an error: this is the expected state on a site whose migrate
+		# has not run yet, and it would otherwise fire on every Employee save.
+		frappe.logger("barakat").debug(
+			f"persona roles not provisioned on {frappe.local.site}; "
+			f"leaving {persona} users untouched (missing: {sorted(missing)[:5]})"
+		)
+		return False
+	return True
+
+
 def reassert_company_user_permission(doc, method=None):
 	"""Ensure the Employee's linked user keeps their company User Permission.
 
@@ -142,6 +178,9 @@ def reassert_persona_roles(doc, method=None):
 	"""
 	preset = (doc.custom_role_preset or "").strip()
 	if preset not in PERSONAS:
+		return
+
+	if not site_is_provisioned(preset):
 		return
 
 	email = (doc.user_id or "").strip()
