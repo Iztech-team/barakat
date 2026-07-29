@@ -17,6 +17,12 @@ from barakat.permissions import (
     gl_entry_scope_for,
     may_assign_preset,
 )
+from barakat.persona_matrix import (
+    MODULE_DOCTYPES,
+    MODULE_KEYS,
+    PERSONA_MATRIX,
+    TILL_REQUIRED_READS,
+)
 
 
 class MayAssignPreset(unittest.TestCase):
@@ -112,6 +118,37 @@ class RoleFixtureCoverage(unittest.TestCase):
             if r.startswith("Barakat") and r not in self._fixture_roles()
         )
         self.assertEqual(missing, [], f"missing from the hooks.py Role fixture: {missing}")
+
+
+class PersonaMatrixData(unittest.TestCase):
+    """The Python twin of proxy-barakat/src/modules/roles/catalog.ts."""
+
+    def test_every_module_key_has_a_doctype_list(self):
+        for key in MODULE_KEYS:
+            self.assertIn(key, MODULE_DOCTYPES, key)
+
+    def test_every_persona_covers_every_module(self):
+        for persona, row in PERSONA_MATRIX.items():
+            for key in MODULE_KEYS:
+                self.assertIn(key, row, f"{persona} missing {key}")
+                self.assertIn(row[key], ("none", "read", "write"), f"{persona}.{key}")
+
+    def test_personas_match_the_bundle_keys(self):
+        self.assertEqual(set(PERSONA_MATRIX), set(PERSONA_ROLE_BUNDLES))
+
+    def test_till_reads_are_declared(self):
+        # The till pulls these under a Manager / Branch Supervisor device session.
+        for doctype in ("System Settings", "Global Defaults", "Device", "POS Scale Settings"):
+            self.assertIn(doctype, TILL_REQUIRED_READS, doctype)
+
+    def test_matrix_matches_the_json_snapshot(self):
+        import json
+        import os
+
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "persona_matrix.json")
+        with open(path, encoding="utf-8") as fh:
+            snapshot = json.load(fh)
+        self.assertEqual(snapshot, PERSONA_MATRIX)
 
 
 if __name__ == "__main__":
