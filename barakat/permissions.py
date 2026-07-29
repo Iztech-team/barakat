@@ -430,8 +430,16 @@ BARAKAT_CUSTOM_ROLES = tuple(ALL_ROLE_PERMS)
 # They are real roles and must still be exported in the hooks.py fixture.
 EXTERNALLY_PERMED_ROLES = frozenset({"Barakat Settings Manager", "Barakat Staff Manager"})
 
-# Persona preset names (Employee.custom_role_preset points at a Role of the same name).
-PERSONA_PRESET_ROLES = ("Branch Supervisor", "Cashier", "Accountant", "Inventory Keeper", "HR")
+# Persona preset names. `Employee.custom_role_preset` is a Link to `Role`, so a Role
+# record of the same name must exist or the Employee cannot be saved at all.
+#
+# DERIVED from the matrix, never hand-listed. The hand-written list in
+# setup/install.py omitted "Manager" — so on a freshly created site the Manager persona
+# could not be assigned at all:
+#     LinkValidationError: Could not find Role: Manager
+# Older sites only work because someone created that Role by hand at some point.
+# Caught on the fresh `osa` test site, 2026-07-29.
+PERSONA_PRESET_ROLES = tuple(sorted(PERSONA_MATRIX))
 
 # Every Role this app must ship in its hooks.py fixture. Computed, never hand-listed:
 # a role that is not exported is silently dropped by persona_role_bundle(), leaving the

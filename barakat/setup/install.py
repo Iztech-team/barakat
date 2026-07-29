@@ -167,13 +167,13 @@ def _create_default_customer():
 	).insert(ignore_permissions=True, ignore_mandatory=True)
 
 
-BARAKAT_ROLES = [
-	"Branch Supervisor",
-	"Cashier",
-	"Accountant",
-	"Inventory Keeper",
-	"HR",
-]
+# The persona preset Roles. DERIVED from the matrix, never hand-listed: this list
+# used to omit "Manager", so a freshly created site could not assign the Manager
+# persona at all (Employee.custom_role_preset is a Link to Role, and the record simply
+# did not exist). Older sites only work because someone made that Role by hand.
+from barakat.permissions import PERSONA_PRESET_ROLES
+
+BARAKAT_ROLES = list(PERSONA_PRESET_ROLES)
 
 
 def _provision_barakat_roles():
