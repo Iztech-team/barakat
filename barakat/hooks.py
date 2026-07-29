@@ -31,6 +31,7 @@ fixtures = [
 					# Company (per-shop rounding — see barakat.api.settings notes)
 					"Company-custom_disable_rounded_total",
 					"Company-custom_rounding_method",
+					"Company-custom_barakat_coa_language",
 					# Branch
 					"Branch-custom_pos_company",
 					"Branch-custom_pos_profiles",
@@ -141,6 +142,9 @@ doctype_js = {
 }
 
 override_doctype_class = {
+	# Builds a new company's chart of accounts in the owner's language, so the
+	# account IDS are Arabic/Hebrew too — they can never be renamed afterwards.
+	"Company": "barakat.overrides.company.BarakatCompany",
 	"POS Opening Entry": "barakat.overrides.pos_opening_entry.BarakatPOSOpeningEntry",
 	"POS Closing Entry": "barakat.overrides.pos_closing_entry.BarakatPOSClosingEntry",
 	"POS Invoice": "barakat.overrides.pos_invoice.BarakatPOSInvoice",

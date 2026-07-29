@@ -78,6 +78,19 @@ class CompanyMarkersAreEnforceable(unittest.TestCase):
         self.assertEqual(f["fieldtype"], "Link")
         self.assertEqual(f["options"], "UOM")
 
+    def test_company_carries_the_chart_of_accounts_language(self):
+        """The proxy sets this on the Company INSERT and BarakatCompany reads it
+        during that same save to pick the chart's language. If the field is not
+        installed, Frappe silently drops the value and the shop is created with
+        ERPNext's English chart — whose account ids can never be renamed. The
+        proxy pins the same string in coa-language.test.ts.
+        """
+        f = _by_name(self.rows, "Company-custom_barakat_coa_language")
+        self.assertIsNotNone(f, "Company-custom_barakat_coa_language missing from fixtures")
+        self.assertEqual(f["fieldname"], "custom_barakat_coa_language")
+        self.assertEqual(f["fieldtype"], "Select")
+        self.assertEqual(f["options"], "\nar\nhe\nen")
+
 
 class ClosingEntryRecordsBothIdentities(unittest.TestCase):
     """A shift's closing side must name the PIN staff AND the signing account.
