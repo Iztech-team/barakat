@@ -22,6 +22,7 @@ from barakat.persona_matrix import (
 	MODULE_DOCTYPES,
 	PERSONA_MATRIX,
 	READ_ONLY_DOCTYPES,
+	SETUP_WALKTHROUGH_DOCTYPES,
 	SHARED_PICKER_READS,
 	TILL_REQUIRED_READS,
 )
@@ -161,3 +162,21 @@ class PersonaMatchesMatrix(FrappeTestCase):
 					effective.get(doctype, set()) & {"read", "select"},
 					f"{persona} till would silently fall back: no read on {doctype}",
 				)
+
+	def test_setup_walkthrough_is_readable(self):
+		"""The setup page must be completable by the persona that owns settings.
+
+		This exists because the other guards iterate MODULE_DOCTYPES, so a doctype in
+		NO module is invisible to them. `Cost Center` was exactly that: step 15 of the
+		walkthrough, listed by no module, so the company-accounts page told a Manager
+		"1 account still needs confirmation" with no way to clear it. Found by driving
+		the real UI on osa, not by any test — hence this one.
+		"""
+		effective = effective_perms("Manager")
+		for doctype in SETUP_WALKTHROUGH_DOCTYPES:
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			self.assertTrue(
+				effective.get(doctype, set()) & {"read", "select"},
+				f"Manager cannot read {doctype}; the setup walkthrough will stall on it",
+			)

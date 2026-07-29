@@ -94,7 +94,17 @@ MODULE_DOCTYPES = {
 	),
 	"finance": ("GL Entry", "Journal Entry", "Payment Entry", "Fiscal Year"),
 	"reports": (),
-	"settings": ("Company", "Global Defaults", "System Settings", "POS Scale Settings"),
+	# Cost Center belongs here because the setup walkthrough's `cost_center` step is
+	# gated on `settings`, and its confirm route is mutate('settings'). Missing it made
+	# the company-accounts page tell a Manager "1 account still needs confirmation"
+	# forever — the step could not even be READ. Caught on osa 2026-07-29.
+	"settings": (
+		"Company",
+		"Global Defaults",
+		"System Settings",
+		"POS Scale Settings",
+		"Cost Center",
+	),
 	# Price List is OWNED here, not just picked: the AP's price-list routes are
 	# gated on `accounting` (view/mutate), so an Accountant must be able to WRITE one.
 	"accounting": (
@@ -199,20 +209,20 @@ SUBMITTABLE_DOCTYPES = frozenset(
 #
 # READ ONLY, never write. Each entry is a picker on a form the persona can open.
 SHARED_PICKER_READS = {
-	"suppliers": ("Item", "Warehouse", "Account", "Mode of Payment", "Company"),
-	"inventory": ("Item", "Warehouse", "Company", "UOM", "Branch"),
+	"suppliers": ("Item", "Warehouse", "Account", "Mode of Payment", "Company", "Cost Center"),
+	"inventory": ("Item", "Warehouse", "Company", "UOM", "Branch", "Cost Center"),
 	"products": ("Company", "Warehouse"),
 	# Warehouse is deliberately ABSENT. The proxy makes the same call explicitly:
 	# `GET /api/warehouses` is viewAny(['warehouses','inventory','suppliers']) and its
 	# comment records that including the catalogue "handed a Cashier the warehouse list
 	# for nothing". The till reads warehouses under a Manager / Branch Supervisor
 	# session, and both own the `warehouses` module already.
-	"pos": ("Customer", "Branch", "Mode of Payment", "Price List", "Company"),
+	"pos": ("Customer", "Branch", "Mode of Payment", "Price List", "Company", "Cost Center"),
 	"staff": ("Branch", "Company"),
 	"salary": ("Employee", "Account", "Company", "Mode of Payment"),
 	"attendance": ("Employee", "Branch"),
-	"finance": ("Account", "Company", "Employee", "Mode of Payment"),
-	"accounting": ("Company", "Price List", "Item Price", "Account"),
+	"finance": ("Account", "Company", "Employee", "Mode of Payment", "Cost Center"),
+	"accounting": ("Company", "Price List", "Item Price", "Account", "Cost Center"),
 	"customers": ("Branch", "Company", "Price List"),
 	"warehouses": ("Company", "Account"),
 	"branches": ("Company",),
@@ -373,3 +383,12 @@ PERSONA_MATRIX = {
 		"reports.suppliers": "none",
 	},
 }
+
+
+# The doctypes the admin panel's setup walkthrough reads to render its 15 steps.
+#
+# Declared explicitly because the guard test iterates MODULE_DOCTYPES — a doctype in NO
+# module is invisible to it. `Cost Center` was exactly that: it is step 15, no module
+# listed it, and the page told the Manager "1 account still needs confirmation" with no
+# way to clear it. Asserted by test_setup_walkthrough_is_readable.
+SETUP_WALKTHROUGH_DOCTYPES = ("Company", "Account", "Cost Center")
