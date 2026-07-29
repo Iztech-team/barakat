@@ -63,6 +63,11 @@ def snapshot():
 	}
 
 
-print("PERM_SNAPSHOT_JSON_START")
-print(json.dumps(snapshot(), indent=2, sort_keys=True))
-print("PERM_SNAPSHOT_JSON_END")
+# Guarded: `effective_perms` is imported by test_persona_matches_matrix, and an
+# unguarded snapshot at module level would run the whole audit on every import.
+# `bench console < perm_audit.py` executes with __name__ == "__main__", so piping the
+# file in still prints.
+if __name__ == "__main__":
+	print("PERM_SNAPSHOT_JSON_START")
+	print(json.dumps(snapshot(), indent=2, sort_keys=True))
+	print("PERM_SNAPSHOT_JSON_END")

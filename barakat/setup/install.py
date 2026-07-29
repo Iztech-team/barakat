@@ -51,8 +51,11 @@ def after_migrate():
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
+		_revoke_stale_barakat_perms,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
+		# Last: applies the bundles the passes above have just provisioned.
+		_backfill_persona_roles,
 	]:
 		try:
 			fn()
@@ -61,17 +64,21 @@ def after_migrate():
 	frappe.db.commit()
 
 
-# NOT wired into after_migrate. Everything in the lists above is purely additive
-# (new roles, new DocPerms) and therefore safe to run unattended on every tenant
-# site. `_backfill_persona_roles` is the SUBTRACTIVE step — it strips System
-# Manager / Script Manager / Report Manager from existing persona users — and a
-# `bench migrate` on an unverified tenant must not silently change what its staff
-# can do. Run it per site, deliberately, after verifying the personas there:
+# WIRED INTO after_migrate as of 2026-07-29. It was deliberately manual before, on the
+# reasoning that a subtractive pass must not silently change what an unverified tenant's
+# staff can do. What changed: leaving it manual is how the 2026-07-29 finding survived —
+# sites that were never backfilled kept the wide bundles, and a cashier on one of them
+# read every payslip. A hole left half-closed is not closed.
+#
+# What makes running it unattended acceptable now:
+#   - the bundles are derived mechanically from PERSONA_MATRIX, not hand-picked, and
+#     guarded both ways by barakat.test_persona_matches_matrix;
+#   - every change is written to the Error Log, so what a migrate did to a site is
+#     recoverable after the fact rather than invisible.
+#
+# The public entry point below remains, for re-running it against one site by hand:
 #
 #   bench --site <site> execute barakat.setup.install.backfill_persona_roles
-#
-# New staff created after the migrate already get the allow-list bundle from the
-# Employee hook, so no site is left in a half-applied state by waiting.
 def backfill_persona_roles():
 	"""Public entry point for the subtractive backfill. See the note above."""
 	_backfill_persona_roles()
@@ -216,6 +223,52 @@ def _grant_barakat_role_perms():
 			frappe.clear_cache(doctype=doctype)
 
 
+def _revoke_stale_barakat_perms():
+	"""Clear permissions a `Barakat *` role no longer declares.
+
+	`_grant_barakat_role_perms` only ever sets a perm to 1 — `update_permission_property`
+	has no revoke path of its own. A role that NARROWS between releases therefore keeps
+	its old grants on every already-migrated site. That was harmless while roles only
+	widened; the 2026-07-29 least-privilege change narrows them, so without this pass the
+	whole change silently no-ops wherever the app has been migrated before.
+
+	Only touches roles this app owns (ALL_ROLE_PERMS). Native ERPNext roles and any
+	tenant-defined role are never modified.
+	"""
+	from frappe.permissions import update_permission_property
+
+	from barakat.permissions import ALL_ROLE_PERMS
+
+	all_perms = (
+		"read",
+		"write",
+		"create",
+		"delete",
+		"submit",
+		"cancel",
+		"select",
+		"report",
+		"export",
+		"share",
+		"print",
+		"email",
+	)
+
+	for role, doctype_perms in ALL_ROLE_PERMS.items():
+		rows = frappe.get_all(
+			"Custom DocPerm",
+			filters={"role": role, "permlevel": 0},
+			fields=["name", "parent"],
+		)
+		for row in rows:
+			wanted = set(doctype_perms.get(row.parent, ()))
+			for perm in all_perms:
+				if perm in wanted:
+					continue
+				update_permission_property(row.parent, role, 0, perm, 0, validate=False)
+			frappe.clear_cache(doctype=row.parent)
+
+
 def _grant_owner_payment_mode_perms():
 	"""Give `System Manager` full CRUD on Mode of Payment — the owner's delete gap.
 
@@ -263,11 +316,28 @@ def _backfill_persona_roles():
 		filters={"custom_role_preset": ("in", sorted(PERSONAS)), "user_id": ("is", "set")},
 		pluck="name",
 	)
+	changes = []
 	for name in employees:
 		try:
-			reassert_persona_roles(frappe.get_doc("Employee", name))
+			doc = frappe.get_doc("Employee", name)
+			email = (doc.user_id or "").strip()
+			before = set(frappe.get_all("Has Role", filters={"parent": email}, pluck="role"))
+			reassert_persona_roles(doc)
+			after = set(frappe.get_all("Has Role", filters={"parent": email}, pluck="role"))
+			if before != after:
+				changes.append(
+					f"{email} ({doc.custom_role_preset}): "
+					f"-{sorted(before - after)} +{sorted(after - before)}"
+				)
 		except Exception as e:
 			frappe.log_error(f"barakat backfill: {name} failed: {e}", "Persona roles")
+
+	# The only record of what an unattended migrate actually changed on this site.
+	if changes:
+		frappe.log_error(
+			f"barakat persona backfill on {frappe.local.site}:\n" + "\n".join(changes),
+			"Persona roles backfill",
+		)
 
 
 # Dedicated custom role that carries read+write on ONLY the two singles the admin
