@@ -1,10 +1,93 @@
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import cint, getdate
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 
 
+def _rule_names(raw):
+	"""The Pricing Rule names inside an item row's `pricing_rules` field.
+
+	The field is a Small Text holding a JSON array (`["PRLE-0001"]`), but be
+	liberal about what arrives: a bare string, an already-decoded list, or
+	malformed JSON must never raise here — a promotion audit trail is not worth
+	rejecting a sale that already happened over.
+	"""
+	if not raw:
+		return []
+	if isinstance(raw, (list, tuple)):
+		parsed = raw
+	else:
+		try:
+			parsed = json.loads(raw)
+		except (TypeError, ValueError):
+			return []
+		if isinstance(parsed, str):
+			parsed = [parsed]
+	if not isinstance(parsed, (list, tuple)):
+		return []
+	return [str(name).strip() for name in parsed if str(name).strip()]
+
+
 class BarakatPOSInvoice(POSInvoice):
+	def validate(self):
+		super().validate()
+		self.restore_pos_pricing_rule_details()
+
+	def restore_pos_pricing_rule_details(self):
+		"""Rebuild the header Pricing Rule Detail table from the item rows.
+
+		The POS applies Pricing Rules itself — it has to, because it sells
+		OFFLINE and must price with the rules that were live at the moment of
+		sale, not whenever the order happens to sync — so it sends the invoice
+		with `ignore_pricing_rule` set and the rates already final.
+
+		ERPNext's `set_missing_item_details` then runs `self.pricing_rules = []`
+		unconditionally before applying its own rules, and (with its engine off)
+		applies none. So the header table the POS sends is discarded on every
+		save, and every POS invoice ends up with an empty one — measured on the
+		test bench: 0 rows site-wide, while 11 item rows carried their rule fine.
+
+		The per-item `pricing_rules` field survives that pass, because ERPNext
+		only overwrites an item field when it has a replacement value and its
+		disabled engine produces none. So the header table is rebuilt from there.
+
+		This is what lets promotion reporting group by rule from the invoice
+		header, and it restores the link Frappe uses to refuse deleting a Pricing
+		Rule that submitted invoices still reference.
+		"""
+		# When ERPNext DID apply the rules itself (an invoice made in the desk),
+		# it has already filled this table with richer rows than we could
+		# reconstruct — margin_type, rate_or_discount. Never touch its work.
+		if self.get("pricing_rules"):
+			return
+
+		rows = []
+		seen = set()
+		for item in self.get("items") or []:
+			for name in _rule_names(item.get("pricing_rules")):
+				if name in seen:
+					continue
+				seen.add(name)
+				# `pricing_rule` is a Link, so a name that no longer exists fails
+				# link validation and would reject the whole invoice. An order
+				# created offline and pushed after someone deleted its rule must
+				# still be recorded — skip the row rather than lose the sale.
+				if not frappe.db.exists("Pricing Rule", name):
+					continue
+				rows.append(
+					{
+						"pricing_rule": name,
+						"item_code": item.get("item_code"),
+						"child_docname": item.get("name"),
+						"rule_applied": 1,
+					}
+				)
+
+		for row in rows:
+			self.append("pricing_rules", row)
+
 	def validate_change_amount(self):
 		"""A refund gives no change, so never derive one from the rounding gap.
 

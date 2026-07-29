@@ -18,7 +18,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from barakat.permissions import PERSONA_ROLE_BUNDLES
-from barakat.persona_matrix import MODULE_DOCTYPES, PERSONA_MATRIX, TILL_REQUIRED_READS
+from barakat.persona_matrix import (
+	MODULE_DOCTYPES,
+	PERSONA_MATRIX,
+	READ_ONLY_DOCTYPES,
+	TILL_REQUIRED_READS,
+)
 from barakat.scripts.perm_audit import effective_perms
 
 WRITE_PERMS = {"write", "create", "delete", "submit", "cancel"}
@@ -98,11 +103,24 @@ class PersonaMatchesMatrix(FrappeTestCase):
 						granted & {"read", "select"},
 						f"{persona} has {module}: {level} but no read on {doctype}",
 					)
-					if level == "write":
+					if level == "write" and doctype not in READ_ONLY_DOCTYPES:
 						self.assertTrue(
 							granted & WRITE_PERMS,
 							f"{persona} has {module}: write but no write on {doctype}",
 						)
+
+	def test_system_generated_doctypes_are_never_writable(self):
+		"""ERPNext writes these itself on submit. A direct write grant is a bug even
+		when the persona's module says write — see READ_ONLY_DOCTYPES."""
+		for persona in PERSONA_ROLE_BUNDLES:
+			effective = effective_perms(persona)
+			for doctype in READ_ONLY_DOCTYPES:
+				granted = effective.get(doctype, set())
+				self.assertEqual(
+					granted & WRITE_PERMS,
+					set(),
+					f"{persona} can write {doctype}, which ERPNext generates",
+				)
 
 	def test_cashier_cannot_reach_the_salary_or_staff_modules(self):
 		"""The doctypes behind `salary: none` / `staff: none` beyond the two that

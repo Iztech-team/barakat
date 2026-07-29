@@ -45,12 +45,14 @@ MODULE_KEYS = (
 # code-defined catalog rather than the Role table. They generate no role.
 MODULE_DOCTYPES = {
 	"dashboard": (),
+	# `POS Employee Branch` is deliberately absent: it is a child table (istable=1) and
+	# inherits its parent's permissions. Granting perms on one is a no-op that reads
+	# like coverage.
 	"pos": (
 		"POS Invoice",
 		"POS Opening Entry",
 		"POS Closing Entry",
 		"POS Profile",
-		"POS Employee Branch",
 		"Device",
 	),
 	"products": (
@@ -79,12 +81,15 @@ MODULE_DOCTYPES = {
 	"finance": ("GL Entry", "Journal Entry", "Payment Entry", "Fiscal Year"),
 	"reports": (),
 	"settings": ("Company", "Global Defaults", "System Settings", "POS Scale Settings"),
+	# Price List is OWNED here, not just picked: the AP's price-list routes are
+	# gated on `accounting` (view/mutate), so an Accountant must be able to WRITE one.
 	"accounting": (
 		"Account",
 		"Mode of Payment",
 		"Sales Taxes and Charges Template",
 		"Currency",
 		"Currency Exchange",
+		"Price List",
 	),
 	"customers": (
 		"Customer",
@@ -96,9 +101,11 @@ MODULE_DOCTYPES = {
 	),
 	"suppliers": ("Supplier", "Supplier Group", "Purchase Invoice"),
 	"reports.sales": ("Sales Invoice", "POS Invoice"),
-	"reports.products": ("Item", "Bin"),
-	"reports.inventory": ("Bin", "Warehouse", "Stock Ledger Entry"),
-	"reports.staff": ("Employee", "Attendance"),
+	# POS Invoice: the top-products report ranks by SALES, so it reads invoices.
+	"reports.products": ("Item", "Bin", "POS Invoice"),
+	"reports.inventory": ("Bin", "Warehouse", "Stock Ledger Entry", "Item"),
+	# POS Invoice: staff performance is sales-per-cashier.
+	"reports.staff": ("Employee", "Attendance", "POS Invoice"),
 	"reports.pos": ("POS Invoice", "POS Closing Entry", "Branch"),
 	"reports.salary": ("Salary Slip",),
 	# GL Entry is deliberately NOT here. The supplier statement is a GL query, but a
@@ -108,6 +115,88 @@ MODULE_DOCTYPES = {
 	# by barakat.overrides.gl_entry. The Accountant reads the full ledger legitimately
 	# through `finance: write`, which does carry GL Entry.
 	"reports.suppliers": ("Supplier",),
+}
+
+# Doctypes that are NEVER writable, whatever the matrix says about their module.
+#
+# ERPNext writes these itself, from submitted vouchers, with ignore_permissions. A
+# module-level write grant would hand a persona direct write on a ledger — found by the
+# removal diff on 2026-07-29, where `inventory: write` was about to give Branch
+# Supervisor, Inventory Keeper and Manager create+write+DELETE on Stock Ledger Entry,
+# and `finance: write` the same on GL Entry.
+#
+# Nothing legitimate needs it: a stock adjustment goes through Stock Entry / Stock
+# Reconciliation, and a payment through Journal Entry / Payment Entry. The ledger row
+# and the Bin update follow automatically.
+#
+#   GL Entry, Stock Ledger Entry -> the two ledgers, written on submit
+#   Bin                          -> cached stock levels, recomputed by the SLE
+#   Loyalty Point Entry          -> written by invoice submit / redemption
+#   System Settings              -> site-wide single. Already a deliberate decision:
+#                                   _grant_settings_manager_perms explicitly sets write
+#                                   back to 0 on it. Do not regress that here.
+READ_ONLY_DOCTYPES = frozenset(
+	{
+		"GL Entry",
+		"Stock Ledger Entry",
+		"Bin",
+		"Loyalty Point Entry",
+		"System Settings",
+	}
+)
+
+# Submittable doctypes (docstatus 0/1/2). A Writer role must carry submit+cancel on
+# these or the module is write-in-name-only: the record saves as a draft and the action
+# fails at the last step.
+#
+# Found by the removal diff on 2026-07-29, comparing against the roles a real site had:
+# without this, `pos: write` could not SUBMIT a POS Invoice (every sale breaks),
+# `finance: write` could not post a Journal Entry (cash movements and day-closing
+# break), `suppliers: write` could not pay a Purchase Invoice, and `salary: write`
+# could not submit a Salary Slip.
+SUBMITTABLE_DOCTYPES = frozenset(
+	{
+		"POS Invoice",
+		"POS Opening Entry",
+		"POS Closing Entry",
+		"Sales Invoice",
+		"Purchase Invoice",
+		"Journal Entry",
+		"Payment Entry",
+		"Stock Entry",
+		"Stock Reconciliation",
+		"Salary Slip",
+		"Salary Structure",
+		"Salary Structure Assignment",
+		"Attendance",
+		"Holiday List Assignment",
+	}
+)
+
+# Read-only doctypes a module's FORMS need even though the module does not own them.
+#
+# This mirrors the proxy's `viewAny` concept in middleware/permission.ts: the purchase
+# invoice form renders an item picker and a warehouse picker, so an Accountant
+# (`suppliers: write`, `products: none`) must be able to READ those lists or the form is
+# unusable. The proxy already widens its route gate for exactly this; without the same
+# widening in ERPNext the picker renders as a valid-looking EMPTY list with nothing on
+# screen to indicate failure.
+#
+# READ ONLY, never write. Each entry is a picker on a form the persona can open.
+SHARED_PICKER_READS = {
+	"suppliers": ("Item", "Warehouse", "Account", "Mode of Payment", "Company"),
+	"inventory": ("Item", "Warehouse", "Company", "UOM", "Branch"),
+	"products": ("Company", "Warehouse"),
+	"pos": ("Customer", "Branch", "Warehouse", "Mode of Payment", "Price List", "Company"),
+	"staff": ("Branch", "Company"),
+	"salary": ("Employee", "Account", "Company", "Mode of Payment"),
+	"attendance": ("Employee", "Branch"),
+	"finance": ("Account", "Company", "Employee", "Mode of Payment"),
+	"accounting": ("Company", "Price List", "Item Price", "Account"),
+	"customers": ("Branch", "Company", "Price List"),
+	"warehouses": ("Company", "Account"),
+	"branches": ("Company",),
+	"settings": ("Account", "Branch"),
 }
 
 # The desktop till pulls these under a Manager / Branch Supervisor device session.

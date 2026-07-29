@@ -1,0 +1,6263 @@
+{
+  "personas": {
+    "Accountant": {
+      "Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Account Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Account Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Accounting Dimension": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounting Dimension Filter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounting Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounts Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Address": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Advance Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Asset": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Activity": [
+        "delete",
+        "read",
+        "report"
+      ],
+      "Asset Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Depreciation Schedule": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Movement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Factor": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Value Adjustment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Auto Repeat": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Subtype": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Clearance": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Bank Guarantee": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Bank Transaction": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Bin": [
+        "read",
+        "report"
+      ],
+      "Branch": [
+        "export",
+        "read"
+      ],
+      "Brand": [
+        "read",
+        "report"
+      ],
+      "Budget": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Buying Settings": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "Chart of Accounts Importer": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Cheque Print Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Company": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contact": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contract": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Cost Center": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Cost Center Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Coupon Code": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Currency": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "Currency Exchange": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Currency Exchange Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Customer": [
+        "read",
+        "report"
+      ],
+      "Customer Group": [
+        "read",
+        "report"
+      ],
+      "Delivery Note": [
+        "read",
+        "report"
+      ],
+      "Dunning": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Dunning Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee": [
+        "export",
+        "read"
+      ],
+      "Exchange Rate Revaluation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Finance Book": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Financial Report Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Fiscal Year": [
+        "read"
+      ],
+      "GL Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Incoterm": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item": [
+        "read"
+      ],
+      "Item Group": [
+        "read",
+        "report"
+      ],
+      "Item Price": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Tax Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Journal Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Journal Entry Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Ledger Health Monitor": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Ledger Merge": [
+        "create",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Lower Deduction Certificate": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Loyalty Point Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Loyalty Program": [
+        "export",
+        "read"
+      ],
+      "Material Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Mode of Payment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Monthly Distribution": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "POS Closing Entry": [
+        "export",
+        "read"
+      ],
+      "POS Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Opening Entry": [
+        "export",
+        "read"
+      ],
+      "POS Profile": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "POS Settings": [
+        "read",
+        "write"
+      ],
+      "Party Link": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Party Type": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Gateway Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Reconciliation": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Payment Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Term": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Terms Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Period Closing Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Price List": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Pricing Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Deferred Accounting": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation Log": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Period Closing Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Process Statement Of Accounts": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Promotional Scheme": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Purchase Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Repost Item Valuation": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Repost Payment Ledger": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Request for Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Component": [
+        "export",
+        "read"
+      ],
+      "Salary Slip": [
+        "export",
+        "read"
+      ],
+      "Salary Structure Assignment": [
+        "export",
+        "read"
+      ],
+      "Sales Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Order": [
+        "read"
+      ],
+      "Sales Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Serial and Batch Bundle": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Share Transfer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Share Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shareholder": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shipping Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "South Africa VAT Settings": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Stock Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Reservation Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Plan": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Supplier": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Tax Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Tax Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Tax Withholding Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Terms and Conditions": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Territory": [
+        "read",
+        "report"
+      ],
+      "Timesheet": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Unreconcile Payment": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Warehouse": [
+        "read",
+        "report"
+      ],
+      "Warehouse Type": [
+        "export",
+        "read",
+        "report"
+      ]
+    },
+    "Branch Supervisor": {
+      "Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Account Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Account Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Accounting Dimension Filter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounting Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounts Settings": [
+        "read"
+      ],
+      "Address": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Advance Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Appointment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appointment Booking Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Asset": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Activity": [
+        "delete",
+        "read",
+        "report"
+      ],
+      "Asset Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Depreciation Schedule": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Movement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Factor": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Value Adjustment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Attendance": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "submit",
+        "write"
+      ],
+      "Auto Repeat": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Subtype": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Clearance": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Bank Guarantee": [
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Bank Transaction": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Batch": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bin": [
+        "read",
+        "report"
+      ],
+      "Branch": [
+        "export",
+        "read"
+      ],
+      "Brand": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Buying Settings": [
+        "read"
+      ],
+      "CRM Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Campaign": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Cheque Print Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Company": [
+        "read"
+      ],
+      "Competitor": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contact": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contract": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Cost Center": [
+        "read",
+        "report"
+      ],
+      "Cost Center Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Coupon Code": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Currency": [
+        "read"
+      ],
+      "Currency Exchange": [
+        "read",
+        "report"
+      ],
+      "Currency Exchange Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Customer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Customer Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Customs Tariff Number": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Delivery Note": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Delivery Schedule Item": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Delivery Trip": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Designation": [
+        "read"
+      ],
+      "Device": [
+        "export",
+        "read"
+      ],
+      "Dunning": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee": [
+        "export",
+        "read"
+      ],
+      "Exchange Rate Revaluation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Finance Book": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Financial Report Template": [
+        "read"
+      ],
+      "Fiscal Year": [
+        "read"
+      ],
+      "GL Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Global Defaults": [
+        "export",
+        "read"
+      ],
+      "Incoterm": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Industry Type": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Installation Note": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Inventory Dimension": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Alternative": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Attribute": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Price": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Tax Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Item Variant Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Journal Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Journal Entry Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Landed Cost Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Lead": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Ledger Health Monitor": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Lower Deduction Certificate": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Loyalty Point Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Loyalty Program": [
+        "export",
+        "read"
+      ],
+      "Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Market Segment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Master Production Schedule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Material Request": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Mode of Payment": [
+        "read",
+        "report"
+      ],
+      "Opportunity": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Opportunity Lost Reason": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Opportunity Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "POS Closing Entry": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Invoice": [
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Invoice Merge Log": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Opening Entry": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Profile": [
+        "export",
+        "read",
+        "report"
+      ],
+      "POS Scale Settings": [
+        "export",
+        "read"
+      ],
+      "POS Settings": [
+        "read",
+        "write"
+      ],
+      "Packing Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Party Link": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Party Type": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Reconciliation": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Payment Request": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Term": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Terms Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Pick List": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Price List": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Pricing Rule": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Deferred Accounting": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation Log": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Statement Of Accounts": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Product Bundle": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Promotional Scheme": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Prospect": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Purchase Invoice": [
+        "cancel",
+        "create",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Taxes and Charges Template": [
+        "read"
+      ],
+      "Putaway Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quick Stock Balance": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Quotation Lost Reason": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Repost Item Valuation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Repost Payment Ledger": [
+        "create",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Request for Quotation": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Forecast": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Invoice": [
+        "create",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Partner": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Person": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Stage": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Selling Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Serial No": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Serial and Batch Bundle": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Share Transfer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Share Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shareholder": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shipment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shipping Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "South Africa VAT Settings": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Stock Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Closing Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Stock Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Reservation Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Subcontracting Inward Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Plan": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Supplier": [
+        "read",
+        "report"
+      ],
+      "Supplier Group": [
+        "read",
+        "report"
+      ],
+      "Supplier Quotation": [
+        "create",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "System Settings": [
+        "export",
+        "read"
+      ],
+      "Tax Category": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Tax Withholding Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Terms and Conditions": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Territory": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Timesheet": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "UOM": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "UOM Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Unreconcile Payment": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Warehouse": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Warehouse Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Work Order": [
+        "read",
+        "report"
+      ]
+    },
+    "Cashier": {
+      "Branch": [
+        "export",
+        "read"
+      ],
+      "Contact": [
+        "export",
+        "read"
+      ],
+      "Customer": [
+        "export",
+        "read"
+      ],
+      "Customer Group": [
+        "export",
+        "read"
+      ],
+      "Item": [
+        "export",
+        "read"
+      ],
+      "Item Group": [
+        "export",
+        "read"
+      ],
+      "Item Price": [
+        "export",
+        "read"
+      ],
+      "Loyalty Point Entry": [
+        "export",
+        "read"
+      ],
+      "Loyalty Program": [
+        "export",
+        "read"
+      ],
+      "Mode of Payment": [
+        "export",
+        "read"
+      ],
+      "POS Closing Entry": [
+        "export",
+        "read"
+      ],
+      "POS Invoice": [
+        "export",
+        "read"
+      ],
+      "POS Opening Entry": [
+        "export",
+        "read"
+      ],
+      "POS Profile": [
+        "export",
+        "read"
+      ],
+      "Pricing Rule": [
+        "export",
+        "read"
+      ],
+      "Product Bundle": [
+        "export",
+        "read"
+      ],
+      "Sales Invoice": [
+        "export",
+        "read"
+      ],
+      "UOM": [
+        "export",
+        "read"
+      ]
+    },
+    "HR": {
+      "Account": [
+        "select"
+      ],
+      "Activity Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Additional Salary": [
+        "create",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Appointment Booking Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Appointment Letter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appointment Letter Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appraisal": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Appraisal Cycle": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appraisal Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Arrear": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Attendance": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Attendance Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Branch": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bulk Salary Structure Assignment": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Company": [
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Compensatory Leave Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Cost Center": [
+        "select"
+      ],
+      "Currency": [
+        "export",
+        "read"
+      ],
+      "Daily Work Summary": [
+        "delete",
+        "read",
+        "report"
+      ],
+      "Daily Work Summary Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Department": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Designation": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Email Account": [
+        "export",
+        "read"
+      ],
+      "Employee": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Attendance Tool": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Employee Benefit Application": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Benefit Claim": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Benefit Ledger": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Employee Checkin": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Feedback Criteria": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Grade": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Grievance": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Employee Group": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Health Insurance": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Incentive": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Onboarding": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Onboarding Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Other Income": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Performance Feedback": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Promotion": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Referral": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Separation": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Separation Template": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Employee Skill Map": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Tax Exemption Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Tax Exemption Declaration": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Tax Exemption Proof Submission": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Tax Exemption Sub Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Transfer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employment Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Exit Interview": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Expense Claim": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Expense Claim Type": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Full and Final Statement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Goal": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Gratuity": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Gratuity Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Grievance Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "HR Settings": [
+        "read",
+        "write"
+      ],
+      "Holiday List": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Holiday List Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Income Tax Slab": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Interest": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Interview": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Interview Feedback": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Interview Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Issue": [
+        "select"
+      ],
+      "Job Applicant": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Applicant Source": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Offer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Job Offer Term Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Opening": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Opening Template": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Job Requisition": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "KRA": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "select",
+        "write"
+      ],
+      "Leave Adjustment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Application": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Block List": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Leave Control Panel": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Leave Encashment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Ledger Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Leave Policy": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Policy Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Type": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Mode of Payment": [
+        "export",
+        "read",
+        "select"
+      ],
+      "Offer Term": [
+        "create",
+        "read",
+        "select",
+        "write"
+      ],
+      "Overtime Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Overtime Type": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "write"
+      ],
+      "POS Invoice": [
+        "export",
+        "read"
+      ],
+      "Payroll Correction": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Payroll Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payroll Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payroll Settings": [
+        "read",
+        "write"
+      ],
+      "Project": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "write"
+      ],
+      "Retention Bonus": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Role": [
+        "export",
+        "read"
+      ],
+      "Salary Component": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Salary Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Structure": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Structure Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Withholding": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Invoice": [
+        "export",
+        "read"
+      ],
+      "Shift Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Assignment Tool": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Shift Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shift Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Schedule": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Schedule Assignment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shift Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Skill": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Staffing Plan": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Task": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "select",
+        "write"
+      ],
+      "Task Type": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Terms and Conditions": [
+        "create",
+        "read",
+        "select",
+        "write"
+      ],
+      "Timesheet": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Event": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Feedback": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Program": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Training Result": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Upload Attendance": [
+        "create",
+        "read",
+        "write"
+      ]
+    },
+    "Inventory Keeper": {
+      "Account": [
+        "read",
+        "report"
+      ],
+      "Accounts Settings": [
+        "read"
+      ],
+      "Address": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Movement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Batch": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bin": [
+        "read",
+        "report"
+      ],
+      "Branch": [
+        "export",
+        "read"
+      ],
+      "Brand": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Buying Settings": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "Company": [
+        "read"
+      ],
+      "Contact": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contract": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Cost Center": [
+        "read"
+      ],
+      "Currency": [
+        "read"
+      ],
+      "Currency Exchange": [
+        "read",
+        "report"
+      ],
+      "Customer": [
+        "read",
+        "report"
+      ],
+      "Customs Tariff Number": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Delivery Note": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Delivery Trip": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Fiscal Year": [
+        "read"
+      ],
+      "GL Entry": [
+        "export",
+        "read"
+      ],
+      "Incoterm": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Inventory Dimension": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Alternative": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Attribute": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Price": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Variant Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Landed Cost Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Master Production Schedule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Material Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Mode of Payment": [
+        "export",
+        "read"
+      ],
+      "POS Invoice": [
+        "export",
+        "read"
+      ],
+      "Packing Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Pick List": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Price List": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Pricing Rule": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Product Bundle": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Purchase Invoice": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Putaway Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quick Stock Balance": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Repost Item Valuation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Request for Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Invoice": [
+        "export",
+        "read"
+      ],
+      "Sales Order": [
+        "read",
+        "report"
+      ],
+      "Serial No": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Serial and Batch Bundle": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shipment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Closing Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Stock Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Reservation Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Subcontracting Inward Order": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Subcontracting Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Supplier": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Terms and Conditions": [
+        "read"
+      ],
+      "Territory": [
+        "read"
+      ],
+      "UOM": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "UOM Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Warehouse": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Warehouse Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Work Order": [
+        "read",
+        "report"
+      ]
+    },
+    "Manager": {
+      "Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Account Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Account Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Accounting Dimension": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounting Dimension Filter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounting Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Accounts Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Activity Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Additional Salary": [
+        "create",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Address": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Advance Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Appointment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appointment Booking Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Appointment Letter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appointment Letter Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appraisal": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Appraisal Cycle": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Appraisal Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Arrear": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Activity": [
+        "delete",
+        "read",
+        "report"
+      ],
+      "Asset Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Depreciation Schedule": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Movement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Asset Shift Factor": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Asset Value Adjustment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Attendance": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Attendance Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Auto Repeat": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Subtype": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Account Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bank Clearance": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Bank Guarantee": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Bank Transaction": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Batch": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Bin": [
+        "read",
+        "report"
+      ],
+      "Branch": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Brand": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Budget": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Bulk Salary Structure Assignment": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Buying Settings": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "CRM Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Campaign": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Chart of Accounts Importer": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Cheque Print Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Company": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Compensatory Leave Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Competitor": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contact": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Contract": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Contract Template": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Cost Center": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Cost Center Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Coupon Code": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Currency": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "Currency Exchange": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Currency Exchange Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Customer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Customer Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Customs Tariff Number": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Daily Work Summary": [
+        "delete",
+        "read",
+        "report"
+      ],
+      "Daily Work Summary Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Delivery Note": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Delivery Schedule Item": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Delivery Trip": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Department": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Designation": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Device": [
+        "export",
+        "read"
+      ],
+      "Dunning": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Dunning Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Email Account": [
+        "export",
+        "read"
+      ],
+      "Employee": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Attendance Tool": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Employee Benefit Application": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Benefit Claim": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Benefit Ledger": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Employee Checkin": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Feedback Criteria": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Grade": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Grievance": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Employee Group": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Health Insurance": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Incentive": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Onboarding": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Onboarding Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Other Income": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Performance Feedback": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Promotion": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Referral": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Separation": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Separation Template": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Employee Skill Map": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Tax Exemption Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Tax Exemption Declaration": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Tax Exemption Proof Submission": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employee Tax Exemption Sub Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Employee Transfer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Employment Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Exchange Rate Revaluation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Exit Interview": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Expense Claim": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Expense Claim Type": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Finance Book": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Financial Report Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Fiscal Year": [
+        "read"
+      ],
+      "Full and Final Statement": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "GL Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Global Defaults": [
+        "export",
+        "read"
+      ],
+      "Goal": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Gratuity": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Gratuity Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Grievance Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "HR Settings": [
+        "read",
+        "write"
+      ],
+      "Holiday List": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Holiday List Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Income Tax Slab": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Incoterm": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Industry Type": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Installation Note": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Interest": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Interview": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Interview Feedback": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Interview Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Inventory Dimension": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Issue": [
+        "select"
+      ],
+      "Item": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Alternative": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Attribute": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Price": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Tax Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Item Variant Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Job Applicant": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Applicant Source": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Offer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Job Offer Term Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Opening": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Job Opening Template": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Job Requisition": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Journal Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Journal Entry Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "KRA": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "select",
+        "write"
+      ],
+      "Landed Cost Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Lead": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Leave Adjustment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Allocation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Application": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Block List": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Leave Control Panel": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Leave Encashment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Ledger Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Leave Policy": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Policy Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Leave Type": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Ledger Health Monitor": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Ledger Merge": [
+        "create",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Lower Deduction Certificate": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Loyalty Point Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Loyalty Program": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "write"
+      ],
+      "Manufacturer": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Market Segment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Master Production Schedule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Material Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Mode of Payment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Monthly Distribution": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Offer Term": [
+        "create",
+        "read",
+        "select",
+        "write"
+      ],
+      "Opportunity": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Opportunity Lost Reason": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Opportunity Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Overtime Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Overtime Type": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "write"
+      ],
+      "POS Closing Entry": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Invoice Merge Log": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Opening Entry": [
+        "cancel",
+        "create",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "POS Profile": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "POS Scale Settings": [
+        "export",
+        "read"
+      ],
+      "POS Settings": [
+        "read",
+        "write"
+      ],
+      "Packing Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Party Link": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Party Type": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Gateway Account": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Payment Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Reconciliation": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Payment Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payment Term": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payment Terms Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payroll Correction": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Payroll Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Payroll Period": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Payroll Settings": [
+        "read",
+        "write"
+      ],
+      "Period Closing Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Pick List": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Price List": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Pricing Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Deferred Accounting": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "submit",
+        "write"
+      ],
+      "Process Payment Reconciliation Log": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Period Closing Voucher": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Process Statement Of Accounts": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Process Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Product Bundle": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Project": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "write"
+      ],
+      "Promotional Scheme": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Prospect": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Purchase Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Purchase Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Putaway Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Parameter Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quality Inspection Template": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Quick Stock Balance": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Quotation Lost Reason": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Repost Item Valuation": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Repost Payment Ledger": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Request for Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Retention Bonus": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Role": [
+        "export",
+        "read"
+      ],
+      "Salary Component": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Salary Slip": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Structure": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Structure Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Salary Withholding": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Forecast": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Invoice": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Sales Partner": [
+        "create",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Person": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Stage": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Sales Taxes and Charges Template": [
+        "create",
+        "delete",
+        "read",
+        "report",
+        "write"
+      ],
+      "Selling Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Serial No": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Serial and Batch Bundle": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Share Transfer": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Share Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shareholder": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shift Assignment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Assignment Tool": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Shift Location": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shift Request": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Schedule": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shift Schedule Assignment": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shift Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Shipment": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Shipping Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Skill": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "South Africa VAT Settings": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Staffing Plan": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Closing Balance": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Closing Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Entry Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Stock Ledger Entry": [
+        "export",
+        "read",
+        "report"
+      ],
+      "Stock Reconciliation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Reservation Entry": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Stock Settings": [
+        "create",
+        "read",
+        "write"
+      ],
+      "Subcontracting Inward Order": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Order": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subcontracting Receipt": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Subscription": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Plan": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Subscription Settings": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Supplier": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Group": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Supplier Quotation": [
+        "cancel",
+        "create",
+        "delete",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "System Settings": [
+        "export",
+        "read"
+      ],
+      "Task": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "select",
+        "write"
+      ],
+      "Task Type": [
+        "create",
+        "delete",
+        "read",
+        "write"
+      ],
+      "Tax Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Tax Rule": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Tax Withholding Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Terms and Conditions": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "select",
+        "write"
+      ],
+      "Territory": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Timesheet": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Event": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Feedback": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "Training Program": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Training Result": [
+        "cancel",
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "submit",
+        "write"
+      ],
+      "UOM": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "UOM Category": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Unreconcile Payment": [
+        "create",
+        "delete",
+        "read",
+        "select",
+        "submit",
+        "write"
+      ],
+      "Upload Attendance": [
+        "create",
+        "read",
+        "write"
+      ],
+      "User": [
+        "create",
+        "export",
+        "read",
+        "write"
+      ],
+      "Warehouse": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Warehouse Type": [
+        "create",
+        "delete",
+        "export",
+        "read",
+        "report",
+        "write"
+      ],
+      "Work Order": [
+        "read",
+        "report"
+      ]
+    }
+  },
+  "site": "qa-test.test.barakat.iztech.net"
+}

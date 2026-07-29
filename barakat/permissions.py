@@ -49,6 +49,9 @@ from barakat.persona_matrix import (
 	MODULE_DOCTYPES,
 	MODULE_KEYS,
 	PERSONA_MATRIX,
+	READ_ONLY_DOCTYPES,
+	SHARED_PICKER_READS,
+	SUBMITTABLE_DOCTYPES,
 	TILL_REQUIRED_READS,
 )
 
@@ -368,13 +371,40 @@ def role_name_for(module, level):
 	return f"Barakat {words} {'Writer' if level == 'write' else 'Reader'}"
 
 
+def perms_for(doctype, level):
+	"""The perms a generated role grants on one doctype.
+
+	READ_ONLY_DOCTYPES are clamped to read even inside a Writer role — ERPNext writes
+	those itself from submitted vouchers, and a module-level write grant would hand a
+	persona direct write on a ledger.
+
+	SUBMITTABLE_DOCTYPES additionally get submit+cancel, without which `write` means
+	"can save a draft and nothing more".
+	"""
+	if level != "write" or doctype in READ_ONLY_DOCTYPES:
+		return READER_PERMS
+	if doctype in SUBMITTABLE_DOCTYPES:
+		return WRITER_PERMS + ("submit", "cancel")
+	return WRITER_PERMS
+
+
 def _build_module_role_perms():
+	"""One Reader and one Writer role per module that owns doctypes.
+
+	Both levels also carry the module's SHARED_PICKER_READS as read-only, so a form's
+	pickers populate for a persona that does not own the picked doctype.
+	"""
 	out = {}
 	for module, doctypes in MODULE_DOCTYPES.items():
 		if not doctypes:
 			continue
-		for level, perms in (("read", READER_PERMS), ("write", WRITER_PERMS)):
-			out[role_name_for(module, level)] = {dt: perms for dt in doctypes}
+		shared = tuple(d for d in SHARED_PICKER_READS.get(module, ()) if d not in doctypes)
+		for level in ("read", "write"):
+			perms = {dt: perms_for(dt, level) for dt in doctypes}
+			for dt in shared:
+				# Never upgrade a doctype the module already owns, and never write.
+				perms.setdefault(dt, READER_PERMS)
+			out[role_name_for(module, level)] = perms
 	return out
 
 
