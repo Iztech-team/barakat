@@ -149,10 +149,13 @@ class TestStructure(unittest.TestCase):
 		):
 			self.assertIn(required, names)
 
-	def test_vat_is_included(self):
-		# ERPNext only ships VAT in the Israel country chart, which a custom
-		# chart bypasses — without it a shop here has nowhere to post VAT.
-		self.assertIn("VAT", english_names())
+	def test_vat_is_left_to_erpnext(self):
+		"""ERPNext's country tax setup creates VAT itself, a few seconds after
+		the chart, and links THAT account to the Sales Taxes and Charges
+		Template. Shipping our own produced two VAT accounts under the same
+		group, only one of them wired to anything.
+		"""
+		self.assertNotIn("VAT", english_names())
 
 
 if __name__ == "__main__":

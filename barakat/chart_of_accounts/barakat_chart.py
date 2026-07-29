@@ -68,9 +68,8 @@ SUPPORTED_LANGUAGES = ("ar", "he", "en")
 # standard_chart_of_accounts.py, with the `_()` wrappers dropped — we do our own
 # translation and must not have Frappe's locale change the keys underneath us.
 #
-# One deliberate addition: VAT, under Duties and Taxes. ERPNext only ships it in
-# the Israel country chart, and supplying a custom chart bypasses country charts
-# entirely — so without this line a shop here would have nowhere to post VAT.
+# Note there is no VAT account here on purpose — ERPNext's country tax setup
+# creates one itself, after the chart. See the Duties and Taxes node.
 STRUCTURE = {
     "Application of Funds (Assets)": {
         "Current Assets": {
@@ -235,10 +234,13 @@ STRUCTURE = {
                     "account_category": "Trade Payables",
                 },
             },
+            # Deliberately has no VAT child. ERPNext's country tax setup creates
+            # its own `VAT` under this group a few seconds after the chart, and
+            # wires THAT one into the Sales Taxes and Charges Template. Adding
+            # ours here produced two VAT accounts side by side, only one of them
+            # connected to anything (seen on the test bench 2026-07-29).
             "Duties and Taxes": {
-                # See the module docstring: ERPNext only ships VAT in the Israel
-                # country chart, which a custom chart bypasses.
-                "VAT": {"account_type": "Tax", "account_category": "Current Tax Liabilities"},
+                "is_group": 1,
                 "account_type": "Tax",
                 "account_category": "Current Tax Liabilities",
             },

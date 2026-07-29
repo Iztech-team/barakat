@@ -94,7 +94,6 @@ NAMES = {
     "Stock Received But Not Billed": {"ar": "بضاعة مستلمة غير مفوترة", "he": "מלאי שהתקבל וטרם חויב"},
     "Asset Received But Not Billed": {"ar": "أصول مستلمة غير مفوترة", "he": "נכס שהתקבל וטרם חויב"},
     "Duties and Taxes": {"ar": "الرسوم والضرائب", "he": "מסים ואגרות"},
-    "VAT": {"ar": "ضريبة القيمة المضافة", "he": "מע״מ"},
     "Short-term Provisions": {"ar": "مخصصات قصيرة الأجل", "he": "הפרשות לזמן קצר"},
     "Loans (Liabilities)": {"ar": "القروض", "he": "הלוואות"},
     "Secured Loans": {"ar": "قروض مضمونة", "he": "הלוואות מובטחות"},
