@@ -534,6 +534,54 @@ def report_allowed_roles(report, native_roles=()):
 	return tuple(out)
 
 
+# ── User visibility: yourself, or your own shop's staff ───────────────────────
+# `read` on `User` comes from Frappe's own baseline for a desk session, not from any
+# Barakat role, so nothing in the persona matrix ever covered it — the same blind spot
+# that hid `Cost Center`: a doctype in NO module is invisible to the matrix guards.
+#
+# Measured on bom.iztech.net (prod, 2026-07-30) — and this is a cross-SHOP leak, not
+# just a directory listing:
+#   * a Cashier saw 26 of the site's 28 users, every colleague's name and email;
+#   * the site hosts EIGHT companies, and `bom3manager@gmail.com` — Manager of BOM3,
+#     which has one employee — saw 21 users belonging to BOM, a different shop.
+#
+# Three tiers, because "who may see a person" is not one question:
+#   self         — no staff access at all (Cashier, Accountant, Inventory Keeper).
+#                  They never need a colleague list; the documents they read carry the
+#                  names they display (a payslip has employee_name).
+#   company      — holds staff/attendance/payroll access (Manager, HR, Branch
+#                  Supervisor). Scoped to the companies their OWN Employee records sit
+#                  in, so one shop's manager cannot enumerate another shop's staff.
+#   unrestricted — owner / System Manager / Administrator. Standing down for them is
+#                  not an optimisation: a query-condition hook applies to EVERY caller,
+#                  and narrowing the owner would lock them out of their own site.
+USER_SCOPE_UNRESTRICTED_ROLES = frozenset({"System Manager", "Administrator"})
+
+USER_SCOPE_COMPANY_ROLES = frozenset(
+	{
+		"Barakat Staff Reader",
+		"Barakat Staff Writer",
+		"Barakat Staff Manager",
+		"Barakat Reports Staff Reader",
+		"Barakat Attendance Manager",
+		"Barakat Salary Viewer",
+	}
+)
+
+
+def user_scope_for(caller_roles):
+	"""'unrestricted' | 'company' | 'self' — which slice of `User` this caller may see.
+
+	Pure decision, no Frappe, so it is unit-testable off a bench.
+	"""
+	roles = set(caller_roles)
+	if roles & USER_SCOPE_UNRESTRICTED_ROLES:
+		return "unrestricted"
+	if roles & USER_SCOPE_COMPANY_ROLES:
+		return "company"
+	return "self"
+
+
 # ── GL Entry row scoping for the supplier-ledger role ────────────────────────
 # `Barakat Supplier Ledger Reader` is a DocPerm grant, and a DocPerm is all-or-
 # nothing per doctype: it would hand a stock keeper every sales, payroll and

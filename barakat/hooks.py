@@ -283,12 +283,18 @@ permission_query_conditions = {
 	# controller hook covers opening one document directly.
 	"Employee": "barakat.overrides.self_service.employee_query_conditions",
 	"Salary Slip": "barakat.overrides.self_service.salary_slip_query_conditions",
+	# `User` read comes from Frappe's desk baseline, not from any Barakat role, so no
+	# persona rule ever covered it — a Cashier listed every colleague, and a Manager of
+	# one shop listed another shop's staff on a multi-company site. See
+	# barakat.overrides.user_scope.
+	"User": "barakat.overrides.user_scope.user_query_conditions",
 }
 
 has_permission = {
 	"GL Entry": "barakat.overrides.gl_entry.has_permission",
 	"Employee": "barakat.overrides.self_service.employee_has_permission",
 	"Salary Slip": "barakat.overrides.self_service.salary_slip_has_permission",
+	"User": "barakat.overrides.user_scope.user_has_permission",
 }
 
 # Document Events
