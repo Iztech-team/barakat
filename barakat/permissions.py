@@ -307,6 +307,18 @@ UNSCOPED_BY_DOCTYPE = {
 			"Barakat Reports Staff Reader",
 			"Barakat Attendance Manager",
 			"Barakat Salary Viewer",
+			# NOT `Barakat Salary Reader`. The asymmetry with the Salary Slip list
+			# below is deliberate and is pinned by
+			# test_accountant_reads_salary_unscoped_but_staff_scoped: a payroll reader
+			# sees the PAY, not the personnel file. The slip carries `employee_name`,
+			# so the salary report renders without Employee read.
+			#
+			# Measured on osa 2026-07-30 and reported as a leak: the Accountant sees
+			# 8 salary slips but only 1 employee (their own). That reads as incoherent
+			# from the outside and is worth restating — it is the intended split, and
+			# the QA brief line "no role except Manager and HR sees other people's
+			# payslips" is what disagrees with the matrix, which grants Accountant
+			# both `salary: read` and `reports.salary: read`.
 			"System Manager",
 			"Administrator",
 		}
