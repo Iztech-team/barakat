@@ -345,10 +345,18 @@ has_permission = {
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "barakat.event.get_events"
-# }
+
+# Frappe's tree endpoint applies NO permissions — it queries the table directly, so
+# every tree view returned every row while the list view of the same doctype filtered
+# correctly. On bom.iztech.net a Cashier of BOM2 saw six other shops' item groups in
+# the tree and none of them in the list. One function serves every tree doctype
+# (Item Group, Customer Group, Territory, Account, Cost Center, ...), so the fix
+# belongs here. `get_all_nodes` resolves its tree method through
+# `frappe.override_whitelisted_method`, so this covers the whole-tree load too.
+override_whitelisted_methods = {
+	"frappe.desk.treeview.get_children": "barakat.overrides.treeview.get_children",
+}
+
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
