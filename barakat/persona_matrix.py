@@ -284,7 +284,14 @@ PERSONA_MATRIX = {
 	},
 	"Cashier": {
 		"dashboard": "none",
-		"pos": "read",
+		# 'none' as of 2026-07-30 (was 'read'). A work period is a till's takings and
+		# a cash-drawer reconciliation — it belongs to whoever closes the shift, not to
+		# the cashier. Dropping it also drops `Barakat POS Reader`, so a Cashier can no
+		# longer read POS Invoice / Opening / Closing Entry through /app or
+		# /api/resource either. Selling is unaffected: the desktop POS runs under a
+		# device session (Manager / Branch Supervisor) with the cashier identified by
+		# PIN, so no till operation authenticates as the Cashier's own user.
+		"pos": "none",
 		"products": "read",
 		"inventory": "none",
 		"warehouses": "none",
