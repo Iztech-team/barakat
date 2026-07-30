@@ -218,10 +218,23 @@ def _ensure_persona_desk_access():
 	desk_access=0, and its staff already flipped to Website User. Both need repairing
 	in place. Idempotent; safe on every migrate.
 	"""
-	from barakat.permissions import MODULE_ROLE_PERMS, PERSONAS
+	# ALL_ROLE_PERMS, not just the generated MODULE_ROLE_PERMS: `desk_access` is a
+	# LOGIN switch, not a permission (proven 2026-07-29 — the DocPerms are what
+	# contain a persona), and `set_system_user` needs only ONE held role to carry it.
+	# Repairing every role this app owns removes a whole class of fragility instead of
+	# relying on each persona happening to hold a generated role.
+	#
+	# Measured on osa 2026-07-30: 42 of 58 Barakat roles had it, and the 16 without
+	# were all hand-written ones (POS Operator, Self Service, Cashier Reader, …). No
+	# persona was locked out — the Cashier's 5-role bundle still held 3 with desk
+	# access — but a future persona whose bundle happened to be hand-written roles
+	# only would have been, and the failure mode is a login that reports "wrong
+	# password". `test_every_persona_can_actually_log_in` guards the invariant; this
+	# stops it being narrowly true by luck.
+	from barakat.permissions import ALL_ROLE_PERMS, PERSONAS
 
 	changed = False
-	for role in MODULE_ROLE_PERMS:
+	for role in ALL_ROLE_PERMS:
 		if frappe.db.exists("Role", role) and not frappe.db.get_value("Role", role, "desk_access"):
 			frappe.db.set_value("Role", role, "desk_access", 1)
 			changed = True
