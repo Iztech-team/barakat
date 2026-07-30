@@ -18,7 +18,11 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from barakat.overrides.staff_roles import persona_role_bundle
-from barakat.permissions import PERSONA_ROLE_BUNDLES
+from barakat.permissions import (
+	NATIVE_REPORT_MODULES,
+	PERSONA_ROLE_BUNDLES,
+	report_allowed_roles,
+)
 from barakat.persona_matrix import (
 	MODULE_DOCTYPES,
 	PERSONA_MATRIX,
@@ -180,6 +184,68 @@ class PersonaMatchesMatrix(FrappeTestCase):
 			self.assertTrue(
 				effective.get(doctype, set()) & {"read", "select"},
 				f"Manager cannot read {doctype}; the setup walkthrough will stall on it",
+			)
+
+	def test_native_reports_pass_both_query_report_gates(self):
+		"""Every persona whose matrix grants the module must be able to RUN the report.
+
+		`frappe.desk.query_report.run` gates twice and independently, and a DocPerm only
+		answers one of them:
+		  gate 1  the report's own role allow-list (`Report.is_permitted`), which a
+		          `Custom Role` REPLACES rather than extends;
+		  gate 2  `has_permission(ref_doctype, "report")`.
+
+		Measured on the osa test site 2026-07-30: the Manager failed BOTH for Trial
+		Balance while its matrix row said `finance: write`, and the AP rendered the 403
+		as "No account movements in the selected period" — a Manager reading that
+		concludes the books are empty, not that they were denied.
+		"""
+		for report, modules in NATIVE_REPORT_MODULES.items():
+			if not frappe.db.exists("Report", report):
+				continue
+			ref_doctype = frappe.db.get_value("Report", report, "ref_doctype")
+
+			# Resolved exactly as Report.is_permitted does: a Custom Role wins outright.
+			custom = frappe.db.get_value("Custom Role", {"report": report}, "name")
+			allowed = set(
+				frappe.get_all(
+					"Has Role",
+					filters={"parent": custom or report},
+					pluck="role",
+				)
+			)
+
+			for persona, row in PERSONA_MATRIX.items():
+				if all(row[module] == "none" for module in modules):
+					continue
+				bundle = set(persona_role_bundle(persona))
+				self.assertTrue(
+					bundle & allowed,
+					f"{persona} may see {report} per the matrix but holds none of its "
+					f"allowed roles {sorted(allowed)} -- gate 1 will 403",
+				)
+				self.assertIn(
+					"report",
+					effective_perms(persona).get(ref_doctype, set()),
+					f"{persona} has no `report` permission on {ref_doctype} -- gate 2 "
+					f"will 403 on {report}",
+				)
+
+	def test_a_custom_role_never_drops_the_reports_native_roles(self):
+		"""`is_permitted` REPLACES the allow-list when a Custom Role exists.
+
+		So every role ERPNext shipped on the report has to be carried across, or the
+		accounts staff (and any owner relying on those roles) silently lose the report
+		the moment we grant it to a persona.
+		"""
+		for report in NATIVE_REPORT_MODULES:
+			if not frappe.db.exists("Report", report):
+				continue
+			native = set(frappe.get_all("Has Role", filters={"parent": report}, pluck="role"))
+			computed = set(report_allowed_roles(report, native))
+			self.assertTrue(
+				native <= computed,
+				f"{report}: Custom Role would drop {sorted(native - computed)}",
 			)
 
 	def test_every_persona_can_actually_log_in(self):

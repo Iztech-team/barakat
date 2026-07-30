@@ -14,6 +14,7 @@ def after_install():
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
+		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
 	]:
@@ -54,6 +55,7 @@ def after_migrate():
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
 		_revoke_stale_barakat_perms,
+		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
 		# Last: applies the bundles the passes above have just provisioned.
@@ -346,6 +348,53 @@ def _grant_owner_payment_mode_perms():
 	for perm in ("read", "write", "create", "delete"):
 		update_permission_property(doctype, "System Manager", 0, perm, 1, validate=False)
 	frappe.clear_cache(doctype=doctype)
+
+
+def _ensure_native_report_roles():
+	"""Let personas run the ERPNext query reports the AP calls.
+
+	See the long note on `NATIVE_REPORT_MODULES` in `barakat.permissions`: a DocPerm
+	does not open a query report. The report's own role allow-list is gate 1, and a
+	`Custom Role` is the only override that survives a migrate (standard reports are
+	re-synced from their app's JSON, which rewrites the Report's own `Has Role` rows).
+
+	Idempotent, and it rewrites the child table to exactly the computed set so a role
+	dropped from `NATIVE_REPORT_MODULES` is removed again rather than lingering.
+	"""
+	from barakat.permissions import NATIVE_REPORT_MODULES, report_allowed_roles
+
+	for report in NATIVE_REPORT_MODULES:
+		if not frappe.db.exists("Report", report):
+			continue  # the app shipping that report is not installed here
+
+		native = frappe.get_all("Has Role", filters={"parent": report}, pluck="role")
+		wanted = [
+			role for role in report_allowed_roles(report, native) if frappe.db.exists("Role", role)
+		]
+		if not wanted:
+			continue
+
+		name = frappe.db.get_value("Custom Role", {"report": report}, "name")
+		doc = (
+			frappe.get_doc("Custom Role", name)
+			if name
+			else frappe.get_doc(
+				{
+					"doctype": "Custom Role",
+					"report": report,
+					"ref_doctype": frappe.db.get_value("Report", report, "ref_doctype"),
+				}
+			)
+		)
+		if sorted(r.role for r in doc.roles) == sorted(wanted):
+			continue
+
+		doc.roles = []
+		for role in wanted:
+			doc.append("roles", {"role": role})
+		doc.save(ignore_permissions=True)
+
+	frappe.clear_cache()
 
 
 def _backfill_persona_roles():

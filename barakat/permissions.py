@@ -348,8 +348,19 @@ def self_scope_applies(doctype, roles):
 # NAMES with read denied and the document open refused — that behaviour is correct and
 # must survive. Dropping `select` empties dropdowns with no error in the AP and no
 # error in the till.
-READER_PERMS = ("read", "select")
-WRITER_PERMS = ("read", "select", "write", "create", "delete")
+#
+# `report` is granted alongside `read` for the same class of reason. It is a VIEW
+# capability, not a data grant: Frappe checks it in two places only — the desk's
+# report view, and `frappe.desk.query_report.run`, which requires
+# `has_permission(<report>.ref_doctype, "report")` on top of the report's own role
+# list. Rows stay bounded by `read`, the query-condition hooks and User Permissions,
+# so this opens no record a persona could not already list. Without it the AP's
+# trial balance 403'd for every persona including Manager, whose matrix row says
+# `finance: write` (measured on the osa test site, 2026-07-30) — and because gate 1
+# below is independent, granting `report` does NOT make ERPNext's report catalogue
+# runnable.
+READER_PERMS = ("read", "select", "report")
+WRITER_PERMS = ("read", "select", "report", "write", "create", "delete")
 
 # Module keys that are acronyms. Role names show in the ERPNext desk's role list, and
 # a plain .capitalize() renders "pos" as "Pos" — which reads as a typo next to the
@@ -447,6 +458,68 @@ PERSONA_PRESET_ROLES = tuple(sorted(PERSONA_MATRIX))
 EXPORTED_ROLE_NAMES = sorted(
 	{*PERSONA_PRESET_ROLES, *ALL_ROLE_PERMS, *EXTERNALLY_PERMED_ROLES}
 )
+
+
+# ── Native ERPNext reports the AP runs ───────────────────────────────────────
+# A DocPerm is not enough to run one of ERPNext's own query reports. Frappe gates
+# `frappe.desk.query_report.run` twice, independently (frappe/desk/query_report.py,
+# `get_report_doc`):
+#
+#   gate 1  `Report.is_permitted()` — the caller must hold a role from the report's
+#           OWN allow-list. ERPNext ships "Trial Balance" allowing Accounts Manager,
+#           Accounts User and Auditor, none of which any persona holds any more.
+#   gate 2  `has_permission(report.ref_doctype, "report")` — covered by the `report`
+#           ptype now in READER_PERMS.
+#
+# Both failed for every persona on osa (2026-07-30), so /finance/general-ledger's
+# Trial Balance tab 403'd for a Manager whose matrix row is `finance: write`.
+#
+# Gate 1 is closed with a `Custom Role`, not by editing the Report: standard reports
+# are re-synced from their app's JSON on every migrate, so roles appended to the
+# Report's own child table are wiped. `Custom Role` is Frappe's designed override and
+# survives.
+#
+# CAREFUL — `is_permitted` REPLACES rather than extends when a Custom Role exists:
+#
+#     if custom_roles:
+#         allowed = custom_roles
+#
+# so the report's native roles must be carried across or the accounts staff and any
+# owner relying on them lose the report. `report_allowed_roles` is what guarantees
+# that; it is pure so it can be tested off a bench.
+NATIVE_REPORT_MODULES = {
+	# AP: /finance/general-ledger, Trial Balance tab.
+	# Proxy: GET /api/finance/trial-balance -> view('finance').
+	"Trial Balance": ("finance",),
+}
+
+# Always allowed on top of the native + generated roles. An owner account holds no
+# persona and acts under its own native roles, so without this a site whose owner is
+# not also an accounts user loses the report — the same owner blind spot
+# `_grant_owner_payment_mode_perms` was written for.
+REPORT_FALLBACK_ROLES = ("System Manager",)
+
+
+def report_allowed_roles(report, native_roles=()):
+	"""Every role that must appear in `report`'s Custom Role allow-list.
+
+	`native_roles` is the report's existing `Has Role` list, carried across because a
+	Custom Role replaces it. Returns () for a report this app does not claim, which is
+	the signal to leave it alone entirely.
+	"""
+	modules = NATIVE_REPORT_MODULES.get(report)
+	if not modules:
+		return ()
+	out = []
+	for name in (*native_roles, *REPORT_FALLBACK_ROLES):
+		if name and name not in out:
+			out.append(name)
+	for module in modules:
+		for level in ("read", "write"):
+			name = role_name_for(module, level)
+			if name and name not in out:
+				out.append(name)
+	return tuple(out)
 
 
 # ── GL Entry row scoping for the supplier-ledger role ────────────────────────
