@@ -215,6 +215,26 @@ def reassert_persona_roles(doc, method=None):
 	# far outside least privilege.
 	target = set(persona_role_bundle(preset)) | (existing_roles & PRESERVED_ROLES)
 	if target == existing_roles:
+		# Roles are already right — but `user_type` may not be, and this early return
+		# is where that used to go unfixed.
+		#
+		# `user_type` is DERIVED: User.validate() calls set_system_user(), which makes
+		# a user a System User iff some held role has desk_access=1. A Website User
+		# cannot sign in at all — Frappe answers the gateway "No App" instead of
+		# "Logged In", and the admin panel renders that as "wrong email or password".
+		#
+		# The stale combination is reachable and was reached: these users were saved
+		# while the generated roles still carried desk_access=0, so they were computed
+		# as Website Users. Repairing the ROLES (2026-07-29) did not re-save the users,
+		# and this return meant no later Employee save would either — so they stayed
+		# locked out until a migrate happened to run the installer's repair pass.
+		#
+		# Recomputing here makes every Employee save self-heal it, which is the same
+		# guarantee the branch below already gets for free from its save().
+		user.set_system_user()
+		if user.user_type != frappe.db.get_value("User", email, "user_type"):
+			frappe.db.set_value("User", email, "user_type", user.user_type, update_modified=False)
+			frappe.clear_document_cache("User", email)
 		return
 
 	# Write the child table directly and save with ignore_permissions, rather than
