@@ -32,13 +32,12 @@ import frappe
 from erpnext.setup.doctype.company.company import Company
 
 from barakat.chart_of_accounts.barakat_chart import build_chart
+from barakat.chart_of_accounts.site_language import TRANSLATED_LANGUAGES
 
 # Set by the proxy in the Company insert payload. Ships as a fixture custom
 # field; a site that has not migrated simply has no value here, and the company
 # then gets ERPNext's English chart.
 COA_LANGUAGE_FIELD = "custom_barakat_coa_language"
-
-TRANSLATED_LANGUAGES = ("ar", "he")
 
 
 class BarakatCompany(Company):
