@@ -32,7 +32,7 @@ import frappe
 from erpnext.setup.doctype.company.company import Company
 
 from barakat.chart_of_accounts.barakat_chart import build_chart
-from barakat.chart_of_accounts.site_language import TRANSLATED_LANGUAGES
+from barakat.chart_of_accounts.site_language import TRANSLATED_LANGUAGES, language_for_new_company
 
 # Set by the proxy in the Company insert payload. Ships as a fixture custom
 # field; a site that has not migrated simply has no value here, and the company
@@ -41,6 +41,31 @@ COA_LANGUAGE_FIELD = "custom_barakat_coa_language"
 
 
 class BarakatCompany(Company):
+	def before_insert(self):
+		"""Give the setup wizard's company the language the site was set up in.
+
+		The wizard has no chart-language field, so without this the first company
+		on an Arabic site gets English books — and an Account's name is minted at
+		insert, so there is no fixing it afterwards.
+
+		`frappe.flags.in_setup_wizard` is set by frappe for the whole wizard run
+		and cleared when it ends, so this fires for exactly that one company.
+		`System Settings.language` was saved by the wizard's first stage, which
+		runs before ERPNext creates the company; stages do not commit
+		individually, so the write is visible on this connection.
+
+		Neither `Company` nor `NestedSet` defines `before_insert`, so there is no
+		super call to keep in step. If a future ERPNext adds one, this silently
+		shadows it.
+		"""
+		language = language_for_new_company(
+			bool(frappe.flags.in_setup_wizard),
+			self.get(COA_LANGUAGE_FIELD),
+			frappe.db.get_single_value("System Settings", "language"),
+		)
+		if language:
+			self.set(COA_LANGUAGE_FIELD, language)
+
 	def create_default_accounts(self):
 		lang = (self.get(COA_LANGUAGE_FIELD) or "").strip().lower()
 		if lang not in TRANSLATED_LANGUAGES:
