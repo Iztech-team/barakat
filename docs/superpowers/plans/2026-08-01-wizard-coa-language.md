@@ -316,8 +316,10 @@ Hebrew books when the site was set up in that language."
 
 - [ ] **Step 6: Push `dev`**
 
+`upstream` is `Iztech-team/barakat`, the repo the benches pull from. `origin` is a personal fork and pushing there deploys nothing.
+
 ```bash
-git push origin dev
+git push upstream dev
 ```
 
 ---
@@ -331,7 +333,7 @@ git push origin dev
 - [ ] **Step 1: Promote to `test` and push**
 
 ```bash
-git checkout test && git merge dev && git push && git checkout dev
+git checkout test && git merge dev && git push upstream test && git checkout dev
 ```
 
 - [ ] **Step 2: Pull and restart on the test box**
