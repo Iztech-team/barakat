@@ -159,11 +159,71 @@ def validate_customer_mobile_unique(doc, method):
 		)
 
 
+def _employee_companies(doc):
+	"""Every company this employee belongs to, by either link that names one.
+
+	There are two, and they used to be read by two different layers:
+
+	  * `Employee.company` — what the admin panel stamps from the active tenant,
+	    and the only field its own duplicate check filters on.
+	  * `Branch.custom_pos_company` — what this rule read, alone, until now.
+
+	They normally agree. When they don't, the two layers disagreed about what
+	"same company" meant, so a PIN one of them refused the other allowed. Taking
+	the union settles it in the safe direction for a login credential: we would
+	rather refuse a PIN that was technically free than let two people in one
+	company share one.
+
+	Returns an empty set when neither link resolves — nothing to scope against,
+	so the caller lets the save through rather than guessing.
+	"""
+	companies = set()
+
+	if doc.company:
+		companies.add(doc.company)
+
+	if doc.branch:
+		branch_company = frappe.db.get_value("Branch", doc.branch, "custom_pos_company")
+		if branch_company:
+			companies.add(branch_company)
+
+	return companies
+
+
 def validate_employee_pin(doc, method):
 	pin = (doc.custom_pos_pin or "").strip()
 
 	if not pin:
 		return
+
+	# Judge only what this save actually changes. If the PIN and both company
+	# links are untouched, the verdict cannot legitimately differ from the one
+	# already on record — re-deciding it would fail an edit to the SALARY or the
+	# status over a PIN the user never typed and cannot see from that screen.
+	#
+	# This matters because the rule below is stricter than the one these records
+	# were saved under (a branchless employee escaped the uniqueness check
+	# entirely). Live test sites already hold such pairs. Without this guard,
+	# tightening the rule would retroactively freeze every one of those employees
+	# — the precise failure mode that took prod down on 2026-07-28.
+	#
+	# All three fields are compared, not just the PIN: moving an employee to
+	# another branch or company can create a clash without the PIN changing at
+	# all, and that save must still be judged.
+	if doc.name:
+		before = frappe.db.get_value(
+			"Employee",
+			doc.name,
+			["custom_pos_pin", "branch", "company"],
+			as_dict=True,
+		)
+		if (
+			before
+			and (before.custom_pos_pin or "").strip() == pin
+			and before.branch == doc.branch
+			and before.company == doc.company
+		):
+			return
 
 	# Format: digits only, 4–6 characters
 	if not re.fullmatch(r"\d{4,6}", pin):
@@ -172,33 +232,54 @@ def validate_employee_pin(doc, method):
 			title="Invalid PIN",
 		)
 
-	# Uniqueness per company — Employee → Branch → custom_pos_company
-	if not doc.branch:
+	# Uniqueness per company. Which company an employee belongs to is reachable
+	# two ways, and this rule honours BOTH (see _employee_companies): reading only
+	# the branch link used to skip the check entirely for a branchless employee,
+	# so two of them could share a PIN — and a shared PIN becomes a real POS login
+	# collision the moment either one is put on a branch.
+	companies = _employee_companies(doc)
+	if not companies:
 		return
 
-	company = frappe.db.get_value("Branch", doc.branch, "custom_pos_company")
-	if not company:
-		return
+	# At most two entries by construction (own company, branch's company), so pad
+	# to a fixed pair: the query shape stays constant and no SQL is string-built.
+	company_list = sorted(companies)
+	company_a, company_b = company_list[0], company_list[-1]
 
 	duplicate = frappe.db.sql(
 		"""
-		SELECT e.name, e.employee_name
+		SELECT e.name, e.employee_name, e.company AS emp_company,
+		       b.custom_pos_company AS branch_company
 		FROM `tabEmployee` e
-		INNER JOIN `tabBranch` b ON b.name = e.branch
-		WHERE b.custom_pos_company = %s
-		  AND e.custom_pos_pin = %s
+		LEFT JOIN `tabBranch` b ON b.name = e.branch
+		WHERE e.custom_pos_pin = %s
 		  AND e.name != %s
+		  AND (e.company IN (%s, %s) OR b.custom_pos_company IN (%s, %s))
 		LIMIT 1
 		""",
-		(company, pin, doc.name or "__new__"),
+		(
+			pin,
+			doc.name or "__new__",
+			company_a,
+			company_b,
+			company_a,
+			company_b,
+		),
 		as_dict=True,
 	)
 
 	if duplicate:
+		d = duplicate[0]
+		# Name the company the two actually share, not just whichever we read
+		# first — with a divergent record those can be different companies.
+		clash = next(
+			(c for c in (d["emp_company"], d["branch_company"]) if c in companies),
+			company_a,
+		)
 		frappe.throw(
 			f"PIN <b>{pin}</b> is already assigned to employee "
-			f"<b>{duplicate[0]['employee_name']}</b> ({duplicate[0]['name']}) "
-			f"in company <b>{company}</b>. Each employee in a company must have a unique PIN.",
+			f"<b>{d['employee_name']}</b> ({d['name']}) "
+			f"in company <b>{clash}</b>. Each employee in a company must have a unique PIN.",
 			title="Duplicate PIN",
 		)
 
