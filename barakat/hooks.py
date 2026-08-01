@@ -6,6 +6,14 @@ app_email = "osamatbaileh@iztechvalley.ps"
 app_license = "mit"
 
 from barakat.permissions import EXPORTED_ROLE_NAMES
+from barakat.persona_matrix import MODULE_DOCTYPES
+
+# Every doctype any persona can reach. Imported from `persona_matrix` (which is
+# deliberately Frappe-free) rather than from `overrides.company_scope`, so hooks.py
+# keeps loading without pulling frappe in through the side door.
+COMPANY_SCOPED_DOCTYPES = tuple(
+	sorted({dt for doctypes in MODULE_DOCTYPES.values() for dt in doctypes})
+)
 
 fixtures = [
 	{
@@ -95,6 +103,9 @@ after_migrate = "barakat.setup.install.after_migrate"
 
 doc_events = {
 	"Employee": {
+		# Runs BEFORE the controller's own validate(), which is the only place a
+		# per-company duplicate-login rule can replace ERPNext's site-wide one.
+		"before_validate": "barakat.overrides.employee_identity.scope_duplicate_login_to_company",
 		"validate": [
 			"barakat.validations.validate_employee_pin",
 			"barakat.overrides.staff_roles.guard_role_preset",
@@ -296,6 +307,40 @@ has_permission = {
 	"Salary Slip": "barakat.overrides.self_service.salary_slip_has_permission",
 	"User": "barakat.overrides.user_scope.user_has_permission",
 }
+
+
+def _add_company_scope(existing, method):
+	"""Register the multi-company guard on every doctype a persona can reach.
+
+	GENERATED, never hand-listed, from the same `MODULE_DOCTYPES` map the persona role
+	bundles are built from — so a doctype a persona can touch is guarded by
+	construction. Hand-picking the doctypes is what makes this class of guard look
+	like coverage while leaving holes.
+
+	Frappe accepts a list for either hook and runs every entry, so this APPENDS to the
+	four doctypes that already carry a narrower rule rather than replacing them. Order
+	does not matter: both hooks can only deny, so the result is the intersection
+	whichever runs first.
+	"""
+	merged = dict(existing)
+	for doctype in COMPANY_SCOPED_DOCTYPES:
+		current = merged.get(doctype)
+		if current is None:
+			merged[doctype] = method
+		elif isinstance(current, str):
+			merged[doctype] = [current, method]
+		else:
+			merged[doctype] = [*current, method]
+	return merged
+
+
+permission_query_conditions = _add_company_scope(
+	permission_query_conditions,
+	"barakat.overrides.company_scope.get_permission_query_conditions",
+)
+has_permission = _add_company_scope(
+	has_permission, "barakat.overrides.company_scope.has_permission"
+)
 
 # Document Events
 # ---------------
