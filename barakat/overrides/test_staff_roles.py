@@ -13,6 +13,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from barakat.overrides.staff_roles import (
     guard_role_preset,
+    guard_user_permission_flag,
     reassert_company_user_permission,
 )
 from barakat.permissions import STAFF_MANAGER_ROLE
@@ -137,6 +138,42 @@ class ReassertCompanyUserPermission(FrappeTestCase):
         ) as remove:
             reassert_company_user_permission(self._emp())
         remove.assert_not_called()
+
+
+class GuardUserPermissionFlag(FrappeTestCase):
+    """Only the owner may save a persona staff member with the company restriction off.
+
+    The decision and its stand-downs are covered off-bench in
+    `barakat.test_user_permission_guard`; this pins the Frappe wiring — that the
+    wrapper reads the right fields off the doc and raises PermissionError.
+    """
+
+    def _emp(self, ticked=0, preset="Cashier", user="staff@example.com"):
+        return frappe._dict(
+            {
+                "custom_role_preset": preset,
+                "user_id": user,
+                "create_user_permission": ticked,
+            }
+        )
+
+    def test_blocks_the_manager(self):
+        with _as("manager@example.com", [STAFF_MANAGER_ROLE]):
+            with self.assertRaises(frappe.PermissionError):
+                guard_user_permission_flag(self._emp(ticked=0))
+
+    def test_allows_the_owner(self):
+        with _as("owner@example.com", ["System Manager"]):
+            guard_user_permission_flag(self._emp(ticked=0))  # must not raise
+
+    def test_allows_the_manager_when_ticked(self):
+        """The ordinary staff create/edit path must be untouched."""
+        with _as("manager@example.com", [STAFF_MANAGER_ROLE]):
+            guard_user_permission_flag(self._emp(ticked=1))  # must not raise
+
+    def test_ignores_an_employee_with_no_login(self):
+        with _as("manager@example.com", [STAFF_MANAGER_ROLE]):
+            guard_user_permission_flag(self._emp(ticked=0, user=""))  # must not raise
 
 
 if __name__ == "__main__":

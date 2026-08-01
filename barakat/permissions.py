@@ -768,3 +768,54 @@ def may_assign_preset(caller_roles, *, is_administrator=False, is_system_context
 	if is_administrator or is_system_context:
 		return True
 	return not PRESET_ASSIGN_ROLES.isdisjoint(set(caller_roles))
+
+
+# ── Who may untick `Employee.create_user_permission` ─────────────────────────
+# That checkbox is what makes ERPNext create the `Company` User Permission which IS
+# the tenant boundary — unticking it deletes the row and unscopes the user from
+# every shop on the site, while the field's own description only mentions employee
+# records. `overrides.staff_roles.reassert_company_user_permission` already re-adds
+# the row on the same save, so an untick is a no-op today. This is the second lock:
+# it refuses the change outright, so the hole cannot reopen if that hook is ever
+# altered, and the person doing it gets told rather than silently ignored.
+#
+# Narrower than PRESET_ASSIGN_ROLES on purpose: STAFF_MANAGER_ROLE (the Manager
+# persona) may create and edit staff but must NOT be able to unscope one, because a
+# Manager can only see their own shop's staff and this is the one field that would
+# let them hand someone the whole site.
+UNTICK_USER_PERMISSION_ROLES = frozenset({"System Manager"})
+
+
+def user_permission_untick_allowed(
+	*,
+	preset,
+	user_id,
+	create_user_permission,
+	caller_roles,
+	is_administrator=False,
+	is_system_context=False,
+):
+	"""Whether this save may leave `create_user_permission` unticked.
+
+	Pure decision — no Frappe. True means "allowed, do nothing".
+
+	Phrased as "may this document be SAVED unticked" rather than "did the field
+	change", because `Document.has_value_changed` returns True for every field on an
+	insert. A changed-based rule would therefore refuse the Manager's ordinary staff
+	CREATE, where the field is simply taking its default.
+
+	Stands down whenever the flag cannot matter, so no unrelated save (a salary edit,
+	an HR-owned employee, a staff member with no login) starts failing:
+	  * already ticked          — the boundary is intact
+	  * no persona preset       — not admin-panel staff; the re-assert hook skips these too
+	  * no linked login         — there is no User Permission for it to delete
+	"""
+	if create_user_permission:
+		return True
+	if (preset or "").strip() not in PERSONAS:
+		return True
+	if not (user_id or "").strip():
+		return True
+	if is_administrator or is_system_context:
+		return True
+	return not UNTICK_USER_PERMISSION_ROLES.isdisjoint(set(caller_roles))

@@ -17,6 +17,7 @@ def after_install():
 		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
+		_lock_create_user_permission_field,
 	]:
 		try:
 			fn()
@@ -58,6 +59,7 @@ def after_migrate():
 		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
+		_lock_create_user_permission_field,
 		# Last: applies the bundles the passes above have just provisioned.
 		_backfill_persona_roles,
 	]:
@@ -622,6 +624,36 @@ def _grant_staff_manager_perms():
 		for perm in perms:
 			update_permission_property(doctype, STAFF_MANAGER_ROLE, 0, perm, 1, validate=False)
 		frappe.clear_cache(doctype=doctype)
+
+
+def _lock_create_user_permission_field():
+	"""Grey out `Employee.create_user_permission` for everyone but the owner.
+
+	The server-side refusal lives in `overrides.staff_roles.guard_user_permission_flag`
+	— this is only so a Manager is not shown a checkbox they will be refused for
+	clicking. A Property Setter cannot express "read-only for these roles", but
+	`read_only_depends_on` is evaluated in the browser with `frappe.user_roles` in
+	scope, which says the same thing for the one caller it needs to.
+
+	Deliberately NOT a permlevel bump. Raising the field to permlevel 1 would also hide
+	it from the Manager's Employee FORM READ, and `User.roles` is already the standing
+	proof of how quietly a permlevel-1 field is dropped from a save (see the note in
+	overrides/staff_roles.py). This changes what the desk offers, nothing else.
+
+	make_property_setter upserts, so re-asserting on every migrate is idempotent.
+	"""
+	frappe.make_property_setter(
+		{
+			"doctype": "Employee",
+			"fieldname": "create_user_permission",
+			"property": "read_only_depends_on",
+			"value": 'eval:!frappe.user_roles.includes("System Manager")',
+			# Matches the DocField's own fieldtype for this property (Code), so the
+			# Property Setter is applied verbatim rather than cast.
+			"property_type": "Code",
+		}
+	)
+	frappe.clear_cache(doctype="Employee")
 
 
 def _relax_demo_company_user_perm():

@@ -98,6 +98,7 @@ doc_events = {
 		"validate": [
 			"barakat.validations.validate_employee_pin",
 			"barakat.overrides.staff_roles.guard_role_preset",
+			"barakat.overrides.staff_roles.guard_user_permission_flag",
 		],
 		"after_insert": [
 			"barakat.overrides.staff_roles.reassert_persona_roles",

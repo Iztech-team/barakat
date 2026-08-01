@@ -38,6 +38,7 @@ from barakat.permissions import (
 	PRESERVED_ROLES,
 	bundle_for,
 	may_assign_preset,
+	user_permission_untick_allowed,
 )
 
 # `Administrator` is the only untouchable account: accounts holding it are never
@@ -161,6 +162,41 @@ def guard_role_preset(doc, method=None):
 		return
 	frappe.throw(
 		_("Only a manager can assign or change a staff member's role."),
+		frappe.PermissionError,
+	)
+
+
+def guard_user_permission_flag(doc, method=None):
+	"""Refuse a save that leaves `create_user_permission` unticked, unless the owner.
+
+	Wired on Employee `validate`, next to `guard_role_preset` — the two are the same
+	shape: one field whose value hands out reach, so only a privileged caller may set
+	it. This one is stricter. The Manager persona may create and edit staff, but must
+	not be able to unscope one: a Manager sees only their own shop, and this checkbox
+	is the single control that would let them hand someone the entire site.
+
+	Refusing rather than silently correcting is the point. ERPNext deletes the
+	`Company` User Permission the moment this is unticked, and
+	`reassert_company_user_permission` (running later in the same save) puts it back —
+	so before this guard the click did nothing at all and said nothing. Now the caller
+	is told, and the boundary no longer depends on that one hook still being there.
+
+	The decision itself, including every stand-down, lives in
+	`barakat.permissions.user_permission_untick_allowed` so it is testable off a bench.
+	"""
+	if user_permission_untick_allowed(
+		preset=doc.custom_role_preset,
+		user_id=doc.user_id,
+		create_user_permission=doc.create_user_permission,
+		caller_roles=frappe.get_roles(frappe.session.user),
+		is_administrator=frappe.session.user == "Administrator",
+		is_system_context=bool(
+			frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch
+		),
+	):
+		return
+	frappe.throw(
+		_("Only the shop owner can remove a staff member's company restriction."),
 		frappe.PermissionError,
 	)
 
