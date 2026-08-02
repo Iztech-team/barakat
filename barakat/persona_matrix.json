@@ -57,7 +57,7 @@
     "dashboard": "none",
     "finance": "none",
     "inventory": "none",
-    "pos": "read",
+    "pos": "none",
     "products": "read",
     "reports": "none",
     "reports.inventory": "none",
