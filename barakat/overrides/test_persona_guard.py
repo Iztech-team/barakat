@@ -56,12 +56,16 @@ class HrBundleNoLongerStaffAdmin(unittest.TestCase):
     def test_hr_has_no_staff_admin_role(self):
         self.assertNotIn(STAFF_MANAGER_ROLE, bundle_for("HR"))
 
-    def test_hr_keeps_payroll_capability(self):
+    def test_hr_keeps_its_remaining_capabilities(self):
         # Was "keeps HR Manager / HR User". Those native roles are gone by design as of
         # 2026-07-29 — they carried unscoped Employee and Salary Slip read for every
         # persona that held them. HR keeps the CAPABILITY through the generated roles.
+        #
+        # This used to assert `Barakat Salary Writer` too. Payroll AUTHORING left this
+        # bundle on 2026-08-02 by the owner's decision — see
+        # test_payroll_authoring_belongs_to_the_accountant, which guards the trade in
+        # both directions. HR still records the attendance payroll is computed from.
         hr = bundle_for("HR")
-        self.assertIn("Barakat Salary Writer", hr)
         self.assertIn("Barakat Attendance Writer", hr)
         self.assertIn("Barakat Staff Reader", hr)
 
@@ -228,8 +232,20 @@ class BundlesDerivedFromMatrix(unittest.TestCase):
         self.assertNotIn("Barakat Staff Reader", cashier)
         self.assertNotIn("Barakat Staff Writer", cashier)
 
-    def test_hr_keeps_salary_write(self):
-        self.assertIn("Barakat Salary Writer", PERSONA_ROLE_BUNDLES["HR"])
+    def test_payroll_authoring_belongs_to_the_accountant(self):
+        """Traded 2026-08-02, and checked both ways on purpose.
+
+        The decision was to MOVE payroll authoring, so HR losing it and the Accountant
+        gaining it are one fact — a swap applied to only one row is the failure worth
+        catching. `Barakat Salary Writer` is what carries submit on Salary Slip, so it
+        is the difference between issuing a payslip and saving a draft.
+        """
+        hr = set(PERSONA_ROLE_BUNDLES["HR"])
+        accountant = set(PERSONA_ROLE_BUNDLES["Accountant"])
+        self.assertIn("Barakat Salary Reader", hr)
+        self.assertNotIn("Barakat Salary Writer", hr)
+        self.assertIn("Barakat Salary Writer", accountant)
+        self.assertNotIn("Barakat Salary Reader", accountant)
 
     def test_till_personas_keep_the_pos_operator_role(self):
         for persona in ("Manager", "Branch Supervisor"):

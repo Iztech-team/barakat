@@ -324,7 +324,11 @@ PERSONA_MATRIX = {
 		"staff": "none",
 		"roles": "none",
 		"attendance": "none",
-		"salary": "read",
+		# Write as of 2026-08-02, by the owner's decision: the Accountant issues
+		# payroll. `salary: write` is the grant that carries SUBMIT on Salary Slip,
+		# so it is what lets a payslip actually be issued rather than saved as a
+		# draft. Traded with HR, which drops to `read` in the same change.
+		"salary": "write",
 		"finance": "write",
 		"reports": "read",
 		"settings": "none",
@@ -374,7 +378,11 @@ PERSONA_MATRIX = {
 		"staff": "read",
 		"roles": "read",
 		"attendance": "write",
-		"salary": "write",
+		# Read as of 2026-08-02, traded to the Accountant (see its row above). HR
+		# still records the attendance payroll is computed from — `attendance:
+		# write` on the line above — but no longer creates, edits or submits the
+		# payslips themselves.
+		"salary": "read",
 		"finance": "none",
 		"reports": "read",
 		"settings": "none",
