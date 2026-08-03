@@ -1,4 +1,7 @@
-"""Create a new company's chart of accounts in the owner's language.
+"""Company overrides: the chart-of-accounts language, and the cash Mode of Payment.
+
+Two unrelated things live here because both are `Company` behaviour ERPNext gets
+wrong for a multi-tenant site. See `set_mode_of_payment_account` for the second.
 
 ## Why an override rather than a rename afterwards
 
@@ -38,6 +41,11 @@ from barakat.chart_of_accounts.site_language import TRANSLATED_LANGUAGES, langua
 # field; a site that has not migrated simply has no value here, and the company
 # then gets ERPNext's English chart.
 COA_LANGUAGE_FIELD = "custom_barakat_coa_language"
+
+# What makes a Mode of Payment belong to one shop. Ships as a fixture custom field
+# ("Mode of Payment-custom_company" in hooks.py) because ERPNext's own Mode of
+# Payment is global — it has no company link of its own.
+MODE_COMPANY_FIELD = "custom_company"
 
 
 class BarakatCompany(Company):
@@ -102,3 +110,73 @@ class BarakatCompany(Company):
 				"Account", {"company": self.name, "account_type": "Payable", "is_group": 0}
 			),
 		)
+
+	def set_mode_of_payment_account(self):
+		"""Only ever write this company's cash account into this company's OWN mode.
+
+		## The bug this closes
+
+		ERPNext's version (setup/doctype/company/company.py) is:
+
+		    cash = frappe.db.get_value("Mode of Payment", {"type": "Cash"}, "name")
+
+		No company filter, no `order_by` — it takes whichever Cash-type mode the
+		database happens to return first, then appends THIS company's cash account
+		to it. That is safe in stock ERPNext, where "Cash" is a single global mode.
+		It is not safe here: the admin panel gives every shop its own mode, named
+		`<mode> - <Company>` and tagged `custom_company`, so the query picks blind
+		among all of them. Measured on qa-test 2026-08-03 with 10 Cash-type modes,
+		it returned `Cash 2 E2E - E2E Shop` — one shop's mode, about to receive
+		another shop's account.
+
+		Worse, this runs from `on_update`, not `after_insert` (company.py:362), so
+		it fires on EVERY company save — a rename, a currency change, the setup
+		walkthrough confirming accounts, a migration touching companies.
+
+		## Why a stray row is not cosmetic
+
+		Every staff login carries one User Permission pinning it to its company, and
+		Frappe's document-level check walks child-table links too. So the moment a
+		mode's `accounts` table names a second company, that mode becomes unreadable
+		to every persona of every shop — the tenant owner, who is not pinned, still
+		reads it. That is ticket 0001-595: recording a supplier payment reads the
+		chosen mode, got a PermissionError, and the admin panel reported it as
+		"you do not have permission to use this payment method".
+
+		## Why "do nothing" is the right fallback
+
+		A company with no mode of its own gets no row anywhere. Writing into the
+		shared "Cash" instead would only move the pollution: the setup readiness
+		gate counts modes by `custom_company == company`, so a row on the shared
+		mode satisfies nothing, and it would break the shared mode for every
+		persona on the site. Creating the shop's payment modes belongs to the
+		admin panel's Company Accounts walkthrough, which is where a human chooses
+		the account.
+
+		A site whose custom field has not been created yet (never migrated) has no
+		per-company modes either, so ERPNext's own behaviour is still correct there
+		and is left alone.
+		"""
+		if not frappe.db.has_column("Mode of Payment", MODE_COMPANY_FIELD):
+			return super().set_mode_of_payment_account()
+
+		if not self.default_cash_account:
+			return
+
+		cash = frappe.db.get_value(
+			"Mode of Payment",
+			{"type": "Cash", MODE_COMPANY_FIELD: self.name},
+			"name",
+			order_by="creation asc",
+		)
+		if not cash:
+			return
+
+		if frappe.db.get_value("Mode of Payment Account", {"company": self.name, "parent": cash}):
+			return
+
+		mode_of_payment = frappe.get_doc("Mode of Payment", cash, for_update=True)
+		mode_of_payment.append(
+			"accounts", {"company": self.name, "default_account": self.default_cash_account}
+		)
+		mode_of_payment.save(ignore_permissions=True)
