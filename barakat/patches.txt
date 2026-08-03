@@ -18,3 +18,4 @@ barakat.patches.enforce_scale_unit_consistency
 barakat.patches.dedupe_loyalty_tier_names
 barakat.patches.repair_stock_adjustment_accounts
 barakat.patches.scope_payment_mode_accounts
+barakat.patches.disable_orphaned_staff_logins
