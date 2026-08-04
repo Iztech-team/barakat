@@ -6,6 +6,17 @@ from frappe import _
 from barakat.loyalty_tier_names import first_duplicate_tier_name
 
 
+class POSProfileWarehouseLocked(frappe.ValidationError):
+	"""Raised when a POS Profile's warehouse is changed during an open shift.
+
+	A dedicated class so the proxy can recognise this by `exc_type` instead of
+	matching the message text. Frappe TRANSLATES thrown messages per user
+	language, so a text match works in English and silently stops working the
+	moment an Arabic or Hebrew operator hits it — and the caller then falls back
+	to a generic "something went wrong" toast that explains nothing.
+	"""
+
+
 def validate_item_disable(doc, method):
 	if not doc.disabled:
 		return
@@ -508,6 +519,7 @@ def validate_pos_profile_warehouse_change(doc, method):
 
 	frappe.throw(
 		title=_("Cannot Change Warehouse"),
+		exc=POSProfileWarehouseLocked,
 		msg=_(
 			"You cannot change this POS Profile's warehouse from <b>{0}</b> to "
 			"<b>{1}</b> while a shift is open on it. The till is still selling "

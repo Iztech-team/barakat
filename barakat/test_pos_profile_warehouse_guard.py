@@ -15,7 +15,10 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from barakat.validations import validate_pos_profile_warehouse_change
+from barakat.validations import (
+    POSProfileWarehouseLocked,
+    validate_pos_profile_warehouse_change,
+)
 
 COMPANY = "Test Co"
 PROFILE = "Main Branch pos profile - Test Co"
@@ -83,6 +86,17 @@ class TestPOSProfileWarehouseGuard(FrappeTestCase):
         ):
             with patch.object(frappe.db, "get_value", return_value=None):
                 with self.assertRaises(frappe.ValidationError):
+                    validate_pos_profile_warehouse_change(_doc(), "validate")
+
+    def test_raises_the_dedicated_exception_type(self):
+        # The proxy matches on exc_type, not on the message: Frappe translates
+        # thrown messages per user language, so a text match would work in
+        # English and silently stop working for an Arabic or Hebrew operator.
+        with patch(
+            "barakat.validations.open_shifts_for_pos_profile", return_value=OPEN_SHIFT
+        ):
+            with patch.object(frappe.db, "get_value", return_value="Old - TC"):
+                with self.assertRaises(POSProfileWarehouseLocked):
                     validate_pos_profile_warehouse_change(_doc(), "validate")
 
 
