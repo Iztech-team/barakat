@@ -73,6 +73,28 @@ def open_shifts_for_company(company):
 	)
 
 
+def open_shifts_for_pos_profile(pos_profile):
+	"""Open POS Opening Entries bound to ONE profile.
+
+	Narrower than open_shifts_for_company on purpose: a profile's warehouse only
+	governs the tills using that profile, so another profile's open shift in the
+	same company must not block the edit.
+	"""
+	if not pos_profile:
+		return []
+	return frappe.db.sql(
+		"""
+		SELECT name, pos_profile, company
+		FROM `tabPOS Opening Entry`
+		WHERE status = 'Open'
+		  AND pos_profile = %s
+		LIMIT 5
+		""",
+		(pos_profile,),
+		as_dict=True,
+	)
+
+
 def _shift_lines(open_shifts):
 	return "".join(
 		f"<li><b>{s['name']}</b> — {s['pos_profile']} ({s['company']})</li>"
@@ -454,4 +476,46 @@ def validate_attendance_branch(doc, method):
 			"employee first, or record the attendance against one of their "
 			"branches."
 		).format(doc.employee_name or doc.employee, branch),
+	)
+
+
+def validate_pos_profile_warehouse_change(doc, method):
+	"""A till stores ONE stock quantity per product, with no warehouse dimension.
+
+	Repointing the profile mid-shift means every quantity the cashier can see
+	still describes the OLD branch until the next stock sync lands, and anything
+	the new warehouse does not stock keeps the old branch's number entirely — so
+	the till reports stock it does not have, in the middle of selling.
+
+	The POS forgets those quantities when it notices the change, but it only
+	notices on its next sync. Between the edit and that sync the till is wrong,
+	and a shift is exactly when being wrong costs money.
+	"""
+	# `validate` also runs on insert, and Frappe assigns doc.name before
+	# run_before_save_methods() — so a new profile already has a name and the
+	# lookup below returns None, which would read as "the warehouse changed".
+	# A brand-new profile cannot have an open shift anyway.
+	if doc.is_new():
+		return
+
+	previous = frappe.db.get_value("POS Profile", doc.name, "warehouse")
+	if previous == doc.warehouse:
+		return
+
+	open_shifts = open_shifts_for_pos_profile(doc.name)
+	if not open_shifts:
+		return
+
+	frappe.throw(
+		title=_("Cannot Change Warehouse"),
+		msg=_(
+			"You cannot change this POS Profile's warehouse from <b>{0}</b> to "
+			"<b>{1}</b> while a shift is open on it. The till is still selling "
+			"against the old warehouse's stock. Please close the shift first:"
+			"<ul>{2}</ul>"
+		).format(
+			previous or _("(none)"),
+			doc.warehouse or _("(none)"),
+			_shift_lines(open_shifts),
+		),
 	)

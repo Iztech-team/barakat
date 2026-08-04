@@ -130,7 +130,13 @@ doc_events = {
 		"on_update": "barakat.scale_unit.company_on_update",
 	},
 	"POS Profile": {
-		"validate": "barakat.validations.validate_pos_profile_accounts",
+		"validate": [
+			"barakat.validations.validate_pos_profile_accounts",
+			# A till's stock figures describe ONE warehouse and it only notices a
+			# repoint on its next sync — so mid-shift it sells against the old
+			# branch's numbers. See validations.py for the full reasoning.
+			"barakat.validations.validate_pos_profile_warehouse_change",
+		],
 	},
 	"Item": {
 		"validate": "barakat.validations.validate_item_disable",
