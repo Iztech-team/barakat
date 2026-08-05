@@ -25,7 +25,61 @@ class BarakatSalesInvoice(SalesInvoice):
 
 	Upstream issue: the `is_consolidated` gate is still present in erpnext (see
 	frappe/erpnext#41514, #41036, #31509) — nothing in core books POS loyalty redemptions.
+
+	A third override lets a shift close when a sale took no cash at all — see
+	`validate_pos_paid_amount`.
 	"""
+
+	# ── shift close: a sale that took no cash ─────────────────────────────────────
+
+	def validate_pos_paid_amount(self):
+		"""Let a consolidated invoice settled entirely without cash through.
+
+		Stock's check is `len(self.payments) == 0 and self.is_pos and grand_total > 0`
+		→ "At least one mode of payment is required for POS invoice." It assumes a POS
+		sale always takes money, so an empty payments table means someone forgot to
+		record the tender.
+
+		A Barakat till breaks that assumption two ways, and both produce a sale with a
+		payments table that is not merely zero but EMPTY:
+
+		* the customer paid the whole bill with loyalty points, so the cash row is 0;
+		* ERPNext refused the redemption after the goods were handed over, so the POS
+		  re-sent the same value as `write_off_amount` and the cash row is 0 again.
+
+		Either way `POSInvoice.clear_unallocated_mode_of_payments` deletes every
+		zero-amount row on validate — by design, so the desk POS does not litter an
+		invoice with the payment methods the cashier did not use. The POS Invoice then
+		submits happily, because that check lives on Sales Invoice and never runs on it.
+		The failure surfaces hours later, when the shift closes and the merge log rebuilds
+		those invoices as a real Sales Invoice: the throw fires, `create_merge_logs` rolls
+		back and the cashier is shown the unrelated "Could not find Reference Name:
+		POS-CLO-…". The shift can then NEVER be closed.
+
+		So: skip the throw only when the invoice really is fully settled — by points, by
+		write-off, or by the two together. An invoice with nothing covering it still
+		throws, which is the case the check exists for.
+
+		Compare against `rounded_total`, NOT `grand_total`: with whole-unit rounding on,
+		a ₪135.29 bill is only payable at ₪135.00, and that is what the points covered.
+		Comparing against the raw total makes this override silently never fire.
+		"""
+		if len(self.payments) == 0 and self._barakat_settled_without_cash():
+			return
+		super().validate_pos_paid_amount()
+
+	def _barakat_settled_without_cash(self):
+		"""True when a consolidated invoice's whole payable is covered by non-cash means.
+
+		Deliberately not gated on `redeem_loyalty_points`: the written-off variant above
+		carries no loyalty fields at all, and it is the same sale reaching the same dead
+		end by a different route.
+		"""
+		if not cint(self.get("is_consolidated")):
+			return False
+		payable = flt(self.get("rounded_total")) or flt(self.get("grand_total"))
+		covered = flt(self.get("loyalty_amount")) + flt(self.get("write_off_amount"))
+		return payable > 0 and covered >= payable
 
 	# ── sale ──────────────────────────────────────────────────────────────────────
 

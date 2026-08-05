@@ -510,3 +510,78 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
         # And the invoice is fully settled, not stranded "Partly Paid".
         self.assertEqual(flt(si.outstanding_amount), 0.0)
         self.assertEqual(si.status, "Paid")
+
+
+class TestPaidAmountSettledWithoutCash(FrappeTestCase):
+    """The `validate_pos_paid_amount` override that lets such a shift close.
+
+    A POS sale can legitimately take no cash at all — the customer paid with points,
+    or ERPNext refused the redemption after the fact and the value became a write-off.
+    Either way `POSInvoice.clear_unallocated_mode_of_payments` strips the zero-amount
+    cash row, so the merged Sales Invoice reaches ERPNext's "At least one mode of
+    payment is required for POS invoice." check with an EMPTY payments table and the
+    shift becomes permanently unclosable.
+
+    These build the doc in memory and call the method directly: the check reads only
+    the payments table and four totals, so nothing needs saving, and the test is not
+    pinned to any company or chart of accounts.
+    """
+
+    def _consolidated(self, **fields):
+        si = frappe.new_doc("Sales Invoice")
+        si.is_pos = 1
+        si.is_consolidated = 1
+        si.grand_total = 135.29
+        si.rounded_total = 135.0
+        for key, value in fields.items():
+            setattr(si, key, value)
+        return si
+
+    # ── the two ways a sale ends up with no cash ────────────────────────────────
+
+    def test_allows_a_sale_paid_entirely_with_points(self):
+        si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=135.0)
+        si.validate_pos_paid_amount()  # must not raise
+
+    def test_allows_a_sale_whose_redemption_was_refused_and_written_off(self):
+        # The written-off variant carries NO loyalty fields — this is why the guard
+        # must not be gated on redeem_loyalty_points.
+        si = self._consolidated(write_off_amount=135.0)
+        si.validate_pos_paid_amount()  # must not raise
+
+    def test_allows_points_and_a_write_off_covering_the_total_together(self):
+        si = self._consolidated(
+            redeem_loyalty_points=1, loyalty_amount=100.0, write_off_amount=35.0
+        )
+        si.validate_pos_paid_amount()  # must not raise
+
+    def test_compares_against_the_rounded_total_not_the_grand_total(self):
+        # The regression that made the first version of this fix a silent no-op: with
+        # whole-unit rounding a 135.29 bill is payable at 135.00, and 135.00 is exactly
+        # what the points covered. Comparing against grand_total never fires.
+        si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=135.0)
+        self.assertTrue(si._barakat_settled_without_cash())
+        self.assertLess(flt(si.loyalty_amount), flt(si.grand_total))
+
+    # ── the check still fires everywhere it should ──────────────────────────────
+
+    def test_still_rejects_a_consolidated_invoice_with_nothing_covering_it(self):
+        si = self._consolidated()
+        with self.assertRaises(frappe.ValidationError):
+            si.validate_pos_paid_amount()
+
+    def test_still_rejects_when_the_non_cash_cover_is_only_partial(self):
+        si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=100.0)
+        with self.assertRaises(frappe.ValidationError):
+            si.validate_pos_paid_amount()
+
+    def test_still_rejects_an_ordinary_non_consolidated_pos_invoice(self):
+        # Nothing about a plain POS sale changes: it must still declare its tender.
+        si = self._consolidated(is_consolidated=0, redeem_loyalty_points=1, loyalty_amount=135.0)
+        with self.assertRaises(frappe.ValidationError):
+            si.validate_pos_paid_amount()
+
+    def test_leaves_an_invoice_that_has_payment_rows_alone(self):
+        si = self._consolidated()
+        si.append("payments", {"amount": 135.0})
+        si.validate_pos_paid_amount()  # must not raise
