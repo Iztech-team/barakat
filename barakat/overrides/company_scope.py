@@ -65,6 +65,7 @@ depend on it, which is why `company_marker.py` exists.
 
 import frappe
 
+from barakat.overrides.company_marker import COMPANY_MARKER_FIELDS
 from barakat.permissions import ALL_ROLE_PERMS, PERSONAS, bundle_for
 from barakat.persona_matrix import MODULE_DOCTYPES
 
@@ -132,6 +133,100 @@ COMPANY_FIELD_OVERRIDES = {
 	"Branch": "custom_pos_company",
 	"Company": "name",
 }
+
+# Kill switch. Set `"barakat_strict_company_scope": 0` in the site's site_config.json
+# and `bench clear-cache` to disable the blackout below WITHOUT a deploy. Default on.
+STRICT_SCOPE_FLAG = "barakat_strict_company_scope"
+
+
+def strict_scope_enabled():
+	value = frappe.conf.get(STRICT_SCOPE_FLAG)
+	return True if value is None else bool(value)
+
+
+def _caller_is_tenant_scoped(user):
+	"""Does this caller live inside the tenant boundary at all?
+
+	Membership is decided by holding a `Company` User Permission, not by having an
+	Employee. That is the population the boundary actually applies to, and it
+	deliberately leaves out the accounts that have no shop: the gateway's SSO user,
+	service accounts, background jobs. Blacking those out would break login and the
+	tills while protecting nobody.
+	"""
+	if user in ("Administrator", "Guest"):
+		return False
+	if OWNER_ROLES & set(frappe.get_roles(user)):
+		return False
+	cache = getattr(frappe.local, "_barakat_tenant_scoped", None)
+	if cache is None:
+		cache = {}
+		frappe.local._barakat_tenant_scoped = cache
+	if user not in cache:
+		cache[user] = bool(
+			frappe.get_all(
+				"User Permission",
+				filters={"user": user, "allow": "Company"},
+				limit=1,
+				ignore_permissions=True,
+			)
+		)
+	return cache[user]
+
+
+def unscopable_block(user, doctype):
+	"""`"1=0"` when a shop-owned doctype has no company column at all, else `""`.
+
+	This is the guarantee the marker fields cannot give on their own. A Company User
+	Permission binds through a Link-to-Company field; a doctype with none is simply
+	not filtered, which is how every shop's Contact and Item Price rows stayed
+	readable by any Cashier until 2026-08-05. The markers closed the two known cases.
+	This closes the CLASS: a persona-reachable doctype that nobody has classified
+	shows nothing rather than everything.
+
+	Unlike the rest of this module it applies to every tenant-scoped caller, not only
+	to someone working in two shops -- the leak it answers never needed two shops.
+
+	Four things deliberately do NOT trigger it, each one a way it could otherwise take
+	a shop down for no security gain:
+
+	  1. `COMPANY_NEUTRAL_DOCTYPES` -- classified as genuinely site-wide.
+	  2. A doctype whose marker THIS APP SHIPS but whose column is not there yet.
+	     Patches run before `sync_fixtures`, so mid-deploy the column is briefly
+	     missing: measured on qa-test on 2026-08-05, `Supplier Group` and `Territory`
+	     read as unscopable for about twenty minutes after the code landed. Blocking
+	     then would empty a live supplier form for every cashier during a deploy.
+	  3. A meta that cannot be READ. `company_field_for` cannot tell "no such field"
+	     from "could not load the doctype", and a transient failure must never become
+	     a blackout.
+	  4. A caller outside the tenant boundary -- see `_caller_is_tenant_scoped`.
+
+	Every block is logged at ERROR with the doctype and user, because a silent
+	blackout is indistinguishable from an empty table.
+	"""
+	if not strict_scope_enabled():
+		return ""
+	if doctype in COMPANY_NEUTRAL_DOCTYPES or doctype in COMPANY_FIELD_OVERRIDES:
+		return ""
+	try:
+		meta = frappe.get_meta(doctype)
+	except Exception:
+		return ""
+	if meta.get_field("company") or meta.get_field("custom_company"):
+		return ""
+	if doctype in COMPANY_MARKER_FIELDS:
+		frappe.logger("barakat").warning(
+			f"company marker for {doctype} is not in place yet; not blocking. "
+			f"If this persists after a migrate, the fixture failed to sync."
+		)
+		return ""
+	if not _caller_is_tenant_scoped(user):
+		return ""
+	frappe.logger("barakat").error(
+		f"BLOCKED {doctype} for {user}: it is reachable by a persona but carries no "
+		f"company column, so it cannot be scoped. Give it a marker "
+		f"(barakat.overrides.company_marker) or declare it in COMPANY_NEUTRAL_DOCTYPES."
+	)
+	return "1=0"
 
 
 def active_company():
@@ -253,6 +348,11 @@ def has_permission(doc, ptype="read", user=None, **kwargs):
 	"""
 	user = user or frappe.session.user
 	doctype = doc.get("doctype") if isinstance(doc, dict) else getattr(doc, "doctype", None)
+
+	# Mirrors the list query: opening one document directly must not walk around it.
+	if unscopable_block(user, doctype):
+		return False
+
 	scope = scope_for(user, doctype)
 	if scope is None:
 		return True
@@ -280,6 +380,13 @@ def get_permission_query_conditions(user=None, doctype=None):
 	unaffected user keeps the exact query they had before.
 	"""
 	user = user or frappe.session.user
+
+	# Before anything else, and for EVERY tenant-scoped caller rather than only a
+	# multi-company one: a shop-owned doctype with no company column is refused.
+	blocked = unscopable_block(user, doctype)
+	if blocked:
+		return blocked
+
 	scope = scope_for(user, doctype)
 	if scope is None:
 		return ""

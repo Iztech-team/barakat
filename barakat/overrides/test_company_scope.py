@@ -12,6 +12,7 @@ catches a marker that was removed, renamed, or downgraded from Link to Data.
 
 import json
 import pathlib
+import unittest.mock
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -21,6 +22,8 @@ from barakat.overrides.company_scope import (
 	COMPANY_NEUTRAL_DOCTYPES,
 	GUARDED_DOCTYPES,
 	company_field_for,
+	strict_scope_enabled,
+	unscopable_block,
 )
 
 FIXTURE = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "custom_field.json"
@@ -101,6 +104,59 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 						self.assertEqual(
 							shipped[key].get(attribute), field.get(attribute), attribute
 						)
+
+	def test_no_guarded_doctype_is_blocked_today(self):
+		"""The blackout must be inert on a healthy site.
+
+		If this fails, real users are seeing an empty list RIGHT NOW. It is the test
+		to run first when someone reports "the list went blank after the update".
+		"""
+		blocked = sorted(
+			doctype
+			for doctype in GUARDED_DOCTYPES
+			if unscopable_block("test-tenant-user@example.com", doctype)
+		)
+		self.assertEqual(blocked, [], f"these are being blacked out: {blocked}")
+
+	def test_a_shop_owned_doctype_with_no_company_column_is_refused(self):
+		"""The point of the whole thing: an unclassified doctype shows nothing."""
+		self.assertTrue(strict_scope_enabled(), "kill switch is off on this site")
+		with unittest.mock.patch(
+			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=True
+		):
+			# `Note` is a real doctype with no company field, and is not classified.
+			self.assertEqual(unscopable_block("someone@example.com", "Note"), "1=0")
+
+	def test_rail_1_a_doctype_we_ship_a_marker_for_is_never_blocked(self):
+		"""Mid-deploy the column is briefly absent; blocking then empties live forms."""
+		for doctype in COMPANY_MARKER_FIELDS:
+			with self.subTest(doctype=doctype):
+				with unittest.mock.patch(
+					"barakat.overrides.company_scope.company_field_for", return_value=None
+				), unittest.mock.patch(
+					"barakat.overrides.company_scope._caller_is_tenant_scoped",
+					return_value=True,
+				):
+					self.assertEqual(unscopable_block("someone@example.com", doctype), "")
+
+	def test_rail_3_an_unreadable_meta_never_blacks_out(self):
+		"""A transient failure must not be mistaken for a missing column."""
+		with unittest.mock.patch(
+			"barakat.overrides.company_scope.frappe.get_meta", side_effect=Exception("boom")
+		):
+			self.assertEqual(unscopable_block("someone@example.com", "Note"), "")
+
+	def test_rail_4_a_caller_outside_the_tenant_boundary_is_untouched(self):
+		"""Service accounts and the gateway hold no Company permission and must pass."""
+		with unittest.mock.patch(
+			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=False
+		):
+			self.assertEqual(unscopable_block("service@example.com", "Note"), "")
+
+	def test_the_kill_switch_disables_it_entirely(self):
+		with unittest.mock.patch.dict(frappe.conf, {"barakat_strict_company_scope": 0}):
+			self.assertFalse(strict_scope_enabled())
+			self.assertEqual(unscopable_block("someone@example.com", "Note"), "")
 
 	def test_markers_are_link_fields_pointing_at_company(self):
 		"""A Data field named `company` holds a name, not a link, and cannot be pinned."""
