@@ -82,6 +82,8 @@ fixtures = [
 					"Contact-custom_company",
 					"Item Price-custom_company",
 					"Product Bundle-custom_company",
+					"Supplier Group-custom_company",
+					"Territory-custom_company",
 					# Sales Invoice / POS Invoice
 					"Sales Invoice-custom_external_id",
 					"Sales Invoice-custom_operator_employee",
@@ -162,6 +164,15 @@ doc_events = {
 	},
 	"Product Bundle": {
 		"validate": "barakat.overrides.company_marker.stamp_product_bundle",
+	},
+	# `before_insert`, not `validate`: these have no parent to inherit from, so the
+	# only source is the caller, and re-deriving on a later save would let one shop
+	# claim a group every shop is already using. Existing rows stay shared.
+	"Supplier Group": {
+		"before_insert": "barakat.overrides.company_marker.stamp_new_owned_master",
+	},
+	"Territory": {
+		"before_insert": "barakat.overrides.company_marker.stamp_new_owned_master",
 	},
 	"Loyalty Program": {
 		"validate": "barakat.validations.validate_loyalty_program_tier_names",

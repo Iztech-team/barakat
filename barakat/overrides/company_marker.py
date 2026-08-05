@@ -85,6 +85,25 @@ COMPANY_MARKER_FIELDS = {
 			"insert_after": "description",
 		}
 	],
+	# The two tree masters. Marker only, no backfill -- see `stamp_new_owned_master`.
+	"Supplier Group": [
+		{
+			"fieldname": "custom_company",
+			"label": "Company (Barakat)",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "supplier_group_name",
+		}
+	],
+	"Territory": [
+		{
+			"fieldname": "custom_company",
+			"label": "Company (Barakat)",
+			"fieldtype": "Link",
+			"options": "Company",
+			"insert_after": "territory_name",
+		}
+	],
 }
 
 
@@ -165,5 +184,36 @@ def stamp_product_bundle(doc, method=None):
 	if (doc.get("custom_company") or "").strip():
 		return
 	company = _company_of_item(doc.get("new_item_code"))
+	if company:
+		doc.custom_company = company
+
+
+def stamp_new_owned_master(doc, method=None):
+	"""Give a NEWLY created Supplier Group / Territory its creator's company.
+
+	Wired on `before_insert`, never on `validate`, and there is deliberately no
+	backfill. Both rules follow from the same fact: unlike a Contact or an Item Price,
+	these have no parent record to inherit from, so the only available source is
+	whoever is saving — and applying that to an existing row would be a land grab.
+
+	Every Supplier Group and Territory on every production site today is an ERPNext
+	seed (checked 2026-08-05 across all five: the 8 stock supplier groups and the 3
+	stock territories, and not one shop-created row anywhere). They are genuinely
+	shared: `Local` carries 801 of BOM's suppliers, `Services` is used by BOM AND
+	BOM4, and `Palestinian Territory, Occupied` is used by all eight companies.
+	Stamping one of those would not close a leak — the names are ERPNext's own — it
+	would empty another shop's picker and push them into creating a duplicate.
+
+	So existing rows stay blank, which keeps them visible to everyone, exactly as
+	`All Item Groups` and the stock Customer Groups already are (see
+	`overrides/treeview.py`). What this does buy: the first row a SHOP creates is
+	scoped from birth rather than after someone notices.
+
+	ERPNext's own seeds are inserted by Administrator, for whom
+	`_sole_permitted_company` returns "" — so a fresh install still comes up shared.
+	"""
+	if (doc.get("custom_company") or "").strip():
+		return
+	company = _sole_permitted_company()
 	if company:
 		doc.custom_company = company

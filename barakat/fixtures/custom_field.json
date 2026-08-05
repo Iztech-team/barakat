@@ -342,6 +342,30 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Supplier Group-custom_company",
+  "dt": "Supplier Group",
+  "fieldname": "custom_company",
+  "label": "Company (Barakat)",
+  "fieldtype": "Link",
+  "options": "Company",
+  "insert_after": "supplier_group_name",
+  "in_list_view": 0,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Territory-custom_company",
+  "dt": "Territory",
+  "fieldname": "custom_company",
+  "label": "Company (Barakat)",
+  "fieldtype": "Link",
+  "options": "Company",
+  "insert_after": "territory_name",
+  "in_list_view": 0,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Customer Group-custom_company",
   "dt": "Customer Group",
   "fieldname": "custom_company",

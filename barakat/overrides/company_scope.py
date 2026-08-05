@@ -99,10 +99,11 @@ GUARDED_DOCTYPES = tuple(
 #   Device                                   A till's hardware identity (id + name only).
 #                                            Owns no shop data; giving it a company is a
 #                                            product change, not a security fix.
-#   Supplier Group, Territory                Tree masters. ERPNext seeds a shared root and
-#                                            both are picked on forms every persona opens,
-#                                            so a marker here needs the same backfill work
-#                                            Customer Group already had. Leak is names only.
+#
+# `Supplier Group` and `Territory` were here until 2026-08-05 and are now marked instead.
+# Note what that did and did not achieve: every such row on every production site is an
+# ERPNext seed and stays deliberately BLANK, so nothing became hidden. The marker means
+# the first row a shop creates is scoped from birth. See `company_marker.stamp_new_owned_master`.
 COMPANY_NEUTRAL_DOCTYPES = frozenset(
 	{
 		"Currency",
@@ -114,9 +115,7 @@ COMPANY_NEUTRAL_DOCTYPES = frozenset(
 		"Holiday List Assignment",
 		"Payroll Settings",
 		"Salary Component",
-		"Supplier Group",
 		"System Settings",
-		"Territory",
 		"User",
 	}
 )

@@ -47,9 +47,15 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 			f"declare it in COMPANY_NEUTRAL_DOCTYPES.",
 		)
 
-	def test_the_three_repaired_doctypes_carry_their_marker(self):
-		"""Pin the specific regression. These three leaked; they must stay scopable."""
-		for doctype in ("Contact", "Item Price", "Product Bundle"):
+	def test_the_repaired_doctypes_carry_their_marker(self):
+		"""Pin the specific regression. These leaked; they must stay scopable."""
+		for doctype in (
+			"Contact",
+			"Item Price",
+			"Product Bundle",
+			"Supplier Group",
+			"Territory",
+		):
 			with self.subTest(doctype=doctype):
 				self.assertEqual(
 					company_field_for(doctype),
