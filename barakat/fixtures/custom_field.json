@@ -306,6 +306,42 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Contact-custom_company",
+  "dt": "Contact",
+  "fieldname": "custom_company",
+  "label": "Company (Barakat)",
+  "fieldtype": "Link",
+  "options": "Company",
+  "insert_after": "company_name",
+  "in_list_view": 0,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Item Price-custom_company",
+  "dt": "Item Price",
+  "fieldname": "custom_company",
+  "label": "Company (Barakat)",
+  "fieldtype": "Link",
+  "options": "Company",
+  "insert_after": "price_list",
+  "in_list_view": 0,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Product Bundle-custom_company",
+  "dt": "Product Bundle",
+  "fieldname": "custom_company",
+  "label": "Company (Barakat)",
+  "fieldtype": "Link",
+  "options": "Company",
+  "insert_after": "description",
+  "in_list_view": 0,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Customer Group-custom_company",
   "dt": "Customer Group",
   "fieldname": "custom_company",

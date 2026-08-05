@@ -56,6 +56,32 @@ def _assert_may_post():
 		frappe.throw(_("You are not permitted to post payroll entries."), frappe.PermissionError)
 
 
+def _assert_may_post_for(company):
+	"""The caller must actually work at `company`.
+
+	Roles are site-global — that is the whole premise `overrides/company_scope.py`
+	exists to work around — so holding `Barakat Salary Writer` says a person may post
+	payroll SOMEWHERE, never where. Without this, an Accountant of shop A could post a
+	journal into shop B's ledger; every other guard below checks the payload against
+	`company`, and none of them checks `company` against the caller.
+
+	System Manager is exempt: it is the owner / setup path, and it is never narrowed
+	anywhere else in the app either.
+	"""
+	if "System Manager" in frappe.get_roles(frappe.session.user):
+		return
+	mine = frappe.get_all(
+		"Employee",
+		filters={"user_id": frappe.session.user, "status": "Active", "company": company},
+		limit=1,
+		ignore_permissions=True,
+	)
+	if not mine:
+		frappe.throw(
+			_("You cannot post payroll for another company."), frappe.PermissionError
+		)
+
+
 def _assert_is_payroll_voucher(external_id, slip):
 	"""The voucher must belong to THIS slip, as an accrual or as a payment.
 
@@ -108,6 +134,7 @@ def post_payroll_journal(company, slip, external_id, remark=None, posting_date=N
 	than double-charge the books.
 	"""
 	_assert_may_post()
+	_assert_may_post_for(company)
 
 	if isinstance(accounts, str):
 		accounts = json.loads(accounts)

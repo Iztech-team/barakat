@@ -48,6 +48,19 @@ are granted by no Barakat role, so the DocPerm check refuses them before this ho
 is consulted — with the exception of Frappe's own desk baseline, which is why
 `user_scope.py` exists for `User` and why any future baseline finding belongs here
 too.
+
+Registration is not scoping, though. A registered doctype with no Company Link field
+has nothing to filter on, and until 2026-08-05 this module answered that case with an
+empty string - silently unfiltering the query, the exact failure mode it exists to
+prevent. Every guarded doctype is now classified: either it carries a marker, or it is
+named in `COMPANY_NEUTRAL_DOCTYPES` as genuinely site-wide. Anything else fails closed,
+so a doctype added to the matrix tomorrow is refused rather than leaked, and
+`test_company_scope.py` fails until someone decides which of the two it is.
+
+Note what this module can and cannot do. It only ever runs for a caller with ACTIVE
+Employee records in two or more companies; the boundary for everyone else is the
+`Company` User Permission, which needs the same marker field to bind to. Both layers
+depend on it, which is why `company_marker.py` exists.
 """
 
 import frappe
@@ -65,6 +78,46 @@ ACTIVE_COMPANY_HEADER = "X-Barakat-Company"
 # from. Sorted so the generated hook registration in hooks.py is deterministic.
 GUARDED_DOCTYPES = tuple(
 	sorted({dt for doctypes in MODULE_DOCTYPES.values() for dt in doctypes})
+)
+
+# Guarded doctypes that genuinely belong to the SITE, not to one shop, and so can never
+# carry a company marker. Everything else must have one or `get_permission_query_conditions`
+# fails closed - see the module docstring.
+#
+# This list is deliberately hand-written and deliberately short. Each entry is a decision
+# that a leak of these rows is acceptable, not an oversight, and `test_company_scope.py`
+# refuses any entry that has since grown a marker.
+#
+#   Currency, Fiscal Year, Holiday List,     ERPNext masters shared by every company on
+#   Holiday List Assignment, Designation,    the site. Scoping them would empty the
+#   Salary Component                         pickers on forms every persona can open.
+#   System Settings, Payroll Settings        Singles. One row, no owner. System Settings
+#                                            is also in TILL_REQUIRED_READS - filtering
+#                                            it would break every till's rounding.
+#   User                                     Frappe's desk baseline, not a Barakat grant.
+#                                            Scoped by tier in `user_scope.py` instead.
+#   Device                                   A till's hardware identity (id + name only).
+#                                            Owns no shop data; giving it a company is a
+#                                            product change, not a security fix.
+#   Supplier Group, Territory                Tree masters. ERPNext seeds a shared root and
+#                                            both are picked on forms every persona opens,
+#                                            so a marker here needs the same backfill work
+#                                            Customer Group already had. Leak is names only.
+COMPANY_NEUTRAL_DOCTYPES = frozenset(
+	{
+		"Currency",
+		"Designation",
+		"Device",
+		"Fiscal Year",
+		"Holiday List",
+		"Holiday List Assignment",
+		"Payroll Settings",
+		"Salary Component",
+		"Supplier Group",
+		"System Settings",
+		"Territory",
+		"User",
+	}
 )
 
 
@@ -142,10 +195,33 @@ def scope_for(user, doctype):
 	return set.intersection(*sets), None
 
 
-def _doc_company(doc):
+def company_field_for(doctype):
+	"""The fieldname naming this doctype's owning company, or None.
+
+	Accepts the native ERPNext `company` and the `custom_company` marker Barakat adds
+	where ERPNext ships none, because the Company User Permission binds to either -
+	all it looks for is a Link field whose `options` is Company. Checking the fieldtype
+	rather than mere presence matters: a Data field named `company` holds a company
+	NAME, not a link, and filtering on it would compare against the wrong value.
+	"""
+	try:
+		meta = frappe.get_meta(doctype)
+	except Exception:
+		return None
+	for fieldname in ("company", "custom_company"):
+		field = meta.get_field(fieldname)
+		if field and field.fieldtype == "Link" and field.options == "Company":
+			return fieldname
+	return None
+
+
+def _doc_company(doc, doctype):
+	field = company_field_for(doctype)
+	if not field:
+		return ""
 	if isinstance(doc, dict):
-		return (doc.get("company") or "").strip()
-	return (getattr(doc, "company", "") or "").strip()
+		return (doc.get(field) or "").strip()
+	return (getattr(doc, field, "") or "").strip()
 
 
 def has_permission(doc, ptype="read", user=None, **kwargs):
@@ -163,19 +239,16 @@ def has_permission(doc, ptype="read", user=None, **kwargs):
 	if ptype not in allowed:
 		return False
 	if pinned:
-		company = _doc_company(doc)
-		# A doctype with no company field is not company-owned; the persona check
-		# above is the whole decision for it.
+		if not company_field_for(doctype) and doctype not in COMPANY_NEUTRAL_DOCTYPES:
+			# Shop-owned, but nothing on the row says which shop. Refuse, for the same
+			# reason the list query returns `1=0`.
+			return False
+		company = _doc_company(doc, doctype)
+		# A company-neutral doctype is not shop-owned; the persona check above is the
+		# whole decision for it.
 		if company and company != pinned:
 			return False
 	return True
-
-
-def _has_company_field(doctype):
-	try:
-		return bool(frappe.get_meta(doctype).get_field("company"))
-	except Exception:
-		return False
 
 
 def get_permission_query_conditions(user=None, doctype=None):
@@ -194,6 +267,12 @@ def get_permission_query_conditions(user=None, doctype=None):
 		# Matches nothing. `1=0` rather than an empty string, which would silently
 		# unfilter the query — the failure mode this whole module exists to prevent.
 		return "1=0"
-	if pinned and _has_company_field(doctype):
-		return f"`tab{doctype}`.`company` = {frappe.db.escape(pinned)}"
+	if pinned:
+		field = company_field_for(doctype)
+		if field:
+			return f"`tab{doctype}`.`{field}` = {frappe.db.escape(pinned)}"
+		if doctype not in COMPANY_NEUTRAL_DOCTYPES:
+			# Shop-owned, but there is no column to pin it by. Returning "" here is
+			# what leaked every shop's Contact and Item Price rows until 2026-08-05.
+			return "1=0"
 	return ""

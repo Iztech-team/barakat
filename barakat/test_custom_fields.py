@@ -66,6 +66,22 @@ class CompanyMarkersAreEnforceable(unittest.TestCase):
         self.assertEqual(f["fieldtype"], "Link")
         self.assertEqual(f["options"], "Company")
 
+    def test_the_2026_08_05_leak_markers_are_shipped(self):
+        # Contact, Item Price and Product Bundle had NO company field of any kind, so
+        # the Company user permission had no link field to bind to and every persona
+        # read every shop's rows. Measured on prod: a Cashier of one shop saw all 405
+        # contacts (271 with a mobile number) and all 34,719 item prices.
+        for name in (
+            "Contact-custom_company",
+            "Item Price-custom_company",
+            "Product Bundle-custom_company",
+        ):
+            with self.subTest(field=name):
+                f = _by_name(self.rows, name)
+                self.assertIsNotNone(f, f"{name} missing from fixtures")
+                self.assertEqual(f["fieldtype"], "Link")
+                self.assertEqual(f["options"], "Company")
+
     def test_uom_has_enforceable_company_marker(self):
         f = _by_name(self.rows, "UOM-custom_company")
         self.assertIsNotNone(f, "UOM must carry a custom_company marker")

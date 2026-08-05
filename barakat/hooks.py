@@ -75,6 +75,13 @@ fixtures = [
 					"Customer-custom_company",
 					"Customer-custom_branch",
 					"Customer-custom_date_of_birth",
+					# Company markers on doctypes ERPNext gives no company field.
+					# Without these the Company User Permission has no Link field to
+					# bind to and the rows are readable by every shop on the site —
+					# see barakat.overrides.company_marker.
+					"Contact-custom_company",
+					"Item Price-custom_company",
+					"Product Bundle-custom_company",
 					# Sales Invoice / POS Invoice
 					"Sales Invoice-custom_external_id",
 					"Sales Invoice-custom_operator_employee",
@@ -143,6 +150,18 @@ doc_events = {
 	},
 	"Customer": {
 		"validate": "barakat.validations.validate_customer_mobile_unique",
+	},
+	# Inherit the owning company onto the three doctypes ERPNext gives no company
+	# field. The marker is what the Company User Permission binds to; an unstamped
+	# row is visible to every shop on the site. See barakat.overrides.company_marker.
+	"Contact": {
+		"validate": "barakat.overrides.company_marker.stamp_contact",
+	},
+	"Item Price": {
+		"validate": "barakat.overrides.company_marker.stamp_item_price",
+	},
+	"Product Bundle": {
+		"validate": "barakat.overrides.company_marker.stamp_product_bundle",
 	},
 	"Loyalty Program": {
 		"validate": "barakat.validations.validate_loyalty_program_tier_names",
