@@ -22,6 +22,9 @@ STAFF_OLD = "test-staff-login-old@barakat.invalid"
 STAFF_NEW = "test-staff-login-new@barakat.invalid"
 OUTSIDER = "test-staff-login-outsider@barakat.invalid"
 CASHIER = "test-staff-login-cashier@barakat.invalid"
+# A login with no Employee record at all — the shape an owner or a service
+# account has. Not staff, therefore not the manager's to rename.
+ORPHAN = "test-staff-login-orphan@barakat.invalid"
 
 # The persona bundles as `staff_roles.py` grants them. The manager set is what makes
 # `User` writable at all; the cashier set deliberately does not include it.
@@ -51,6 +54,7 @@ class TestRenameLogin(FrappeTestCase):
 		)
 		self._make_user(CASHIER, "Login Test Cashier", CASHIER_ROLES)
 		self._make_employee("Login Test Cashier", CASHIER, self.company)
+		self._make_user(ORPHAN, "Login Test Orphan", CASHIER_ROLES)  # no Employee
 		if self.other_company:
 			self._make_user(OUTSIDER, "Login Test Outsider", CASHIER_ROLES)
 			self._make_employee("Login Test Outsider", OUTSIDER, self.other_company)
@@ -71,7 +75,7 @@ class TestRenameLogin(FrappeTestCase):
 		):
 			for emp in frappe.get_all("Employee", filters={"employee_name": name}, pluck="name"):
 				frappe.delete_doc("Employee", emp, force=1, ignore_permissions=True)
-		for email in (MANAGER, STAFF_OLD, STAFF_NEW, OUTSIDER, CASHIER):
+		for email in (MANAGER, STAFF_OLD, STAFF_NEW, OUTSIDER, CASHIER, ORPHAN):
 			if frappe.db.exists("User", email):
 				frappe.delete_doc("User", email, force=1, ignore_permissions=True)
 		frappe.db.commit()
@@ -192,6 +196,29 @@ class TestRenameLogin(FrappeTestCase):
 
 		frappe.set_user("Administrator")
 		self.assertTrue(frappe.db.exists("User", STAFF_OLD))
+
+	def test_a_login_with_no_staff_record_is_out_of_reach(self):
+		# Runs on every site, unlike the cross-company case below: a user with no
+		# Employee is not staff of anyone's shop, so the scope check must refuse it
+		# even though the caller holds `User` write.
+		frappe.set_user(MANAGER)
+		with self.assertRaises(frappe.PermissionError):
+			rename_login(old_email=ORPHAN, new_email=STAFF_NEW)
+
+		frappe.set_user("Administrator")
+		self.assertTrue(frappe.db.exists("User", ORPHAN))
+
+	def test_a_password_may_still_be_set_on_the_renamed_login(self):
+		# The panel allows changing the email AND the password in one save, and the
+		# proxy applies the password to the NEW name straight after the rename,
+		# under the caller's own session. So that write has to stay possible for a
+		# manager once the rename has moved the account.
+		frappe.set_user(MANAGER)
+		rename_login(old_email=STAFF_OLD, new_email=STAFF_NEW)
+
+		renamed = frappe.get_doc("User", STAFF_NEW)
+		renamed.new_password = "An0ther-Test-Pass!42"
+		renamed.save()
 
 	def test_another_shops_staff_is_out_of_reach(self):
 		if not self.other_company:
