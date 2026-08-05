@@ -109,6 +109,7 @@ COMPANY_NEUTRAL_DOCTYPES = frozenset(
 		"Designation",
 		"Device",
 		"Fiscal Year",
+		"Global Defaults",
 		"Holiday List",
 		"Holiday List Assignment",
 		"Payroll Settings",
@@ -119,6 +120,19 @@ COMPANY_NEUTRAL_DOCTYPES = frozenset(
 		"User",
 	}
 )
+
+# Doctypes whose owning company is named by something the two standard field names
+# miss. Both were found by `test_company_scope.py` rather than by reading, which is the
+# point of having it.
+#
+#   Branch   ERPNext's Branch has no company at all; Barakat adds `custom_pos_company`.
+#   Company  is pinned by its own name. Frappe binds a Company User Permission to the
+#            `name` of the Company doctype itself, which is why a Company list is
+#            already correctly scoped (1 of 8 on prod) with no `company` field in sight.
+COMPANY_FIELD_OVERRIDES = {
+	"Branch": "custom_pos_company",
+	"Company": "name",
+}
 
 
 def active_company():
@@ -203,7 +217,16 @@ def company_field_for(doctype):
 	all it looks for is a Link field whose `options` is Company. Checking the fieldtype
 	rather than mere presence matters: a Data field named `company` holds a company
 	NAME, not a link, and filtering on it would compare against the wrong value.
+
+	Resolved by name rather than by "any Link to Company" on purpose. Several doctypes
+	carry a Company link that is not ownership -- `Customer.represents_company`,
+	`Company.parent_company` -- and pinning on one of those would filter the list by
+	the wrong relationship. Anything the two standard names miss is declared in
+	COMPANY_FIELD_OVERRIDES, and `test_company_scope.py` fails until it is.
 	"""
+	override = COMPANY_FIELD_OVERRIDES.get(doctype)
+	if override:
+		return override
 	try:
 		meta = frappe.get_meta(doctype)
 	except Exception:

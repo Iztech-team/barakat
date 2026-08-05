@@ -100,9 +100,11 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 		"""A Data field named `company` holds a name, not a link, and cannot be pinned."""
 		for doctype in GUARDED_DOCTYPES:
 			field = company_field_for(doctype)
-			if not field:
+			if not field or field == "name":
+				# `Company` is pinned by its own name, which is not a field at all.
 				continue
 			with self.subTest(doctype=doctype):
 				meta_field = frappe.get_meta(doctype).get_field(field)
+				self.assertIsNotNone(meta_field, f"{doctype}.{field} does not exist")
 				self.assertEqual(meta_field.fieldtype, "Link")
 				self.assertEqual(meta_field.options, "Company")
