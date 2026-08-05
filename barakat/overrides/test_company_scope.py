@@ -118,20 +118,36 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 		)
 		self.assertEqual(blocked, [], f"these are being blacked out: {blocked}")
 
-	def test_a_shop_owned_doctype_with_no_company_column_is_refused(self):
-		"""The point of the whole thing: an unclassified doctype shows nothing."""
-		self.assertTrue(strict_scope_enabled(), "kill switch is off on this site")
+	def test_it_is_off_unless_a_site_opts_in(self):
+		"""Default OFF. A site arms it deliberately; it is never inherited."""
+		self.assertFalse(strict_scope_enabled())
 		with unittest.mock.patch(
 			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=True
 		):
+			self.assertEqual(unscopable_block("someone@example.com", "Note"), "")
+
+	def test_a_shop_owned_doctype_with_no_company_column_is_refused_when_armed(self):
+		"""The point of the whole thing: an unclassified doctype shows nothing."""
+		with unittest.mock.patch.dict(
+			frappe.conf, {"barakat_strict_company_scope": 1}
+		), unittest.mock.patch(
+			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=True
+		):
+			self.assertTrue(strict_scope_enabled())
 			# `Note` is a real doctype with no company field, and is not classified.
 			self.assertEqual(unscopable_block("someone@example.com", "Note"), "1=0")
+
+	# The three rails below are only meaningful with the switch ARMED. Without
+	# `_armed()` the flag short-circuits first and every one of them passes for the
+	# wrong reason — a green test that proves nothing.
+	def _armed(self):
+		return unittest.mock.patch.dict(frappe.conf, {"barakat_strict_company_scope": 1})
 
 	def test_rail_1_a_doctype_we_ship_a_marker_for_is_never_blocked(self):
 		"""Mid-deploy the column is briefly absent; blocking then empties live forms."""
 		for doctype in COMPANY_MARKER_FIELDS:
 			with self.subTest(doctype=doctype):
-				with unittest.mock.patch(
+				with self._armed(), unittest.mock.patch(
 					"barakat.overrides.company_scope.company_field_for", return_value=None
 				), unittest.mock.patch(
 					"barakat.overrides.company_scope._caller_is_tenant_scoped",
@@ -141,19 +157,21 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 
 	def test_rail_3_an_unreadable_meta_never_blacks_out(self):
 		"""A transient failure must not be mistaken for a missing column."""
-		with unittest.mock.patch(
+		with self._armed(), unittest.mock.patch(
 			"barakat.overrides.company_scope.frappe.get_meta", side_effect=Exception("boom")
+		), unittest.mock.patch(
+			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=True
 		):
 			self.assertEqual(unscopable_block("someone@example.com", "Note"), "")
 
 	def test_rail_4_a_caller_outside_the_tenant_boundary_is_untouched(self):
 		"""Service accounts and the gateway hold no Company permission and must pass."""
-		with unittest.mock.patch(
+		with self._armed(), unittest.mock.patch(
 			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=False
 		):
 			self.assertEqual(unscopable_block("service@example.com", "Note"), "")
 
-	def test_the_kill_switch_disables_it_entirely(self):
+	def test_disarming_it_again_stops_the_blackout(self):
 		with unittest.mock.patch.dict(frappe.conf, {"barakat_strict_company_scope": 0}):
 			self.assertFalse(strict_scope_enabled())
 			self.assertEqual(unscopable_block("someone@example.com", "Note"), "")

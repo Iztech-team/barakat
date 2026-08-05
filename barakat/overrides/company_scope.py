@@ -134,14 +134,19 @@ COMPANY_FIELD_OVERRIDES = {
 	"Company": "name",
 }
 
-# Kill switch. Set `"barakat_strict_company_scope": 0` in the site's site_config.json
-# and `bench clear-cache` to disable the blackout below WITHOUT a deploy. Default on.
+# OPT-IN, and off unless a site asks for it. Set `"barakat_strict_company_scope": 1` in
+# that site's site_config.json and `bench clear-cache` to arm the blackout below; remove
+# it to disarm. No deploy either way.
+#
+# Off by default on purpose. The blackout is the only thing in this module that can empty
+# a list a shop is using, and defaulting it on would arm every site that gets created
+# later without anyone deciding to. It is a tool to reach for when a site wants the
+# stricter posture, not a behaviour to inherit silently.
 STRICT_SCOPE_FLAG = "barakat_strict_company_scope"
 
 
 def strict_scope_enabled():
-	value = frappe.conf.get(STRICT_SCOPE_FLAG)
-	return True if value is None else bool(value)
+	return bool(frappe.conf.get(STRICT_SCOPE_FLAG))
 
 
 def _caller_is_tenant_scoped(user):
