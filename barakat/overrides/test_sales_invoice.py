@@ -585,3 +585,54 @@ class TestPaidAmountSettledWithoutCash(FrappeTestCase):
         si = self._consolidated()
         si.append("payments", {"amount": 135.0})
         si.validate_pos_paid_amount()  # must not raise
+
+
+class TestConsolidatedInvoiceTaxes(FrappeTestCase):
+    """The `set_taxes` override that stops a merged invoice inventing taxes.
+
+    A consolidated Sales Invoice arrives at save() with its totals already fixed by
+    `merge_pos_invoice_into` and its tax rows copied from the source POS invoices. If
+    those sales were tax-free the table is empty, and stock ERPNext then treats the
+    empty table as a gap to fill from the POS Profile's template — crediting tax
+    accounts for money the customer was never charged. The voucher stops balancing
+    ("Debit and Credit not equal for Sales Invoice #… Difference is -46.08.") and the
+    shift can never be closed.
+
+    `append_taxes_from_master` is the single call that materialises template rows, so
+    these assert on it directly: deterministic, and independent of which templates
+    happen to exist on the site.
+    """
+
+    def _new(self, **fields):
+        si = frappe.new_doc("Sales Invoice")
+        si.is_pos = 1
+        si.company = frappe.get_all("Company", pluck="name", limit_page_length=1)[0]
+        for key, value in fields.items():
+            setattr(si, key, value)
+        return si
+
+    def test_consolidated_invoice_never_pulls_taxes_from_a_template(self):
+        from unittest.mock import patch
+
+        si = self._new(is_consolidated=1, taxes_and_charges="ANY-TEMPLATE")
+        with patch.object(type(si), "append_taxes_from_master") as spy:
+            si.set_taxes()
+        spy.assert_not_called()
+        self.assertEqual(si.get("taxes"), [], "a tax-free sale must stay tax-free")
+
+    def test_consolidated_invoice_keeps_the_rows_the_merge_gave_it(self):
+        # The merge copies the source invoices' tax rows across; those must survive
+        # untouched. This is the ordinary taxed shift, and it must not regress.
+        si = self._new(is_consolidated=1)
+        si.append("taxes", {"charge_type": "Actual", "description": "VAT", "tax_amount": 12.8})
+        si.set_taxes()
+        self.assertEqual(len(si.get("taxes")), 1)
+        self.assertEqual(flt(si.get("taxes")[0].tax_amount), 12.8)
+
+    def test_an_ordinary_invoice_still_gets_its_template_taxes(self):
+        from unittest.mock import patch
+
+        si = self._new(is_consolidated=0)
+        with patch.object(type(si), "append_taxes_from_master") as spy:
+            si.set_taxes()
+        spy.assert_called_once()

@@ -27,8 +27,48 @@ class BarakatSalesInvoice(SalesInvoice):
 	frappe/erpnext#41514, #41036, #31509) — nothing in core books POS loyalty redemptions.
 
 	A third override lets a shift close when a sale took no cash at all — see
-	`validate_pos_paid_amount`.
+	`validate_pos_paid_amount`. A fourth stops a consolidated invoice inventing taxes the
+	original sale never charged — see `set_taxes`.
 	"""
+
+	# ── shift close: taxes are copied, never re-derived ───────────────────────────
+
+	def set_taxes(self):
+		"""A consolidated invoice's taxes are whatever the merge copied — including none.
+
+		`AccountsController.set_taxes` fills a NEW document's empty tax table from the
+		`taxes_and_charges` template, and `SalesInvoice.set_pos_fields` has just put the
+		POS Profile's template there (it copies that field onto any POS invoice lacking
+		one). Between them, a merged shift-close invoice whose source sales carried NO tax
+		silently acquires the profile's current tax rates.
+
+		That is always wrong and sometimes fatal. `merge_pos_invoice_into` has already
+		fixed `net_total`, `grand_total` and `rounded_total` from the source invoices, and
+		the customer paid that figure. Bolting a tax on afterwards credits tax accounts
+		with money nobody was charged while the receivable still shows the original total,
+		so the voucher does not balance and ERPNext refuses it:
+
+		    Debit and Credit not equal for Sales Invoice #… Difference is -46.08.
+
+		The shift then cannot be closed at all.
+
+		Real case (test3, 2026-08-06): a till sold tax-free all morning, tax was configured
+		at 09:50 while the shift was still open, and at close the four earlier sales each
+		grew the newly created template's rates. Nothing about those sales changed — the
+		configuration appeared underneath them.
+
+		Only invoices with an EMPTY tax table are affected, which is why a shift of
+		ordinarily-taxed sales never hits this: their rows come from the merge and
+		`set_taxes` leaves a non-empty table alone. The fix is to make that true
+		unconditionally for a consolidated invoice, so "the sale carried no tax" is
+		honoured as a fact rather than read as a gap to fill in.
+
+		Deliberately NOT limited to the empty case: re-deriving tax on a consolidated
+		invoice is never correct, whatever the table currently holds.
+		"""
+		if cint(self.get("is_consolidated")):
+			return
+		super().set_taxes()
 
 	# ── shift close: a sale that took no cash ─────────────────────────────────────
 
