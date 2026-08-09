@@ -20,3 +20,4 @@ barakat.patches.repair_stock_adjustment_accounts
 barakat.patches.scope_payment_mode_accounts
 barakat.patches.disable_orphaned_staff_logins
 barakat.patches.scope_contact_item_price_company
+barakat.patches.align_loyalty_purchase_amount

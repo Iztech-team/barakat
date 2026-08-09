@@ -3,6 +3,8 @@ from frappe.utils import cint, cstr, flt
 
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 
+from barakat.overrides.loyalty import align_loyalty_spend
+
 
 class BarakatSalesInvoice(SalesInvoice):
 	"""Book POS loyalty redemptions to the general ledger.
@@ -28,7 +30,8 @@ class BarakatSalesInvoice(SalesInvoice):
 
 	A third override lets a shift close when a sale took no cash at all — see
 	`validate_pos_paid_amount`. A fourth stops a consolidated invoice inventing taxes the
-	original sale never charged — see `set_taxes`.
+	original sale never charged — see `set_taxes`. A fifth makes the loyalty ledger record
+	each bill once, instead of once whole and once net — see `on_submit`.
 	"""
 
 	# ── shift close: taxes are copied, never re-derived ───────────────────────────
@@ -120,6 +123,22 @@ class BarakatSalesInvoice(SalesInvoice):
 		payable = flt(self.get("rounded_total")) or flt(self.get("grand_total"))
 		covered = flt(self.get("loyalty_amount")) + flt(self.get("write_off_amount"))
 		return payable > 0 and covered >= payable
+
+	# ── loyalty ledger ────────────────────────────────────────────────────────────
+
+	def on_submit(self):
+		"""Submit, then make the loyalty ledger's money add up to this bill exactly once.
+
+		Runs after `super()` rather than replacing either of the two methods that write
+		the rows, because both of them write it wrong and they run in a different order
+		on a Sales Invoice than on a POS Invoice. Correcting once, after everything has
+		been written, is the one place that holds for both — and it is still inside this
+		submit, so nothing outside the request ever reads the inflated total.
+
+		See `barakat.overrides.loyalty` for the rule and why it exists.
+		"""
+		super().on_submit()
+		align_loyalty_spend(self)
 
 	# ── sale ──────────────────────────────────────────────────────────────────────
 

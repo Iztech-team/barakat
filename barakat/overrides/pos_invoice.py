@@ -5,6 +5,8 @@ from frappe import _
 from frappe.utils import cint, getdate
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 
+from barakat.overrides.loyalty import align_loyalty_spend
+
 
 def _rule_names(raw):
 	"""The Pricing Rule names inside an item row's `pricing_rules` field.
@@ -34,6 +36,21 @@ class BarakatPOSInvoice(POSInvoice):
 	def validate(self):
 		super().validate()
 		self.restore_pos_pricing_rule_details()
+
+	def on_submit(self):
+		"""Submit, then make the loyalty ledger's money add up to this bill exactly once.
+
+		The same correction `BarakatSalesInvoice` makes, repeated rather than inherited:
+		erpnext's `POSInvoice` extends `SalesInvoice`, but this class extends `POSInvoice`,
+		so it does NOT pick up our Sales Invoice override. This is the copy that matters
+		in production — `SalesInvoice.on_submit` gates all three of its loyalty paths on
+		`not is_consolidated`, so the invoice a shift close produces writes no ledger rows
+		at all, and every Barakat sale reaches the ledger as a POS Invoice.
+
+		See `barakat.overrides.loyalty` for the rule and why it exists.
+		"""
+		super().on_submit()
+		align_loyalty_spend(self)
 
 	def restore_pos_pricing_rule_details(self):
 		"""Rebuild the header Pricing Rule Detail table from the item rows.
