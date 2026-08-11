@@ -82,9 +82,30 @@ MODULE_DOCTYPES = {
 	"inventory": ("Stock Entry", "Stock Reconciliation", "Stock Ledger Entry", "Bin"),
 	"warehouses": ("Warehouse",),
 	"branches": ("Branch",),
-	"staff": ("Employee", "Designation", "Holiday List", "Holiday List Assignment", "User"),
+	# `Employee Device` is here rather than under `attendance` on purpose. Pairing a
+	# phone to a person is the one action in the presence feature that can be used to
+	# commit fraud -- pair a friend's phone, leave it in the shop, go home -- and
+	# `staff: write` is the narrower gate: it is Manager-only, while `attendance:
+	# write` is also held by HR. HR keeps `staff: read`, so HR can see pairings and
+	# cannot create them.
+	"staff": (
+		"Employee",
+		"Designation",
+		"Holiday List",
+		"Holiday List Assignment",
+		"User",
+		"Employee Device",
+	),
 	"roles": (),
-	"attendance": ("Attendance",),
+	# Presence rows are read by whoever reads attendance: Manager and HR. They are the
+	# evidence behind an automatic check-in, so anyone looking at an attendance record
+	# has to be able to see where it came from.
+	"attendance": (
+		"Attendance",
+		"Presence Device",
+		"Presence Session",
+		"Presence Sighting",
+	),
 	"salary": (
 		"Salary Slip",
 		"Salary Structure",
@@ -98,12 +119,17 @@ MODULE_DOCTYPES = {
 	# gated on `settings`, and its confirm route is mutate('settings'). Missing it made
 	# the company-accounts page tell a Manager "1 account still needs confirmation"
 	# forever — the step could not even be READ. Caught on osa 2026-07-29.
+	# `Presence Settings` and `Presence Till` are configuration, not attendance data:
+	# turning wifi presence on for a company, and approving which tills may report.
+	# Both are Manager work, and both sit behind the same gate as the other settings.
 	"settings": (
 		"Company",
 		"Global Defaults",
 		"System Settings",
 		"POS Scale Settings",
 		"Cost Center",
+		"Presence Settings",
+		"Presence Till",
 	),
 	# Price List is OWNED here, not just picked: the AP's price-list routes are
 	# gated on `accounting` (view/mutate), so an Accountant must be able to WRITE one.
