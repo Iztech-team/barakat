@@ -72,3 +72,40 @@ def apply_report(state, report):
 			decisions.append(Decision(ARRIVED, device_key, report.at))
 
 	return decisions
+
+
+def tick(state, now, wait, stale_after):
+	"""Age out devices nobody has seen for `wait`. Returns any departures.
+
+	`stale_after` guards the case that matters most: if no settled watcher has reported
+	recently, the branch is unreachable, not empty. Ageing devices out then would mark
+	an entire shop as having gone home because one till lost power.
+
+	A departure's `at` is when the device was last seen, never `now`. Someone who left
+	at 17:12 left at 17:12, not at 17:27 when the wait ran out.
+	"""
+
+	if not _branch_is_covered(state, now, stale_after):
+		return []
+
+	decisions = []
+	for device_key in sorted(state.present):
+		last_seen = state.last_seen[device_key]
+		if now - last_seen > wait:
+			state.present.discard(device_key)
+			decisions.append(Decision(DEPARTED, device_key, last_seen))
+
+	return decisions
+
+
+def _branch_is_covered(state, now, stale_after):
+	"""True when at least one watcher past its warm-up has reported recently.
+
+	Both halves are required. A watcher still warming up has no opinion worth acting
+	on, and a watcher that reported an hour ago is not telling us about now.
+	"""
+
+	return any(
+		settled and (now - reported_at) <= stale_after
+		for reported_at, settled in state.till_last_report.values()
+	)
