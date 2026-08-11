@@ -2,9 +2,10 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import cint, getdate
+from frappe.utils import cint, flt, getdate
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 
+from barakat.cashier_limits import discount_over_cap, has_ad_hoc_line
 from barakat.overrides.loyalty import align_loyalty_spend
 
 
@@ -32,10 +33,28 @@ def _rule_names(raw):
 	return [str(name).strip() for name in parsed if str(name).strip()]
 
 
+def _profile_limits(pos_profile):
+	"""The cashier-limit fields of a POS Profile, as a plain dict.
+
+	Its own function so the tests can stub the lookup instead of creating a
+	profile — the rule under test is the comparison, not one site's data.
+	"""
+	return (
+		frappe.db.get_value(
+			"POS Profile",
+			pos_profile,
+			["custom_allow_ad_hoc_item", "custom_max_discount_percent"],
+			as_dict=True,
+		)
+		or {}
+	)
+
+
 class BarakatPOSInvoice(POSInvoice):
 	def validate(self):
 		super().validate()
 		self.restore_pos_pricing_rule_details()
+		self.validate_cashier_limits()
 
 	def on_submit(self):
 		"""Submit, then make the loyalty ledger's money add up to this bill exactly once.
@@ -51,6 +70,52 @@ class BarakatPOSInvoice(POSInvoice):
 		"""
 		super().on_submit()
 		align_loyalty_spend(self)
+
+	def validate_cashier_limits(self):
+		"""Enforce the selling profile's two server-visible cashier limits.
+
+		Keyed off the POS Profile, never off a role: the till authenticates as a
+		Manager or Branch Supervisor device session with the cashier identified
+		only by a PIN, so the submitting user says nothing about who rang the
+		sale. See barakat/persona_matrix.py (the Cashier row).
+		"""
+		if not self.pos_profile:
+			# A consolidated or hand-made invoice is not a till. Never judge it
+			# by a till's limits.
+			return
+
+		limits = _profile_limits(self.pos_profile)
+
+		if not cint(limits.get("custom_allow_ad_hoc_item")):
+			if has_ad_hoc_line(row.item_code for row in (self.items or [])):
+				frappe.throw(
+					_(
+						"This till is not allowed to sell custom items. "
+						"Remove the typed-in line, or enable "
+						"'Allow custom items' on POS Profile {0}."
+					).format(self.pos_profile),
+					title=_("Custom items not allowed"),
+				)
+
+		# A refund's discount mirrors the original sale's — it was already judged
+		# when that sale posted. A zero grand total is the rounding-collapse free
+		# order push-orders.ts creates by discounting the whole subtotal.
+		if cint(self.is_return) or not flt(self.grand_total):
+			return
+
+		max_percent = limits.get("custom_max_discount_percent")
+		if discount_over_cap(
+			self.discount_amount,
+			self.total,
+			max_percent,
+			self.precision("grand_total"),
+		):
+			frappe.throw(
+				_("Discount is above the {0}% limit set on POS Profile {1}.").format(
+					flt(max_percent), self.pos_profile
+				),
+				title=_("Discount too large"),
+			)
 
 	def restore_pos_pricing_rule_details(self):
 		"""Rebuild the header Pricing Rule Detail table from the item rows.
