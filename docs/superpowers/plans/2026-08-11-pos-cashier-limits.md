@@ -812,124 +812,58 @@ git commit -m "feat(customer): refuse till-created customers when the POS Profil
 
 ---
 
-### Task 5: The backfill patch and the barakat version bump
+### Task 5: The barakat version bump
 
-Without this, every POS Profile that predates the feature reads `custom_max_discount_percent` as NULL and — once Task 3 is live — could reject discounted sales at every shop. This is the same failure shape as the 2026-07-28 prod outage.
+**Superseded during execution.** This task originally added
+`barakat/patches/backfill_pos_profile_cashier_limits.py`. It was measured on the QA bench
+before being written, and **the patch is not needed and would have been dead code** — see
+the Rollout section of the spec for the evidence.
+
+In short: a POS Profile was created on `shop1.barakat.local` *before* the Task 1 fixture was
+installed, then `bench migrate` ran. Frappe adds each column `NOT NULL` with the fixture's
+`default` in the DDL, so the pre-existing row already read `0 / 0 / 100` — the intended
+backfill, done by Frappe. The planned patch guarded on `value is not None`, which a
+`NOT NULL` column can never satisfy, so it would have shipped as a permanent no-op.
+
+The real guard on the safe value is the fixture `default` itself, already pinned by
+`test_custom_fields.CashierLimitFieldsAreDeclared`.
 
 **Files:**
-- Create: `barakat/patches/backfill_pos_profile_cashier_limits.py`
-- Modify: `barakat/patches.txt`
 - Modify: `barakat/__init__.py`
 
-**Interfaces:**
-- Consumes: `barakat.cashier_limits.MAX_DISCOUNT_UNLIMITED` from Task 2.
-- Produces: nothing consumed by later tasks.
+- [ ] **Step 1: Bump the version**
 
-- [ ] **Step 1: Write the patch**
+Change `__version__` from `4.8.0` to `4.9.0`. Read the current value first.
 
-Create `barakat/patches/backfill_pos_profile_cashier_limits.py`:
-
-```python
-"""Give every pre-existing POS Profile an explicit cashier-limit setting.
-
-A profile created before these custom fields existed reads NULL for all three.
-NULL is falsy, so:
-
-  - both toggles read OFF, which is what the client asked for, and
-  - `custom_max_discount_percent` reads as ZERO, which would make
-    pos_invoice.py reject every discounted sale at every live shop the moment
-    barakat is deployed.
-
-The second one is why this patch is not optional. Backfilling 100 keeps every
-existing till selling exactly as it does today, and makes 0 mean what it says:
-a deliberate "no discounts".
-
-Idempotent: only NULL values are written, so a re-run never stomps a limit
-someone has since set on purpose — including a deliberate 0.
-
-See docs/superpowers/specs/2026-08-11-pos-cashier-limits-design.md
-"""
-
-import frappe
-
-from barakat.cashier_limits import MAX_DISCOUNT_UNLIMITED
-
-BACKFILL = {
-	"custom_allow_ad_hoc_item": 0,
-	"custom_allow_customer_creation": 0,
-	"custom_max_discount_percent": MAX_DISCOUNT_UNLIMITED,
-}
-
-
-def execute():
-	profiles = frappe.get_all("POS Profile", fields=["name", *BACKFILL])
-	if not profiles:
-		print("[barakat] no POS Profiles on this site - cashier limits backfill skipped")
-		return
-
-	written = {field: 0 for field in BACKFILL}
-
-	for row in profiles:
-		for field, value in BACKFILL.items():
-			if row.get(field) is not None:
-				continue
-			frappe.db.set_value(
-				"POS Profile", row.name, field, value, update_modified=False
-			)
-			written[field] += 1
-
-	summary = " ".join(f"{field}={count}" for field, count in written.items())
-	print(f"[barakat] cashier limits backfilled on {len(profiles)} POS Profiles: {summary}")
-```
-
-- [ ] **Step 2: Register the patch**
-
-Append one line to the end of `barakat/patches.txt`:
-
-```
-barakat.patches.backfill_pos_profile_cashier_limits
-```
-
-- [ ] **Step 3: Bump the version**
-
-In `barakat/__init__.py`, change `__version__` from `4.8.0` to `4.9.0`. Read the current value first and bump the minor from whatever is actually there.
-
-- [ ] **Step 4: Run the patch on a QA site that has a pre-existing profile**
+- [ ] **Step 2: Confirm the column defaults on a site with a pre-existing profile**
 
 ```bash
 bench --site <site> migrate
 ```
 
-Expected output includes a line like `[barakat] cashier limits backfilled on N POS Profiles: custom_allow_ad_hoc_item=N custom_allow_customer_creation=N custom_max_discount_percent=N`.
+Then check that a profile created before the fixture landed reads sane values:
 
-- [ ] **Step 5: Prove it is idempotent**
-
-Set one profile's cap to 0 deliberately, then re-run the patch. Open a console:
-
-```bash
-bench --site <site> console
+```sql
+SELECT name, custom_allow_ad_hoc_item, custom_allow_customer_creation,
+       custom_max_discount_percent FROM `tabPOS Profile`;
 ```
 
-In the console:
+Expected: `0`, `0`, `100`. If any pre-existing profile reads `0` for the discount cap, STOP —
+that is the outage condition, and a backfill patch really is needed after all.
 
-```python
-frappe.db.set_value("POS Profile", "<a profile>", "custom_max_discount_percent", 0)
-frappe.db.commit()
-```
-
-Exit the console, then:
+- [ ] **Step 3: Run the pure suites**
 
 ```bash
-bench --site <site> execute barakat.patches.backfill_pos_profile_cashier_limits.execute
+python -m unittest barakat.test_cashier_limits barakat.test_custom_fields
 ```
 
-Expected: the summary reports `custom_max_discount_percent=0` written, and the profile you set to 0 is **still 0**. A patch that resets it to 100 is wrong — fix it before continuing.
+Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add barakat/patches/backfill_pos_profile_cashier_limits.py barakat/patches.txt barakat/__init__.py
-git commit -m "feat(patch): backfill cashier limits on existing POS Profiles, bump to 4.9.0"
+git add barakat/__init__.py docs/superpowers
+git commit -m "chore(release): barakat 4.9.0, and record why no backfill patch is needed"
 ```
 
 ---
@@ -2087,8 +2021,8 @@ Summarise: which steps passed, and for any that failed, the exact error and the 
 
 ## Self-Review
 
-**Spec coverage.** Every spec section maps to a task: data model -> Task 1; pure decisions -> Task 2; guard 1 and guard 3 server side -> Task 3; guard 2 server side -> Task 4; rollout/backfill and the barakat bump -> Task 5; proxy -> Task 6; AP surface, help tooltips, i18n, release note -> Task 7; POS profile pull and renderer plumbing -> Task 8; guard 1 and guard 3 POS side -> Task 9; guard 2 POS side and the POS bump -> Task 10; the verification list -> Task 11. The "accepted risk" section is surfaced to users by the AP warning line in Task 7 Step 3.
+**Spec coverage.** Every spec section maps to a task: data model -> Task 1; pure decisions -> Task 2; guard 1 and guard 3 server side -> Task 3; guard 2 server side -> Task 4; rollout (measured: no patch needed) and the barakat bump -> Task 5; proxy -> Task 6; AP surface, help tooltips, i18n, release note -> Task 7; POS profile pull and renderer plumbing -> Task 8; guard 1 and guard 3 POS side -> Task 9; guard 2 POS side and the POS bump -> Task 10; the verification list -> Task 11. The "accepted risk" section is surfaced to users by the AP warning line in Task 7 Step 3.
 
 **Type consistency.** The wire names `allowAdHocItem` / `allowCustomerCreation` / `maxDiscountPercent` are identical in the proxy (Task 6), the AP form (Task 7), `PosProfileData` and the RPC (Task 8), and both POS UI tasks. The ERPNext fieldnames `custom_allow_ad_hoc_item` / `custom_allow_customer_creation` / `custom_max_discount_percent` / `custom_pos_profile` are identical in Tasks 1, 3, 4, 5, 6, 8 and 10. `_profile_limits` is defined in Task 3 and patched by that name in its own tests only.
 
-**The default `100`, never `0`,** is asserted independently in four places — the fixture test (Task 1), the pure module (Task 2), the backfill patch (Task 5), the proxy mapper test (Task 6) and the POS pull test (Task 8). That redundancy is deliberate: a `0` slipping in at any one layer silently bans discounting at every shop.
+**The default `100`, never `0`,** is asserted independently in four places — the fixture test (Task 1), the pure module (Task 2), the proxy mapper test (Task 6) and the POS pull test (Task 8). That redundancy is deliberate: a `0` slipping in at any one layer silently bans discounting at every shop. The fixture test is the load-bearing one, because the fixture's `default` is what Frappe writes into the column DDL and therefore what every pre-existing profile inherits (Task 5).

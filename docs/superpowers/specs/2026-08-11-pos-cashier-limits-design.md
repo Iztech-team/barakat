@@ -212,22 +212,40 @@ that route's `response` schema, or it is silently stripped before the AP sees it
 
 ## Rollout
 
-**Existing POS Profiles carry none of these fields and would read `0`** — meaning both
-buttons vanish (intended) *and* a max discount of `0` would make `pos_invoice.py` reject
+The fear was that **existing POS Profiles carry none of these fields and would read `0`** —
+both buttons vanishing (intended) *and* a max discount of `0` making `pos_invoice.py` reject
 every discounted invoice at every live shop. That is the failure mode that took prod down on
-2026-07-28.
+2026-07-28, so the design originally called for a backfill patch.
 
-A patch, `barakat/patches/backfill_pos_profile_cashier_limits.py`, therefore sets on every
-existing POS Profile:
+**Measured on the QA bench 2026-08-11: no patch is needed, and one would be a no-op.**
 
-| Field | Backfilled to |
-|---|---|
-| `custom_allow_ad_hoc_item` | `0` |
-| `custom_allow_customer_creation` | `0` |
-| `custom_max_discount_percent` | `100` |
+A POS Profile (`Legacy Till`) was created on `shop1.barakat.local` *before* the fixture was
+installed, then `bench migrate` was run. Frappe adds each column with the fixture's `default`
+in the DDL, `NOT NULL`:
 
-The patch is **idempotent**: it writes only where the value is `NULL`, so re-running never
-stomps a deliberate `0`. It is site-scoped; prod migration excludes `petromall` as always.
+```
+custom_allow_ad_hoc_item          tinyint(4)     NOT NULL DEFAULT 0
+custom_allow_customer_creation    tinyint(4)     NOT NULL DEFAULT 0
+custom_max_discount_percent       decimal(21,9)  NOT NULL DEFAULT 100.000000000
+```
+
+and the pre-existing row read `0 / 0 / 100` — exactly the intended backfill.
+
+Two consequences:
+
+- **A backfill patch is unnecessary.** Frappe's column default already does it.
+- **The planned patch would have been dead code.** It guarded on `value is not None`, and
+  these columns can never be `NULL`. It would have shipped as a permanent no-op — the same
+  trap as the orphan-cleanup patch.
+
+What actually guarantees the safe value is therefore **the `default` in the fixture**, and
+that is pinned by `test_custom_fields.CashierLimitFieldsAreDeclared`, which asserts
+`custom_max_discount_percent` has `"default": "100"`. Change that fixture default to `0` and
+the test fails — which is the real guard, and it runs on the Windows dev box.
+
+This reasoning holds only because these are brand-new fieldnames: no site can already have
+the column without the default. A future field added to an existing column would need a
+patch again.
 
 **Stale cached profiles.** A POS that upgrades before its next profile refresh reads a
 cached `PosProfileData` written without these fields. The defaults applied on read mirror
@@ -237,7 +255,7 @@ identically. Toggles take effect at the next profile refresh, not instantly.
 **Ship order is forced by the dependency:** barakat -> proxy -> AP -> POS. The fields must
 exist before anything writes them.
 
-Versions: barakat `4.8.0`, proxy `6.4.0`, AP `1.32.0` (+ release note), POS `2.11.0`. All
+Versions: barakat `4.9.0`, proxy `6.4.0`, AP `1.32.0` (+ release note), POS `2.15.0`. All
 minor — new fields, new settings, no breaking change to an existing shape.
 
 ## Accepted risk

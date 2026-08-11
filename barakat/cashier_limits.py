@@ -11,9 +11,11 @@ import decimal
 
 AD_HOC_ITEM_CODE = "MISC"
 
-# The value that means "no limit". Also the value the backfill patch writes to
-# every profile that predates this feature — a 0 default would reject every
-# discounted sale at every live shop.
+# The value that means "no limit", and the value every profile that predates
+# this feature inherits: Frappe writes the fixture's `default` into the column
+# DDL, so `custom_max_discount_percent` is NOT NULL DEFAULT 100. A 0 there would
+# reject every discounted sale at every live shop, which is why
+# test_custom_fields pins the fixture default rather than trusting a comment.
 MAX_DISCOUNT_UNLIMITED = 100.0
 
 
