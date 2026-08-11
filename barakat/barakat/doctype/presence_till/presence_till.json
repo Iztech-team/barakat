@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "autoname": "field:pos_profile",
+ "creation": "2026-08-11 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["custom_company","pos_profile","branch","machine_name","machine_fingerprint","api_user","status","last_seen","last_seq","watcher_version","last_clock_drift_s","approved_by","approved_at"],
+ "fields": [
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1,"read_only":1},
+  {"fieldname":"pos_profile","fieldtype":"Link","label":"POS Profile","options":"POS Profile","reqd":1,"unique":1},
+  {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1,"read_only":1},
+  {"fieldname":"machine_name","fieldtype":"Data","label":"Computer"},
+  {"fieldname":"machine_fingerprint","fieldtype":"Data","label":"Machine Fingerprint"},
+  {"fieldname":"api_user","fieldtype":"Link","label":"API User","options":"User","read_only":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Pending\nActive\nSuspended\nRetired","default":"Pending","reqd":1},
+  {"fieldname":"last_seen","fieldtype":"Datetime","label":"Last Seen","read_only":1},
+  {"fieldname":"last_seq","fieldtype":"Int","label":"Last Sequence","read_only":1},
+  {"fieldname":"watcher_version","fieldtype":"Data","label":"Watcher Version","read_only":1},
+  {"fieldname":"last_clock_drift_s","fieldtype":"Int","label":"Clock Drift (s)","read_only":1},
+  {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User","read_only":1},
+  {"fieldname":"approved_at","fieldtype":"Datetime","label":"Approved At","read_only":1}
+ ],
+ "links": [],
+ "modified": "2026-08-11 00:00:00",
+ "module": "Barakat",
+ "name": "Presence Till",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

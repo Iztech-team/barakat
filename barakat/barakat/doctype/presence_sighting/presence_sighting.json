@@ -1,0 +1,25 @@
+{
+ "actions": [],
+ "creation": "2026-08-11 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["custom_company","branch","till","device_key","event","server_time"],
+ "fields": [
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1},
+  {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1},
+  {"fieldname":"till","fieldtype":"Link","label":"Till","options":"Presence Till"},
+  {"fieldname":"device_key","fieldtype":"Data","label":"Device Key","reqd":1,"length":64},
+  {"fieldname":"event","fieldtype":"Select","label":"Event","options":"appeared\ngone","reqd":1},
+  {"fieldname":"server_time","fieldtype":"Datetime","label":"Server Time","reqd":1,"description":"Stamped on arrival. A till's own clock is never trusted."}
+ ],
+ "links": [],
+ "modified": "2026-08-11 00:00:00",
+ "module": "Barakat",
+ "name": "Presence Sighting",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
