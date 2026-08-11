@@ -14,6 +14,24 @@ Read straight off the DocPerm tables rather than by calling the API. The desktop
 wraps every sync in try/catch and falls back to defaults, and the watcher has exactly
 that shape - a missing permission would look like "not configured" forever rather than
 raising anything. Auditing the table is the only way this fails loudly.
+
+## Why there is no `_grant_owner_presence_perms` in setup/install.py
+
+There deliberately isn't one, and this test is what makes that safe.
+
+`_grant_owner_payment_mode_perms` exists because ERPNext ships `Mode of Payment` with
+no `System Manager` DocPerm row at all, so owners 403'd on a control the admin panel
+showed them. That cannot happen here: every presence doctype declares System Manager
+in its own JSON, `add_permission` copies the standard rows into Custom DocPerm before
+adding the persona rows, and `_revoke_stale_barakat_perms` only ever touches roles in
+`ALL_ROLE_PERMS` - native roles are never modified.
+
+Verified on shop1 after a migrate, 2026-08-11: every presence doctype carries a
+System Manager Custom DocPerm row alongside its generated `Barakat *` rows.
+
+So a grant would be dead code. If `test_system_manager_has_full_access_to_every_
+presence_doctype` ever fails, the cause is a JSON that lost its permissions block -
+put it back there, rather than adding an install-time grant to paper over it.
 """
 
 import frappe
