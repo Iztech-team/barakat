@@ -136,6 +136,48 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "POS Profile-custom_cashier_limits_section",
+  "dt": "POS Profile",
+  "fieldname": "custom_cashier_limits_section",
+  "label": "Cashier Limits",
+  "fieldtype": "Section Break",
+  "insert_after": "custom_bank_account"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_allow_ad_hoc_item",
+  "dt": "POS Profile",
+  "fieldname": "custom_allow_ad_hoc_item",
+  "label": "Allow custom items",
+  "description": "Let the cashier add an item that is not in the catalogue, typing its name and price. Off by default.",
+  "fieldtype": "Check",
+  "default": "0",
+  "insert_after": "custom_cashier_limits_section"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_allow_customer_creation",
+  "dt": "POS Profile",
+  "fieldname": "custom_allow_customer_creation",
+  "label": "Allow creating customers",
+  "description": "Let the cashier create a new customer from the till. Off by default.",
+  "fieldtype": "Check",
+  "default": "0",
+  "insert_after": "custom_allow_ad_hoc_item"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_max_discount_percent",
+  "dt": "POS Profile",
+  "fieldname": "custom_max_discount_percent",
+  "label": "Maximum discount %",
+  "description": "The largest order discount the cashier may apply. 100 means no limit; 0 disables the discount button entirely.",
+  "fieldtype": "Percent",
+  "default": "100",
+  "insert_after": "custom_allow_customer_creation"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Employee-custom_pos_pin",
   "dt": "Employee",
   "fieldname": "custom_pos_pin",
@@ -291,6 +333,17 @@
   "insert_after": "customer_group",
   "in_list_view": 0,
   "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Customer-custom_pos_profile",
+  "dt": "Customer",
+  "fieldname": "custom_pos_profile",
+  "label": "Created from POS profile",
+  "description": "Set by the till when a cashier creates this customer. Blank for customers created in the admin panel.",
+  "fieldtype": "Data",
+  "read_only": 1,
+  "insert_after": "custom_company"
  },
  {
   "doctype": "Custom Field",

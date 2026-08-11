@@ -136,5 +136,53 @@ class ClosingEntryRecordsBothIdentities(unittest.TestCase):
         self.assertEqual(f["options"], "Employee")
 
 
+class CashierLimitFieldsAreDeclared(unittest.TestCase):
+    """The three per-till limits the POS Profile carries.
+
+    See docs/superpowers/specs/2026-08-11-pos-cashier-limits-design.md. The
+    defaults are the load-bearing part: a max-discount default of 0 would make
+    pos_invoice.py reject every discounted sale at every shop.
+    """
+
+    def setUp(self):
+        self.rows = _rows()
+
+    def test_section_break_exists_after_bank_account(self):
+        f = _by_name(self.rows, "POS Profile-custom_cashier_limits_section")
+        self.assertIsNotNone(f, "cashier limits section missing from fixtures")
+        self.assertEqual(f["fieldtype"], "Section Break")
+        self.assertEqual(f["insert_after"], "custom_bank_account")
+
+    def test_both_toggles_are_checks_defaulting_off(self):
+        for fieldname in ("custom_allow_ad_hoc_item", "custom_allow_customer_creation"):
+            f = _by_name(self.rows, f"POS Profile-{fieldname}")
+            self.assertIsNotNone(f, f"{fieldname} missing from fixtures")
+            self.assertEqual(f["fieldtype"], "Check", fieldname)
+            # A Check with no default is 0 anyway, but state it so the intent
+            # survives an edit: the client asked for these OFF by default.
+            self.assertEqual(f.get("default", "0"), "0", fieldname)
+
+    def test_max_discount_is_percent_defaulting_to_100(self):
+        f = _by_name(self.rows, "POS Profile-custom_max_discount_percent")
+        self.assertIsNotNone(f, "custom_max_discount_percent missing from fixtures")
+        self.assertEqual(f["fieldtype"], "Percent")
+        # 100, never 0. A 0 default would make pos_invoice.py reject every
+        # discounted sale at every shop the moment this ships.
+        self.assertEqual(f["default"], "100")
+
+
+class CustomerPosProfileStamp(unittest.TestCase):
+    def setUp(self):
+        self.rows = _rows()
+
+    def test_stamp_is_data_not_link(self):
+        f = _by_name(self.rows, "Customer-custom_pos_profile")
+        self.assertIsNotNone(f, "Customer-custom_pos_profile missing from fixtures")
+        # Data, not Link: a Link would make a POS Profile undeletable once a till
+        # had created a customer under it (LinkExistsError).
+        self.assertEqual(f["fieldtype"], "Data")
+        self.assertEqual(f.get("read_only"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
