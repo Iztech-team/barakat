@@ -152,6 +152,10 @@ doc_events = {
 	},
 	"Customer": {
 		"validate": "barakat.validations.validate_customer_mobile_unique",
+		# `before_insert`, not `validate`: the rule is about who may CREATE a
+		# customer. Running it on every save would block edits to a customer a
+		# till legitimately created before the flag was turned off.
+		"before_insert": "barakat.overrides.customer_pos_guard.guard_pos_customer_creation",
 	},
 	# Inherit the owning company onto the three doctypes ERPNext gives no company
 	# field. The marker is what the Company User Permission binds to; an unstamped
