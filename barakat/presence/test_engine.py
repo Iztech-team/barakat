@@ -176,5 +176,69 @@ class TestDepartures(unittest.TestCase):
 		self.assertEqual(decisions[0].at, at(60))
 
 
+class TestCoverage(unittest.TestCase):
+	"""The two ways a branch stops being trustworthy, and neither may look like empty.
+
+	This is the difference between a system that fails loudly and one that lies
+	quietly. A branch nobody can see is unreachable; recording it as "nobody came to
+	work" would be a wrong answer delivered with total confidence, and it would not be
+	noticed until payday.
+	"""
+
+	WAIT = timedelta(minutes=15)
+	STALE = timedelta(minutes=5)
+
+	def test_a_warming_up_watcher_cannot_cause_departures(self):
+		"""A till that just rebooted knows nothing. Its empty view is not evidence."""
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+		apply_report(state, Report("till-1", at(16 * 60), frozenset(), settled=False))
+
+		decisions = tick(state, at(16 * 60), self.WAIT, self.STALE)
+
+		self.assertEqual(decisions, [])
+		self.assertIn("dev-a", state.present)
+
+	def test_a_settled_watcher_elsewhere_still_allows_departures(self):
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+		apply_report(state, Report("till-1", at(16 * 60), frozenset(), settled=False))
+		apply_report(state, Report("till-2", at(16 * 60), frozenset()))
+
+		decisions = tick(state, at(16 * 60), self.WAIT, self.STALE)
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].kind, DEPARTED)
+
+	def test_a_silent_branch_cannot_cause_departures(self):
+		"""Power cut, dead internet, crashed watcher. Unreachable, never empty."""
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+
+		decisions = tick(state, at(60 * 60), self.WAIT, self.STALE)
+
+		self.assertEqual(decisions, [])
+		self.assertIn("dev-a", state.present)
+
+	def test_a_branch_with_no_watchers_at_all_cannot_cause_departures(self):
+		state = BranchState()
+		state.last_seen["dev-a"] = at(0)
+		state.present.add("dev-a")
+
+		decisions = tick(state, at(60 * 60), self.WAIT, self.STALE)
+
+		self.assertEqual(decisions, [])
+
+	def test_an_empty_shop_with_a_healthy_watcher_does_produce_departures(self):
+		"""The control. Coverage must not suppress the normal case."""
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+		apply_report(state, Report("till-1", at(16 * 60), frozenset()))
+
+		decisions = tick(state, at(16 * 60), self.WAIT, self.STALE)
+
+		self.assertEqual(len(decisions), 1)
+
+
 if __name__ == "__main__":
 	unittest.main()
