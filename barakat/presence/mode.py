@@ -33,6 +33,13 @@ def settings_for(company):
 
 	Field by field on purpose: a row that sets only the departure wait must not zero
 	out every other number just by existing.
+
+	A cleared Int field in Frappe reads back as **0**, not NULL - the column is NOT
+	NULL DEFAULT 0. So zero has to mean "not set" here, and every one of these numbers
+	is a duration where zero is never a sane answer: a zero departure wait would send
+	an entire shop home on the first missed sweep, and a zero warm-up would do it every
+	time a till rebooted. If a real zero is ever wanted for one of these, it needs its
+	own explicit flag rather than a magic value.
 	"""
 
 	values = dict(DEFAULTS)
@@ -48,9 +55,13 @@ def settings_for(company):
 	if not row:
 		return values
 
-	for key in DEFAULTS:
-		if row.get(key) not in (None, ""):
-			values[key] = row[key]
+	for key, fallback in DEFAULTS.items():
+		saved = row.get(key)
+		if isinstance(fallback, int):
+			if isinstance(saved, int) and saved > 0:
+				values[key] = saved
+		elif saved:
+			values[key] = saved
 	return values
 
 

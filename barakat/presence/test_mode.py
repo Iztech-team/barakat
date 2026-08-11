@@ -50,24 +50,48 @@ class TestPresenceMode(FrappeTestCase):
 
 		self.assertEqual(settings_for(self.company)["departure_wait_minutes"], 8)
 
-	def test_an_unset_value_falls_back_to_the_default(self):
-		"""A row that exists must not zero out every number it did not set."""
+	def test_a_cleared_number_falls_back_to_the_default(self):
+		"""A cleared Int reads back as 0, not null, and 0 is never a sane duration.
+
+		Zero here would mean no warm-up at all, so every till reboot would report the
+		whole shop as having gone home. A cleared field has to mean "use the default",
+		not "use nothing".
+		"""
 		self._make(mode="Wifi", departure_wait_minutes=8)
 		frappe.db.set_value(
 			"Presence Settings",
 			{"custom_company": self.company},
 			"warmup_s",
-			None,
+			0,
 		)
 
 		self.assertEqual(settings_for(self.company)["warmup_s"], DEFAULTS["warmup_s"])
 
+	def test_a_cleared_departure_wait_falls_back_rather_than_becoming_instant(self):
+		self._make(mode="Wifi")
+		frappe.db.set_value(
+			"Presence Settings",
+			{"custom_company": self.company},
+			"departure_wait_minutes",
+			0,
+		)
+
+		self.assertEqual(
+			settings_for(self.company)["departure_wait_minutes"],
+			DEFAULTS["departure_wait_minutes"],
+		)
+
 	def test_company_is_mandatory(self):
-		"""A blank company marker is visible to everyone. Mandatory removes the case."""
+		"""A blank company marker is visible to everyone. Mandatory removes the case.
+
+		The row is named after the company, so the naming step rejects it before the
+		mandatory-field check runs. Either way it cannot be saved, which is the point -
+		hence the broader ValidationError rather than MandatoryError specifically.
+		"""
 		doc = frappe.new_doc("Presence Settings")
 		doc.mode = "Wifi"
 
-		with self.assertRaises(frappe.MandatoryError):
+		with self.assertRaises(frappe.ValidationError):
 			doc.insert()
 
 	def _make(self, **values):
