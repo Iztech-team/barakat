@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "autoname": "field:custom_company",
+ "creation": "2026-08-11 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["custom_company","mode","departure_wait_minutes","sweep_interval_s","heartbeat_s","warmup_s","sighting_retention_days","pairing_timeout_s","rot_days","max_devices"],
+ "fields": [
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1,"unique":1},
+  {"fieldname":"mode","fieldtype":"Select","label":"Attendance Mode","options":"Manual\nWifi","default":"Manual","reqd":1},
+  {"fieldname":"departure_wait_minutes","fieldtype":"Int","label":"Minutes before a missing phone counts as gone","default":"15"},
+  {"fieldname":"sweep_interval_s","fieldtype":"Int","label":"Seconds between scans","default":"2"},
+  {"fieldname":"heartbeat_s","fieldtype":"Int","label":"Seconds between heartbeats","default":"30"},
+  {"fieldname":"warmup_s","fieldtype":"Int","label":"Warm-up seconds after a till starts","default":"60"},
+  {"fieldname":"sighting_retention_days","fieldtype":"Int","label":"Days of raw sightings kept","default":"30"},
+  {"fieldname":"pairing_timeout_s","fieldtype":"Int","label":"Pairing session timeout (seconds)","default":"120"},
+  {"fieldname":"rot_days","fieldtype":"Int","label":"Days before a pairing is flagged as rotted","default":"7"},
+  {"fieldname":"max_devices","fieldtype":"Int","label":"Maximum devices per report","default":"512"}
+ ],
+ "links": [],
+ "modified": "2026-08-11 00:00:00",
+ "module": "Barakat",
+ "name": "Presence Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
