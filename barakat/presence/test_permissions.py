@@ -128,3 +128,115 @@ class TestPersonaReach(FrappeTestCase):
 			roles_with("Presence Settings", "write") & manager,
 			"Manager cannot change the attendance mode",
 		)
+
+
+class TestEveryPersonaAgainstEveryDoctype(FrappeTestCase):
+	"""The full grid, asserted rather than assumed.
+
+	An API sweep proves reachability but cannot see an empty dropdown, and the earlier
+	tests only spot-check three personas. This walks all of them, so a persona that
+	quietly gains presence reach in a later release fails here rather than in a shop.
+	"""
+
+	# Read off persona_matrix.json, not assumed: `attendance: write` is held by
+	# Manager, HR and Branch Supervisor. A branch supervisor seeing who is in their
+	# own branch is the point of the feature, so all three carry the evidence.
+	# `staff: write` and `settings: write` are Manager only, which is what keeps
+	# pairing and configuration where they belong.
+	SIGHTED = ("Manager", "HR", "Branch Supervisor")
+	BLIND = ("Cashier", "Inventory Keeper", "Accountant")
+
+	EVIDENCE = ("Presence Device", "Presence Session", "Presence Sighting")
+	CONFIG = ("Presence Settings", "Presence Till")
+
+	def test_no_blind_persona_can_touch_presence_in_any_way(self):
+		for persona in self.BLIND:
+			bundle = set(bundle_for(persona))
+			for doctype in PRESENCE_DOCTYPES:
+				for ptype in ("read", "write", "create", "delete"):
+					with self.subTest(persona=persona, doctype=doctype, ptype=ptype):
+						self.assertEqual(
+							roles_with(doctype, ptype) & bundle,
+							set(),
+							f"{persona} has {ptype} on {doctype}",
+						)
+
+	def test_a_manager_can_read_every_presence_doctype(self):
+		"""The person who has to answer for the attendance can see all of its evidence."""
+		bundle = set(bundle_for("Manager"))
+
+		for doctype in PRESENCE_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				self.assertTrue(
+					roles_with(doctype, "read") & bundle,
+					f"Manager cannot read {doctype}",
+				)
+
+	def test_every_sighted_persona_can_read_the_attendance_evidence(self):
+		for persona in self.SIGHTED:
+			bundle = set(bundle_for(persona))
+			for doctype in self.EVIDENCE:
+				with self.subTest(persona=persona, doctype=doctype):
+					self.assertTrue(
+						roles_with(doctype, "read") & bundle,
+						f"{persona} cannot read {doctype}",
+					)
+
+	def test_only_a_manager_can_configure_presence(self):
+		"""HR and Branch Supervisor record attendance. They do not set it up."""
+		for persona in ("HR", "Branch Supervisor"):
+			bundle = set(bundle_for(persona))
+			for doctype in self.CONFIG:
+				with self.subTest(persona=persona, doctype=doctype):
+					self.assertEqual(
+						roles_with(doctype, "write") & bundle,
+						set(),
+						f"{persona} can change {doctype}",
+					)
+
+	def test_only_a_manager_can_pair_a_device(self):
+		"""The fraud surface, kept on the narrowest gate."""
+		for persona in ("HR", "Branch Supervisor"):
+			bundle = set(bundle_for(persona))
+			with self.subTest(persona=persona):
+				self.assertEqual(
+					roles_with("Employee Device", "write") & bundle,
+					set(),
+					f"{persona} can pair a device",
+				)
+
+	def test_known_gap_a_sighted_persona_can_delete_a_sighting(self):
+		"""KNOWN GAP, asserted so it cannot change without somebody noticing.
+
+		Sightings are the raw evidence behind an automatic check-in, and the spec's
+		intent is that only the retention job removes them. But the generated persona
+		permissions grant create/write/delete together for a module set to `write`, so
+		everyone with `attendance: write` can also delete a sighting.
+
+		Deliberately not fixed in this plan: separating delete from write needs a
+		mechanism that does not exist yet, and the blast radius is limited - the
+		Presence Session and the Employee Checkin are the records that matter, and both
+		survive. Recorded in the spec's open decisions rather than left as a surprise.
+
+		If this test starts failing, the permission model gained per-verb control and
+		this gap can be closed properly.
+		"""
+		for persona in self.SIGHTED:
+			bundle = set(bundle_for(persona))
+			with self.subTest(persona=persona):
+				self.assertTrue(
+					roles_with("Presence Sighting", "delete") & bundle,
+					f"{persona} can no longer delete a sighting - close the gap and "
+					f"replace this test with the real assertion",
+				)
+
+	def test_no_blind_persona_can_delete_a_sighting(self):
+		"""The gap above is limited to personas that can already see attendance."""
+		for persona in self.BLIND:
+			bundle = set(bundle_for(persona))
+			with self.subTest(persona=persona):
+				self.assertEqual(
+					roles_with("Presence Sighting", "delete") & bundle,
+					set(),
+					f"{persona} can delete a sighting",
+				)

@@ -724,7 +724,7 @@ mean a new column in the persona matrix in two repos, kept in sync by hand, for 
 
 | Thing | Module gate | Who that is today |
 |---|---|---|
-| View presence, sessions, no-data list | `attendance: read` | Manager, HR |
+| View presence, sessions, no-data list | `attendance: read` | Manager, HR, **Branch Supervisor** |
 | Pair / unpair a device | **`staff: write`** | **Manager only** — HR is `staff: read` |
 | Approve, suspend, reissue a till | `settings: write` | Manager |
 | Turn wifi mode on or off | `settings: write` | Manager |
@@ -1069,3 +1069,20 @@ before step J.
 9. Whether the client is told about Frappe HR's existing location-based mobile check-in
    (§2.3.3). Recommendation: yes — a client who chooses the harder path should know they
    chose it.
+10. **A sighting can be deleted by anyone with `attendance: write`** — Manager, HR and
+    Branch Supervisor. Found while writing the persona tests on 2026-08-11, not by
+    reading. The generated persona permissions grant create/write/delete together for a
+    module set to `write`, and there is no per-verb control today.
+
+    Sightings are the raw evidence behind an automatic check-in, and the intent in §11 is
+    that only the retention job removes them. Left open deliberately: the blast radius is
+    small — the `Presence Session` and the `Employee Checkin` both survive a deleted
+    sighting, and those are the records a dispute turns on. Closing it properly needs a
+    mechanism that does not exist yet.
+
+    Locked in by `test_known_gap_a_sighted_persona_can_delete_a_sighting`, which asserts
+    the gap so it cannot change silently in either direction.
+11. **A correction to §10.7's table**: `attendance: write` is held by **Manager, HR and
+    Branch Supervisor**, not Manager and HR alone. Read off `persona_matrix.json`
+    2026-08-11. A branch supervisor seeing who is in their own branch is correct, so no
+    change was made — but the table said otherwise and now does not.

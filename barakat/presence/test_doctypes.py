@@ -164,6 +164,51 @@ class TestEmployeeDevicePairing(FrappeTestCase):
 
 		self.assertGreaterEqual(len(open_rows), 2)
 
+	def test_the_same_employee_may_repair_a_device_they_previously_gave_up(self):
+		"""Someone goes back to their old phone. History keeps both rows."""
+		first = self._pair(self.employees[0], "presence-test-5")
+		first.valid_to = "2026-08-01"
+		first.save()
+
+		again = self._pair(self.employees[0], "presence-test-5")
+
+		self.assertTrue(again.name)
+		self.assertNotEqual(again.name, first.name)
+
+	def test_closing_a_pairing_never_deletes_it(self):
+		"""Delete January's pairing and January's attendance becomes unexplainable."""
+		row = self._pair(self.employees[0], "presence-test-6")
+		row.valid_to = "2026-08-01"
+		row.save()
+
+		self.assertTrue(frappe.db.exists("Employee Device", row.name))
+		self.assertEqual(
+			frappe.db.get_value("Employee Device", row.name, "valid_to").isoformat(),
+			"2026-08-01",
+		)
+
+	def test_a_pairing_must_name_an_employee(self):
+		with self.assertRaises(frappe.MandatoryError):
+			frappe.get_doc(
+				{
+					"doctype": "Employee Device",
+					"custom_company": self.company,
+					"device_key": "presence-test-7",
+					"valid_from": "2026-01-01",
+				}
+			).insert()
+
+	def test_a_pairing_must_name_a_device(self):
+		with self.assertRaises(frappe.MandatoryError):
+			frappe.get_doc(
+				{
+					"doctype": "Employee Device",
+					"custom_company": self.company,
+					"employee": self.employees[0],
+					"valid_from": "2026-01-01",
+				}
+			).insert()
+
 	def _pair(self, employee, device_key):
 		doc = frappe.get_doc(
 			{
@@ -173,6 +218,97 @@ class TestEmployeeDevicePairing(FrappeTestCase):
 				"device_key": device_key,
 				"valid_from": "2026-01-01",
 			}
+		)
+		doc.insert()
+		return doc
+
+
+class TestPresenceTillRules(FrappeTestCase):
+	"""One till per POS Profile, and a till starts locked out until approved."""
+
+	def setUp(self):
+		self.company = frappe.get_all("Company", pluck="name", limit=1)[0]
+		frappe.db.delete("Presence Till", {"pos_profile": ("like", "Presence Test%")})
+		if not frappe.db.exists("Branch", TEST_BRANCH):
+			frappe.get_doc(
+				{
+					"doctype": "Branch",
+					"branch": TEST_BRANCH,
+					"custom_pos_company": self.company,
+					"custom_pos_profiles": [{"pos_profile": TEST_PROFILE}],
+				}
+			).insert(ignore_links=True)
+
+	def test_two_tills_cannot_claim_the_same_pos_profile(self):
+		"""One profile is one till. Two would double-count the same room."""
+		self._till("DESK-A")
+
+		with self.assertRaises(Exception):
+			self._till("DESK-B")
+
+	def test_branch_and_company_are_refreshed_on_every_save(self):
+		"""Not just on insert - a branch reassignment must follow the till."""
+		till = self._till("DESK-C")
+		frappe.db.set_value("Presence Till", till.name, "branch", "Wrong Branch")
+
+		till.reload()
+		till.machine_name = "DESK-C-renamed"
+		till.save()
+
+		self.assertEqual(till.branch, TEST_BRANCH)
+
+	def test_a_till_can_be_suspended_and_retired(self):
+		till = self._till("DESK-D")
+
+		for status in ("Active", "Suspended", "Retired"):
+			till.status = status
+			till.save()
+			self.assertEqual(
+				frappe.db.get_value("Presence Till", till.name, "status"), status
+			)
+
+	def _till(self, machine):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Presence Till",
+				"pos_profile": TEST_PROFILE,
+				"machine_name": machine,
+			}
+		)
+		doc.insert(ignore_links=True)
+		return doc
+
+
+class TestPresenceSettingsRules(FrappeTestCase):
+	def setUp(self):
+		self.company = frappe.get_all("Company", pluck="name", limit=1)[0]
+		frappe.db.delete("Presence Settings", {"custom_company": self.company})
+
+	def test_a_company_may_have_only_one_settings_row(self):
+		self._settings()
+
+		with self.assertRaises(Exception):
+			self._settings()
+
+	def test_manual_is_the_default_mode(self):
+		row = self._settings()
+
+		self.assertEqual(row.mode, "Manual")
+
+	def test_the_shipped_defaults_match_the_engine_defaults(self):
+		"""A default that disagrees with the code is a number nobody chose."""
+		from barakat.presence.mode import DEFAULTS
+
+		row = self._settings()
+
+		self.assertEqual(row.departure_wait_minutes, DEFAULTS["departure_wait_minutes"])
+		self.assertEqual(row.sweep_interval_s, DEFAULTS["sweep_interval_s"])
+		self.assertEqual(row.warmup_s, DEFAULTS["warmup_s"])
+		self.assertEqual(row.max_devices, DEFAULTS["max_devices"])
+
+	def _settings(self):
+		doc = frappe.get_doc(
+			{"doctype": "Presence Settings", "custom_company": self.company}
 		)
 		doc.insert()
 		return doc

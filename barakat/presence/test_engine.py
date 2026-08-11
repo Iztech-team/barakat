@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timedelta
 
 from barakat.presence.engine import (
+	Decision,
 	ARRIVED,
 	DEPARTED,
 	BranchState,
@@ -238,6 +239,420 @@ class TestCoverage(unittest.TestCase):
 		decisions = tick(state, at(16 * 60), self.WAIT, self.STALE)
 
 		self.assertEqual(len(decisions), 1)
+
+
+class EngineCase(unittest.TestCase):
+	"""Shared helpers. `seen` keeps the branch covered so `tick` is allowed to act."""
+
+	WAIT = timedelta(minutes=15)
+	STALE = timedelta(minutes=5)
+
+	def seen(self, state, when, *devices, till="till-1", settled=True):
+		return apply_report(
+			state, Report(till, when, frozenset(devices), settled=settled)
+		)
+
+	def tick(self, state, when, wait=None, stale=None):
+		# `is None`, not `or`: timedelta(0) is falsy, so `wait or self.WAIT` would
+		# silently substitute 15 minutes for a deliberate zero and the degenerate
+		# tests below would pass without testing anything. Same falsy-zero trap that
+		# bit `settings_for` in mode.py.
+		return tick(
+			state,
+			when,
+			self.WAIT if wait is None else wait,
+			self.STALE if stale is None else stale,
+		)
+
+
+class TestBoundaries(EngineCase):
+	"""Off-by-one at the wait boundary decides whether somebody is paid for a shift."""
+
+	def test_exactly_at_the_wait_is_not_yet_a_departure(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(15 * 60))
+
+		self.assertEqual(self.tick(state, at(15 * 60)), [])
+
+	def test_one_second_past_the_wait_is_a_departure(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(15 * 60 + 1))
+
+		self.assertEqual(len(self.tick(state, at(15 * 60 + 1))), 1)
+
+	def test_exactly_at_stale_still_counts_as_covered(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+
+		self.assertEqual(len(self.tick(state, at(16 * 60), stale=timedelta(minutes=16))), 1)
+
+	def test_an_empty_report_is_valid_and_changes_nothing(self):
+		state = BranchState()
+
+		decisions = self.seen(state, at(0))
+
+		self.assertEqual(decisions, [])
+		self.assertEqual(state.present, set())
+
+	def test_a_full_report_at_the_cap_is_handled(self):
+		"""512 devices is the spec's per-report cap. A busy shop really does hit it."""
+		state = BranchState()
+		devices = [f"dev-{i:04d}" for i in range(512)]
+
+		decisions = self.seen(state, at(0), *devices)
+
+		self.assertEqual(len(decisions), 512)
+		self.assertEqual(len(state.present), 512)
+
+	def test_every_one_of_a_large_set_departs_together(self):
+		state = BranchState()
+		devices = [f"dev-{i:04d}" for i in range(512)]
+		self.seen(state, at(0), *devices)
+		self.seen(state, at(20 * 60))
+
+		decisions = self.tick(state, at(20 * 60))
+
+		self.assertEqual(len(decisions), 512)
+		self.assertEqual(state.present, set())
+
+
+class TestIdempotenceAndOrdering(EngineCase):
+	"""Retries and out-of-order delivery must not invent or lose events."""
+
+	def test_the_same_report_applied_twice_arrives_once(self):
+		state = BranchState()
+		report = Report("till-1", at(0), frozenset({"dev-a"}))
+
+		first = apply_report(state, report)
+		second = apply_report(state, report)
+
+		self.assertEqual(len(first), 1)
+		self.assertEqual(second, [])
+
+	def test_a_stale_report_cannot_resurrect_a_departed_device(self):
+		"""A queued report from before the departure must not reopen the session."""
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(20 * 60))
+		self.assertEqual(len(self.tick(state, at(20 * 60))), 1)
+
+		late = self.seen(state, at(5 * 60), "dev-a", till="till-2")
+
+		self.assertEqual(len(late), 1, "a re-sighting is an arrival, not a no-op")
+		self.assertEqual(late[0].kind, ARRIVED)
+
+	def test_two_tills_reporting_out_of_order_keep_the_newest_sighting(self):
+		state = BranchState()
+		self.seen(state, at(600), "dev-a", till="till-1")
+		self.seen(state, at(100), "dev-a", till="till-2")
+
+		self.assertEqual(state.last_seen["dev-a"], at(600))
+
+	def test_ticking_twice_does_not_depart_twice(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(20 * 60))
+
+		first = self.tick(state, at(20 * 60))
+		second = self.tick(state, at(21 * 60))
+
+		self.assertEqual(len(first), 1)
+		self.assertEqual(second, [])
+
+	def test_a_tick_with_nothing_present_is_harmless(self):
+		state = BranchState()
+		self.seen(state, at(0))
+
+		self.assertEqual(self.tick(state, at(60 * 60)), [])
+
+
+class TestOfflineReplay(EngineCase):
+	"""Shop internet drops; the watcher queues and replays. Nothing may be lost."""
+
+	def test_a_queued_burst_replayed_in_order_produces_one_arrival(self):
+		state = BranchState()
+
+		decisions = []
+		for minute in range(0, 30):
+			decisions += self.seen(state, at(minute * 60), "dev-a")
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].kind, ARRIVED)
+
+	def test_a_gap_inside_a_replayed_burst_still_produces_a_departure(self):
+		"""The person really did leave during the outage. The queue proves it."""
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		for minute in range(20, 40):
+			self.seen(state, at(minute * 60))
+
+		decisions = self.tick(state, at(40 * 60))
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].at, at(0))
+
+	def test_a_replay_that_ends_with_the_device_back_produces_no_departure(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(5 * 60))
+		self.seen(state, at(10 * 60), "dev-a")
+		self.seen(state, at(15 * 60), "dev-a")
+
+		self.assertEqual(self.tick(state, at(15 * 60)), [])
+
+
+class TestManyTills(EngineCase):
+	"""Three watchers in one room. The branch answers, never a single till."""
+
+	def test_three_tills_seeing_the_same_device_arrive_it_once(self):
+		state = BranchState()
+
+		a = self.seen(state, at(0), "dev-a", till="till-1")
+		b = self.seen(state, at(1), "dev-a", till="till-2")
+		c = self.seen(state, at(2), "dev-a", till="till-3")
+
+		self.assertEqual(len(a) + len(b) + len(c), 1)
+
+	def test_two_tills_going_offline_do_not_end_anybodys_day(self):
+		state = BranchState()
+		for till in ("till-1", "till-2", "till-3"):
+			self.seen(state, at(0), "dev-a", till=till)
+
+		self.seen(state, at(30 * 60), "dev-a", till="till-3")
+
+		self.assertEqual(self.tick(state, at(30 * 60)), [])
+		self.assertIn("dev-a", state.present)
+
+	def test_the_last_surviving_till_going_quiet_suppresses_departures(self):
+		"""All three gone means unreachable, and unreachable is never empty."""
+		state = BranchState()
+		for till in ("till-1", "till-2", "till-3"):
+			self.seen(state, at(0), "dev-a", till=till)
+
+		self.assertEqual(self.tick(state, at(60 * 60)), [])
+		self.assertIn("dev-a", state.present)
+
+	def test_one_healthy_till_among_three_stale_ones_is_enough(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a", till="till-1")
+		self.seen(state, at(0), "dev-a", till="till-2")
+		self.seen(state, at(30 * 60), till="till-3")
+
+		decisions = self.tick(state, at(30 * 60))
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].at, at(0))
+
+
+class TestSeveralBranches(EngineCase):
+	"""One state per branch. They must not leak into each other."""
+
+	def test_two_branches_track_the_same_device_independently(self):
+		ramallah = BranchState()
+		nablus = BranchState()
+
+		self.seen(ramallah, at(0), "dev-a")
+		self.seen(nablus, at(0), "dev-b")
+
+		self.assertEqual(ramallah.present, {"dev-a"})
+		self.assertEqual(nablus.present, {"dev-b"})
+
+	def test_a_device_moving_between_branches_departs_one_and_arrives_at_the_other(self):
+		ramallah = BranchState()
+		nablus = BranchState()
+		self.seen(ramallah, at(0), "dev-a")
+
+		arrived = self.seen(nablus, at(40 * 60), "dev-a")
+		self.seen(ramallah, at(40 * 60))
+		departed = self.tick(ramallah, at(40 * 60))
+
+		self.assertEqual(arrived[0].kind, ARRIVED)
+		self.assertEqual(departed[0].kind, DEPARTED)
+		self.assertEqual(departed[0].at, at(0))
+
+	def test_one_branch_going_dark_does_not_affect_another(self):
+		ramallah = BranchState()
+		nablus = BranchState()
+		self.seen(ramallah, at(0), "dev-a")
+		self.seen(nablus, at(0), "dev-b")
+		self.seen(nablus, at(20 * 60))
+
+		self.assertEqual(self.tick(ramallah, at(20 * 60)), [])
+		self.assertEqual(len(self.tick(nablus, at(20 * 60))), 1)
+
+
+class TestAFullDay(EngineCase):
+	"""Realistic shifts end to end. These are the ones a shop owner would recognise."""
+
+	def test_a_normal_shift_produces_exactly_one_arrival_and_one_departure(self):
+		state = BranchState()
+		events = []
+
+		# 08:00 arrives, seen every 2 minutes until 17:00, with pocket sleeps.
+		events += self.seen(state, at(0), "dev-a")
+		for minute in range(2, 540, 2):
+			present = minute % 20 != 0  # drops off briefly every 20 minutes
+			if present:
+				events += self.seen(state, at(minute * 60), "dev-a")
+			else:
+				events += self.seen(state, at(minute * 60))
+			events += self.tick(state, at(minute * 60))
+
+		# 17:00 leaves for good.
+		for minute in range(540, 580, 2):
+			events += self.seen(state, at(minute * 60))
+			events += self.tick(state, at(minute * 60))
+
+		arrivals = [e for e in events if e.kind == ARRIVED]
+		departures = [e for e in events if e.kind == DEPARTED]
+
+		self.assertEqual(len(arrivals), 1, "one arrival for one shift")
+		self.assertEqual(len(departures), 1, "one departure for one shift")
+		self.assertEqual(arrivals[0].at, at(0))
+		self.assertEqual(departures[0].at, at(538 * 60))
+
+	def test_a_split_shift_produces_two_sessions(self):
+		"""Morning, a real two-hour gap, then back. That is genuinely two sessions."""
+		state = BranchState()
+		events = []
+
+		events += self.seen(state, at(0), "dev-a")
+		for minute in range(2, 240, 2):
+			events += self.seen(state, at(minute * 60))
+			events += self.tick(state, at(minute * 60))
+
+		events += self.seen(state, at(240 * 60), "dev-a")
+		for minute in range(242, 480, 2):
+			events += self.seen(state, at(minute * 60))
+			events += self.tick(state, at(minute * 60))
+
+		self.assertEqual(len([e for e in events if e.kind == ARRIVED]), 2)
+		self.assertEqual(len([e for e in events if e.kind == DEPARTED]), 2)
+
+	def test_a_shift_crossing_midnight_is_not_cut_in_two(self):
+		"""Sessions are not split at midnight. Real timestamps, one session."""
+		state = BranchState()
+		start = 15 * 3600  # 23:00
+		self.seen(state, at(start), "dev-a")
+		for offset in range(120, 7200, 120):
+			self.seen(state, at(start + offset), "dev-a")
+
+		self.seen(state, at(start + 7200 + 20 * 60))
+		decisions = self.tick(state, at(start + 7200 + 20 * 60))
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].at, at(start + 7080))
+
+	def test_a_whole_team_arriving_and_leaving_is_tracked_per_person(self):
+		state = BranchState()
+		team = [f"dev-{i}" for i in range(8)]
+
+		arrivals = []
+		for index, device in enumerate(team):
+			arrivals += self.seen(state, at(index * 300), device)
+
+		for index, device in enumerate(team):
+			still_here = team[index + 1 :]
+			self.seen(state, at(3600 + index * 300), *still_here)
+
+		self.seen(state, at(3600 + 8 * 300 + 20 * 60))
+		departures = self.tick(state, at(3600 + 8 * 300 + 20 * 60))
+
+		self.assertEqual(len(arrivals), 8)
+		self.assertEqual(len(departures), 8)
+		self.assertEqual(state.present, set())
+
+
+class TestDegenerateSettings(EngineCase):
+	"""Nonsense numbers must not crash. The settings layer guards them; this proves
+	the engine does not blow up if one ever gets through."""
+
+	def test_a_zero_wait_departs_on_the_next_tick(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(1))
+
+		decisions = self.tick(state, at(1), wait=timedelta(0))
+
+		self.assertEqual(len(decisions), 1)
+
+	def test_a_zero_stale_window_only_trusts_a_report_from_this_exact_instant(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+
+		# One second later the only report is already stale, so nothing may age out.
+		self.assertEqual(self.tick(state, at(1), stale=timedelta(0)), [])
+
+		# At the exact instant of the report the branch is covered - but the device was
+		# also seen at that instant, so it has been missing for zero seconds and zero is
+		# not more than a zero wait. Still present, correctly.
+		self.assertEqual(
+			self.tick(state, at(0), wait=timedelta(0), stale=timedelta(0)), []
+		)
+		self.assertIn("dev-a", state.present)
+
+	def test_a_zero_wait_departs_a_device_missing_for_one_second(self):
+		"""`>` not `>=`: a device seen at this instant has been gone for no time."""
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(1))
+
+		self.assertEqual(len(self.tick(state, at(1), wait=timedelta(0))), 1)
+
+	def test_a_huge_wait_never_departs(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a")
+		self.seen(state, at(86400))
+
+		self.assertEqual(self.tick(state, at(86400), wait=timedelta(days=365)), [])
+
+	def test_a_till_that_never_settles_can_never_cause_a_departure(self):
+		state = BranchState()
+		self.seen(state, at(0), "dev-a", settled=False)
+		for minute in range(1, 60):
+			self.seen(state, at(minute * 60), settled=False)
+
+		self.assertEqual(self.tick(state, at(60 * 60)), [])
+
+
+class TestValueShape(EngineCase):
+	"""Decisions and reports are values. Nothing downstream may mutate them."""
+
+	def test_a_decision_cannot_be_modified(self):
+		decision = Decision(ARRIVED, "dev-a", at(0))
+
+		with self.assertRaises(Exception):
+			decision.kind = DEPARTED
+
+	def test_a_report_cannot_be_modified(self):
+		report = Report("till-1", at(0), frozenset({"dev-a"}))
+
+		with self.assertRaises(Exception):
+			report.till = "till-2"
+
+	def test_applying_a_report_does_not_mutate_it(self):
+		state = BranchState()
+		report = Report("till-1", at(0), frozenset({"dev-a"}))
+
+		apply_report(state, report)
+
+		self.assertEqual(report.devices, frozenset({"dev-a"}))
+		self.assertEqual(report.at, at(0))
+
+	def test_a_fresh_branch_state_shares_nothing_with_another(self):
+		"""A mutable default would make every branch the same branch."""
+		first = BranchState()
+		second = BranchState()
+
+		first.present.add("dev-a")
+		first.last_seen["dev-a"] = at(0)
+		first.till_last_report["till-1"] = (at(0), True)
+
+		self.assertEqual(second.present, set())
+		self.assertEqual(second.last_seen, {})
+		self.assertEqual(second.till_last_report, {})
 
 
 if __name__ == "__main__":
