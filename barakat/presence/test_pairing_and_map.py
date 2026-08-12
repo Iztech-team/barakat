@@ -78,6 +78,14 @@ class TestPairingAndMap(FrappeTestCase):
 		):
 			frappe.db.delete(doctype, {"branch": BRANCH})
 		frappe.db.delete("Employee Device", {"device_key": ("in", [PHONE, TABLET])})
+		# These employees are borrowed from the site, so they can turn up already
+		# carrying pairings from real use — and "was that their last device" is decided
+		# by exactly that. Left in place, the test passes or fails on the state of
+		# somebody else's data.
+		frappe.db.delete(
+			"Employee Device",
+			{"employee": ("in", [cls.employee, cls.other_employee])},
+		)
 		frappe.db.delete("Presence Pairing Session", {"branch": BRANCH})
 		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
 		if till:
@@ -249,15 +257,20 @@ class TestPairingAndMap(FrappeTestCase):
 			"the phone was still counting after being unpaired",
 		)
 
-	def test_unpairing_leaves_this_mornings_history_alone(self):
-		"""January's session must still resolve to whoever held the phone in January."""
+	def test_unpairing_leaves_earlier_history_alone(self):
+		"""January's session must still resolve to whoever held the phone in January.
+
+		The moment asked about is relative to the unpairing, not a fixed hour: a clock
+		time like 06:00 is BEFORE the unpairing on an afternoon run and AFTER it on an
+		early-morning one, so the test would pass or fail depending on when it ran.
+		"""
 		self._pair(PHONE)
 		row = frappe.db.exists("Employee Device", {"device_key": PHONE})
+		before = add_to_date(now_datetime(), hours=-2)
 		pairing.unpair(row)
 
-		morning = now_datetime().replace(hour=6, minute=0, second=0, microsecond=0)
 		self.assertEqual(
-			service.employee_for(PHONE, self.company, morning), self.employee
+			service.employee_for(PHONE, self.company, before), self.employee
 		)
 
 	def test_unpairing_the_last_phone_closes_a_shift_nothing_else_could(self):
