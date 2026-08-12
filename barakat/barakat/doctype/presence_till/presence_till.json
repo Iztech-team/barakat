@@ -4,7 +4,7 @@
  "creation": "2026-08-11 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["custom_company","pos_profile","branch","machine_name","machine_fingerprint","api_user","status","last_seen","last_seq","watcher_version","last_clock_drift_s","approved_by","approved_at","key_issued_at"],
+ "field_order": ["custom_company","pos_profile","branch","machine_name","machine_fingerprint","api_user","status","last_seen","last_seq","watcher_version","last_clock_drift_s","approved_by","approved_at","key_issued_at","is_settled","is_blind"],
  "fields": [
   {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1,"read_only":1},
   {"fieldname":"pos_profile","fieldtype":"Link","label":"POS Profile","options":"POS Profile","reqd":1,"unique":1},
@@ -19,7 +19,9 @@
   {"fieldname":"last_clock_drift_s","fieldtype":"Int","label":"Clock Drift (s)","read_only":1},
   {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User","read_only":1},
   {"fieldname":"approved_at","fieldtype":"Datetime","label":"Approved At","read_only":1},
-  {"fieldname":"key_issued_at","fieldtype":"Datetime","label":"Key Issued At","read_only":1,"description":"The key is handed over exactly once. Blank means it has not been collected yet."}
+  {"fieldname":"key_issued_at","fieldtype":"Datetime","label":"Key Issued At","read_only":1,"description":"The key is handed over exactly once. Blank means it has not been collected yet."},
+  {"fieldname":"is_settled","fieldtype":"Check","label":"Past Warm-up","default":"0","read_only":1,"description":"Reported by the watcher. While warming up its empty view is not evidence that anybody left."},
+  {"fieldname":"is_blind","fieldtype":"Check","label":"Blind","default":"0","read_only":1,"description":"The watcher cannot even see the router. The branch is unreachable, not empty."}
  ],
  "links": [],
  "modified": "2026-08-11 00:00:00",

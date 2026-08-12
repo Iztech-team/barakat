@@ -42,16 +42,17 @@ def load_state(branch, company, warmup_s):
 	for till in frappe.get_all(
 		"Presence Till",
 		filters={"branch": branch, "custom_company": company, "status": "Active"},
-		fields=["name", "last_seen", "creation"],
+		fields=["name", "last_seen", "is_settled", "is_blind"],
 		limit_page_length=0,
 	):
 		if not till.last_seen:
 			continue
-		last = get_datetime(till.last_seen)
-		# A till counts as settled once it has been reporting for longer than the
-		# warm-up. Before that its empty view is not evidence of anything.
-		settled = (last - get_datetime(till.creation)) >= timedelta(seconds=warmup_s)
-		state.till_last_report[till.name] = (last, settled)
+		# Whether a watcher is past its warm-up is something ONLY the watcher knows -
+		# it restarts independently of this record, so the record's age says nothing.
+		# A blind watcher (one that cannot even see the router) is also not evidence:
+		# it sees nothing because it is broken, not because the shop is empty.
+		settled = bool(till.is_settled) and not till.is_blind
+		state.till_last_report[till.name] = (get_datetime(till.last_seen), settled)
 
 	return state
 
@@ -203,8 +204,13 @@ def _close_session(till, employee, when):
 	)
 
 
-def ingest(till, devices, seen_at):
-	"""One watcher report, end to end. Returns the decisions taken."""
+def ingest(till, devices, seen_at, settled=True, blind=False):
+	"""One watcher report, end to end. Returns the decisions taken.
+
+	`settled` and `blind` come from the watcher, because only the watcher knows when it
+	started and whether it can see its own router. Both mean the same thing to the
+	engine: this view is not evidence that anybody left.
+	"""
 	settings = settings_for(till.custom_company)
 	state = load_state(till.branch, till.custom_company, settings["warmup_s"])
 
@@ -212,7 +218,7 @@ def ingest(till, devices, seen_at):
 		till=till.name,
 		at=seen_at,
 		devices=frozenset(devices),
-		settled=_is_settled(till, seen_at, settings["warmup_s"]),
+		settled=bool(settled) and not blind,
 	)
 	decisions = engine.apply_report(state, report)
 
@@ -247,11 +253,6 @@ def sweep(branch, company):
 		record_sightings(till, decisions)
 		apply_decisions(till, decisions)
 	return decisions
-
-
-def _is_settled(till, seen_at, warmup_s):
-	"""A till is settled once it has been alive longer than the warm-up."""
-	return (seen_at - get_datetime(till.creation)) >= timedelta(seconds=warmup_s)
 
 
 def _any_till(branch, company):

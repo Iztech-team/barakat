@@ -26,6 +26,7 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		frappe.set_user("Administrator")
 		cls.company = frappe.get_all("Company", pluck="name", limit=1)[0]
 		cls.employee = frappe.get_all("Employee", pluck="name", limit=1)[0]
+		cls._ensure_pos_profile()
 
 		if not frappe.db.exists("Branch", BRANCH):
 			frappe.get_doc(
@@ -43,8 +44,32 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		cls._wipe()
 		if frappe.db.exists("Branch", BRANCH):
 			frappe.delete_doc("Branch", BRANCH, force=True, ignore_permissions=True)
+		if frappe.db.exists("POS Profile", PROFILE):
+			frappe.delete_doc("POS Profile", PROFILE, force=True, ignore_permissions=True)
 		frappe.db.commit()
 		super().tearDownClass()
+
+	@classmethod
+	def _ensure_pos_profile(cls):
+		"""A POS Profile that exists, and nothing more.
+
+		A real one needs twelve mandatory fields including several Barakat accounts,
+		plus a payment method and a warehouse. Presence needs none of that - it only
+		needs the profile to EXIST, because `Presence Till` links to it and reads its
+		branch from the Branch record. So this is inserted with validation bypassed:
+		building a working till profile here would be fixture work that tests ERPNext
+		rather than presence.
+
+		Note what is NOT bypassed: `Presence Till` still resolves its own branch and
+		company for real, which is the part under test.
+		"""
+		if frappe.db.exists("POS Profile", PROFILE):
+			return
+		doc = frappe.get_doc({"doctype": "POS Profile", "company": cls.company})
+		doc.name = PROFILE
+		doc.flags.ignore_validate = True
+		doc.flags.ignore_mandatory = True
+		doc.insert(ignore_permissions=True, ignore_mandatory=True, ignore_links=True)
 
 	@classmethod
 	def _wipe(cls):

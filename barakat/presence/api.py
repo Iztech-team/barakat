@@ -157,7 +157,13 @@ def report(devices=None, seq=None, sent_at=None, watcher_version=None, health=No
 	# silently rather than loudly.
 	seen_at = now_datetime()
 
-	service.ingest(till, devices, seen_at)
+	health = frappe.parse_json(health) if isinstance(health, str) else (health or {})
+	# The watcher decides both of these. It knows when it started, and it knows whether
+	# it can see its own router; the server can know neither.
+	blind = bool(health.get("blind"))
+	settled = not bool(health.get("warming_up"))
+
+	service.ingest(till, devices, seen_at, settled=settled, blind=blind)
 
 	frappe.db.set_value(
 		"Presence Till",
@@ -167,6 +173,8 @@ def report(devices=None, seq=None, sent_at=None, watcher_version=None, health=No
 			"last_seq": seq,
 			"watcher_version": watcher_version,
 			"last_clock_drift_s": drift,
+			"is_settled": 1 if settled else 0,
+			"is_blind": 1 if blind else 0,
 		},
 		update_modified=False,
 	)
