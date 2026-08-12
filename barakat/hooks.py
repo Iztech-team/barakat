@@ -398,6 +398,24 @@ has_permission = _add_company_scope(
 # Scheduled Tasks
 # ---------------
 
+# Presence. Both jobs iterate ONLY companies that switched wifi presence on, so a site
+# with nobody enabled - `petromall`, and every company that never asked for this - does
+# no work at all.
+#
+# The sweep has to exist: a watcher report can only ever say "I can see these devices".
+# A departure is the absence of a sighting, which no incoming request can announce, so
+# without a timer nobody ever leaves.
+scheduler_events = {
+	"cron": {
+		"* * * * *": [
+			"barakat.presence.tasks.sweep_departures",
+		],
+	},
+	"daily": [
+		"barakat.presence.tasks.delete_old_sightings",
+	],
+}
+
 # scheduler_events = {
 # 	"all": [
 # 		"barakat.tasks.all"

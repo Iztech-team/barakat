@@ -16,6 +16,7 @@ PRESENCE_DOCTYPES = (
 	"Employee Device",
 	"Presence Sighting",
 	"Presence Session",
+	"Presence Live Device",
 )
 
 TEST_BRANCH = "Presence Test Branch"

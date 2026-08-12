@@ -1,0 +1,25 @@
+{
+ "actions": [],
+ "autoname": "format:{branch}::{device_key}",
+ "creation": "2026-08-11 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["custom_company","branch","device_key","last_seen","present"],
+ "fields": [
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1},
+  {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1},
+  {"fieldname":"device_key","fieldtype":"Data","label":"Device Key","reqd":1,"length":64},
+  {"fieldname":"last_seen","fieldtype":"Datetime","label":"Last Seen","reqd":1,"description":"Newest sighting from any till at this branch."},
+  {"fieldname":"present","fieldtype":"Check","label":"Present","default":"1","description":"Cleared once no till has seen it for the departure wait."}
+ ],
+ "links": [],
+ "modified": "2026-08-11 00:00:00",
+ "module": "Barakat",
+ "name": "Presence Live Device",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

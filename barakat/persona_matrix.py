@@ -105,6 +105,7 @@ MODULE_DOCTYPES = {
 		"Presence Device",
 		"Presence Session",
 		"Presence Sighting",
+		"Presence Live Device",
 	),
 	"salary": (
 		"Salary Slip",

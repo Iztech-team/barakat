@@ -46,6 +46,7 @@ PRESENCE_DOCTYPES = (
 	"Employee Device",
 	"Presence Sighting",
 	"Presence Session",
+	"Presence Live Device",
 )
 
 

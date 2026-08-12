@@ -1,0 +1,360 @@
+"""A till joins, gets approved, reports a phone, and somebody's shift opens and closes.
+
+The whole chain in one file. Every other test in this feature checks one layer; this one
+proves the layers are actually connected, which is the failure no unit test can see.
+"""
+
+from datetime import timedelta
+
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_to_date, now_datetime
+
+from barakat.presence import api, service
+from barakat.presence.mode import MANUAL, WIFI
+
+BRANCH = "E2E Presence Branch"
+PROFILE = "E2E Presence Profile"
+PHONE = "e2edeadbeef01"
+STRANGER = "e2ecafef00d99"
+
+
+class TestPresenceEndToEnd(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		cls.company = frappe.get_all("Company", pluck="name", limit=1)[0]
+		cls.employee = frappe.get_all("Employee", pluck="name", limit=1)[0]
+
+		if not frappe.db.exists("Branch", BRANCH):
+			frappe.get_doc(
+				{
+					"doctype": "Branch",
+					"branch": BRANCH,
+					"custom_pos_company": cls.company,
+					"custom_pos_profiles": [{"pos_profile": PROFILE}],
+				}
+			).insert(ignore_links=True, ignore_permissions=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.set_user("Administrator")
+		cls._wipe()
+		if frappe.db.exists("Branch", BRANCH):
+			frappe.delete_doc("Branch", BRANCH, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDownClass()
+
+	@classmethod
+	def _wipe(cls):
+		for doctype in (
+			"Presence Sighting",
+			"Presence Live Device",
+			"Presence Session",
+		):
+			frappe.db.delete(doctype, {"branch": BRANCH})
+		frappe.db.delete("Employee Device", {"device_key": ("in", [PHONE, STRANGER])})
+		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
+		if till:
+			user = frappe.db.get_value("Presence Till", till, "api_user")
+			frappe.delete_doc("Presence Till", till, force=True, ignore_permissions=True)
+			if user and frappe.db.exists("User", user):
+				frappe.delete_doc("User", user, force=True, ignore_permissions=True)
+		frappe.db.delete("Presence Settings", {"custom_company": cls.company})
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self._wipe()
+		self._set_mode(WIFI)
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	# ---------------------------------------------------------------- helpers
+
+	def _set_mode(self, mode):
+		frappe.get_doc(
+			{"doctype": "Presence Settings", "custom_company": self.company, "mode": mode}
+		).insert(ignore_permissions=True)
+
+	def _join(self):
+		return api.request_join(PROFILE, machine_name="DESK-E2E-01")
+
+	def _approve(self):
+		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
+		api.approve(till)
+		return till
+
+	def _pair_phone(self):
+		frappe.get_doc(
+			{
+				"doctype": "Employee Device",
+				"custom_company": self.company,
+				"employee": self.employee,
+				"device_key": PHONE,
+				"valid_from": "2020-01-01",
+			}
+		).insert(ignore_permissions=True)
+
+	def _as_till(self, till):
+		"""Act as the watcher's own account, which holds no permissions at all."""
+		frappe.set_user(frappe.db.get_value("Presence Till", till, "api_user"))
+
+	def _open_session(self):
+		return frappe.db.exists(
+			"Presence Session",
+			{"employee": self.employee, "branch": BRANCH, "state": "Open"},
+		)
+
+	# ---------------------------------------------------------------- enrolment
+
+	def test_a_new_till_is_pending_and_gets_no_key(self):
+		result = self._join()
+
+		self.assertEqual(result["status"], "pending")
+		self.assertNotIn("api_secret", result)
+
+	def test_a_till_gets_its_key_only_after_a_human_approves(self):
+		self._join()
+		self._approve()
+
+		result = self._join()
+
+		self.assertEqual(result["status"], "approved")
+		self.assertTrue(result["api_key"])
+		self.assertTrue(result["api_secret"])
+
+	def test_the_key_is_handed_over_exactly_once(self):
+		self._join()
+		self._approve()
+		self._join()
+
+		again = self._join()
+
+		self.assertEqual(again["status"], "active")
+		self.assertNotIn("api_secret", again)
+
+	def test_the_watcher_account_holds_no_role_that_grants_anything(self):
+		"""A stolen key must be worth nothing. Its account can reach no data at all."""
+		self._join()
+		till = self._approve()
+		self._join()
+		user = frappe.db.get_value("Presence Till", till, "api_user")
+
+		self._as_till(till)
+		try:
+			for doctype in ("Employee", "Customer", "Presence Session", "Presence Device"):
+				with self.subTest(doctype=doctype):
+					self.assertFalse(
+						frappe.has_permission(doctype, "read"),
+						f"the watcher account can read {doctype}",
+					)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertNotIn(
+			"System Manager", {r.role for r in frappe.get_doc("User", user).roles}
+		)
+
+	def test_a_company_in_manual_mode_issues_nothing(self):
+		frappe.db.delete("Presence Settings", {"custom_company": self.company})
+		self._set_mode(MANUAL)
+
+		self.assertEqual(self._join()["status"], "off")
+
+	# ---------------------------------------------------------------- reporting
+
+	def test_a_reported_phone_opens_a_shift_for_the_person_it_belongs_to(self):
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			result = api.report(devices=[{"id": PHONE}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertTrue(result["ok"])
+		self.assertTrue(self._open_session(), "no shift was opened")
+		self.assertTrue(
+			frappe.db.exists("Presence Live Device", f"{BRANCH}::{PHONE}"),
+			"the branch's live view was not updated",
+		)
+		self.assertTrue(
+			frappe.db.exists(
+				"Presence Sighting", {"device_key": PHONE, "event": "appeared"}
+			),
+			"no sighting was recorded",
+		)
+
+	def test_an_unpaired_phone_is_recorded_but_belongs_to_nobody(self):
+		"""A customer walking past is a device, not a member of staff."""
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": STRANGER}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertTrue(frappe.db.exists("Presence Live Device", f"{BRANCH}::{STRANGER}"))
+		self.assertFalse(self._open_session())
+
+	def test_seeing_the_same_phone_again_does_not_open_a_second_shift(self):
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=1)
+			api.report(devices=[{"id": PHONE}], seq=2)
+			api.report(devices=[{"id": PHONE}], seq=3)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertEqual(
+			len(
+				frappe.get_all(
+					"Presence Session", filters={"employee": self.employee, "branch": BRANCH}
+				)
+			),
+			1,
+		)
+
+	def test_a_replayed_report_is_refused(self):
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": STRANGER}], seq=5)
+			with self.assertRaises(Exception):
+				api.report(devices=[{"id": STRANGER}], seq=5)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_a_suspended_till_is_refused(self):
+		self._join()
+		till = self._approve()
+		self._join()
+		api.suspend(till)
+
+		self._as_till(till)
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				api.report(devices=[{"id": STRANGER}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_a_stranger_with_no_till_is_refused(self):
+		"""Being authenticated is not the same as being a till."""
+		with self.assertRaises(frappe.PermissionError):
+			api.report(devices=[{"id": STRANGER}], seq=1)
+
+	# ---------------------------------------------------------------- departures
+
+	def test_a_phone_that_stops_being_seen_closes_the_shift(self):
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+		session = self._open_session()
+		self.assertTrue(session)
+
+		# Wind the clock back rather than waiting fifteen real minutes. The sighting is
+		# what ages; the sweep is what notices.
+		vanished = add_to_date(now_datetime(), minutes=-20)
+		frappe.db.set_value(
+			"Presence Live Device", f"{BRANCH}::{PHONE}", "last_seen", vanished
+		)
+		frappe.db.set_value(
+			"Presence Till", till, "last_seen", now_datetime(), update_modified=False
+		)
+
+		departures = service.sweep(BRANCH, self.company)
+
+		self.assertEqual(len(departures), 1)
+		self.assertFalse(self._open_session(), "the shift is still open")
+
+		closed = frappe.get_doc("Presence Session", session)
+		self.assertEqual(closed.state, "Closed")
+		# The person left when their phone vanished, not when the timer ran out.
+		self.assertLess(
+			abs((closed.out_time - vanished).total_seconds()), 5, "wrong leaving time"
+		)
+
+	def test_a_phone_that_comes_back_in_time_keeps_the_shift_open(self):
+		"""The pocket-sleep case, end to end."""
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+		frappe.db.set_value(
+			"Presence Live Device",
+			f"{BRANCH}::{PHONE}",
+			"last_seen",
+			add_to_date(now_datetime(), minutes=-5),
+		)
+		frappe.db.set_value(
+			"Presence Till", till, "last_seen", now_datetime(), update_modified=False
+		)
+
+		departures = service.sweep(BRANCH, self.company)
+
+		self.assertEqual(departures, [])
+		self.assertTrue(self._open_session(), "the shift was closed too early")
+
+	def test_a_branch_nobody_can_see_never_sends_anyone_home(self):
+		"""Unreachable is not empty. This is the failure that would go unnoticed."""
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+		# The phone aged out AND the till went silent - a power cut, not a quiet shop.
+		frappe.db.set_value(
+			"Presence Live Device",
+			f"{BRANCH}::{PHONE}",
+			"last_seen",
+			add_to_date(now_datetime(), minutes=-60),
+		)
+		frappe.db.set_value(
+			"Presence Till",
+			till,
+			"last_seen",
+			add_to_date(now_datetime(), minutes=-60),
+			update_modified=False,
+		)
+
+		departures = service.sweep(BRANCH, self.company)
+
+		self.assertEqual(departures, [])
+		self.assertTrue(self._open_session(), "a dead branch sent everybody home")

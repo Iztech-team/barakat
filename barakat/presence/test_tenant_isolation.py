@@ -329,6 +329,7 @@ class TestPresenceScopeWiring(FrappeTestCase):
 		"Employee Device",
 		"Presence Sighting",
 		"Presence Session",
+		"Presence Live Device",
 	)
 
 	def test_every_presence_doctype_resolves_to_the_company_marker(self):
