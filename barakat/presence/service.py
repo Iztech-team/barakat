@@ -122,32 +122,44 @@ def record_sightings(till, decisions):
 
 
 def employee_for(device_key, company, when):
-	"""Whose device is this, on that date? None if nobody's.
+	"""Whose device is this, at that moment? None if nobody's.
 
-	Only open pairings count, and only ones that were open at the time. A pairing is
-	closed with a date rather than deleted precisely so that a January session still
-	resolves to whoever held the phone in January.
+	`when` is a full datetime, not a date. That matters for the closing day: `valid_to`
+	is a date, so a pairing ended at 14:00 would go on counting until midnight, and
+	"stop counting" has to mean now. `closed_at` carries the moment and this excludes
+	anything closed at or before `when`.
+
+	Only pairings that were open AT THE TIME count. A pairing is closed with a date
+	rather than deleted precisely so that a January session still resolves to whoever
+	held the phone in January — and so that unpairing at 14:00 leaves this morning's
+	session still belonging to them.
 	"""
+	day = when.date() if hasattr(when, "date") else when
+
 	rows = frappe.get_all(
 		"Employee Device",
 		filters={
 			"device_key": device_key,
 			"custom_company": company,
-			"valid_from": ("<=", when),
+			"valid_from": ("<=", day),
 		},
-		or_filters=[["valid_to", "is", "not set"], ["valid_to", ">=", when]],
-		fields=["employee"],
-		limit=1,
+		or_filters=[["valid_to", "is", "not set"], ["valid_to", ">=", day]],
+		fields=["employee", "closed_at"],
+		limit=2,
 	)
-	return rows[0].employee if rows else None
+	for row in rows:
+		if row.closed_at and row.closed_at <= when:
+			continue
+		return row.employee
+	return None
 
 
 def apply_decisions(till, decisions):
 	"""Turn engine decisions into sessions for the people they belong to."""
 	for decision in decisions:
-		employee = employee_for(
-			decision.device_key, till.custom_company, decision.at.date()
-		)
+		# The full moment, not the day: a pairing ended this afternoon must stop counting
+		# this afternoon, while this morning's sightings still belong to whoever held it.
+		employee = employee_for(decision.device_key, till.custom_company, decision.at)
 		if not employee:
 			# An unpaired device. Recorded as a sighting, belongs to nobody, and is
 			# how the pairing screen finds a phone in the first place.

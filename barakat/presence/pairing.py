@@ -211,3 +211,65 @@ def _reporting_till(branch, company):
 		limit=1,
 	)
 	return rows[0] if rows else None
+
+
+@frappe.whitelist()
+def unpair(name):
+	"""End a pairing, effective now. Manager work.
+
+	Two things have to happen, and the second is easy to miss.
+
+	The pairing is closed with today's date AND the exact moment. The date alone leaves
+	it counting until midnight, because `valid_to` is a date and the lookup asks whether
+	today falls inside the range — so a phone handed back at 14:00 could still open a
+	session at 16:00.
+
+	And if that was the person's last live device while a session was open, the session
+	is closed here. Nothing else would ever close it: a departure is detected by the
+	device vanishing, and the moment the pairing is gone that device resolves to nobody,
+	so the sweep skips it and the session hangs open for good. Somebody would show as at
+	work until a human noticed.
+	"""
+	doc = frappe.get_doc("Employee Device", name)
+	frappe.get_doc("Employee", doc.employee).check_permission("write")
+
+	if doc.valid_to and doc.closed_at:
+		return {"ok": True, "already": True}
+
+	now = now_datetime()
+	frappe.db.set_value(
+		"Employee Device", doc.name, {"valid_to": now.date(), "closed_at": now}
+	)
+
+	closed = _close_dangling_session(doc.employee, doc.custom_company, now)
+	return {"ok": True, "session_closed": closed}
+
+
+def _close_dangling_session(employee, company, now):
+	"""Close an open session only if this person has no live device left.
+
+	If they still hold another paired phone they may genuinely still be here, and the
+	ordinary departure logic can still see them leave through it. Closing on their
+	behalf would clock them out while they are standing at the till.
+	"""
+	still_paired = frappe.db.count(
+		"Employee Device",
+		{
+			"employee": employee,
+			"custom_company": company,
+			"valid_to": ("is", "not set"),
+		},
+	)
+	if still_paired:
+		return False
+
+	names = frappe.get_all(
+		"Presence Session",
+		filters={"employee": employee, "custom_company": company, "state": "Open"},
+		pluck="name",
+	)
+	for session in names:
+		frappe.db.set_value(
+			"Presence Session", session, {"out_time": now, "state": "Closed"}
+		)
+	return bool(names)
