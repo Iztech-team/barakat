@@ -119,6 +119,38 @@ def suspend(till):
 
 
 @frappe.whitelist()
+def reactivate(till):
+	"""Bring a suspended till back. Manager work.
+
+	Suspending is not a pause, so this is not simply its opposite: the account was
+	disabled and the till has been refused ever since. It comes back with a NEW key and
+	the old one dead, because the reason a till gets suspended is usually that somebody
+	is not sure where it is — and a machine that has been out of the shop for a week
+	should not walk back in on the credential it left with.
+
+	`approve` cannot do this job: it refuses anything that is not Pending, and it would
+	leave the disabled account disabled, so the till would show Active and still be
+	turned away on every report.
+	"""
+	doc = frappe.get_doc("Presence Till", till)
+	doc.check_permission("write")
+
+	if doc.status != "Suspended":
+		frappe.throw(_("Till {0} is not suspended.").format(till))
+
+	email = keys.user_name_for(doc)
+	if frappe.db.exists("User", email):
+		frappe.db.set_value("User", email, "enabled", 1)
+
+	frappe.db.set_value(
+		"Presence Till",
+		doc.name,
+		{"status": "Active", "key_issued_at": None},
+	)
+	return {"status": "awaiting-collection"}
+
+
+@frappe.whitelist()
 def reissue(till):
 	"""For a reimaged or replaced PC. The old key dies the moment this is called."""
 	doc = frappe.get_doc("Presence Till", till)
