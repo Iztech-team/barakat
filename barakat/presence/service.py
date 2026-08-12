@@ -154,8 +154,13 @@ def employee_for(device_key, company, when):
 	return None
 
 
-def apply_decisions(till, decisions):
-	"""Turn engine decisions into sessions for the people they belong to."""
+def apply_decisions(till, decisions, present=frozenset()):
+	"""Turn engine decisions into sessions for the people they belong to.
+
+	`present` is every device the branch can still see. It matters only for departures,
+	and it is the difference between "a phone left" and "a person left" — see
+	`_still_here_on_another_device`.
+	"""
 	for decision in decisions:
 		# The full moment, not the day: a pairing ended this afternoon must stop counting
 		# this afternoon, while this morning's sightings still belong to whoever held it.
@@ -167,8 +172,29 @@ def apply_decisions(till, decisions):
 
 		if decision.kind == engine.ARRIVED:
 			_open_session(till, employee, decision.at, decision.device_key)
-		else:
+		elif not _still_here_on_another_device(
+			employee, till.custom_company, decision.device_key, present, decision.at
+		):
 			_close_session(till, employee, decision.at)
+
+
+def _still_here_on_another_device(employee, company, gone_key, present, when):
+	"""Does this person still have a DIFFERENT device on the network?
+
+	Somebody carrying a phone and a tablet used to be sent home the moment either one
+	dropped off, because a departure closed the session without ever asking whether the
+	other was still sitting there. The shift ended at whichever device slept first, and
+	the rest of the day was never recorded.
+
+	Only devices paired to the same person count, so a colleague's phone standing beside
+	them keeps nobody at work.
+	"""
+	for device_key in present:
+		if device_key == gone_key:
+			continue
+		if employee_for(device_key, company, when) == employee:
+			return True
+	return False
 
 
 def _open_session(till, employee, when, device_key):
@@ -237,7 +263,7 @@ def ingest(till, devices, seen_at, settled=True, blind=False):
 
 	save_devices(till.branch, till.custom_company, state, devices)
 	record_sightings(till, decisions)
-	apply_decisions(till, decisions)
+	apply_decisions(till, decisions, state.present)
 	return decisions
 
 
@@ -264,7 +290,7 @@ def sweep(branch, company):
 	till = _any_till(branch, company)
 	if till:
 		record_sightings(till, decisions)
-		apply_decisions(till, decisions)
+		apply_decisions(till, decisions, state.present)
 	return decisions
 
 
