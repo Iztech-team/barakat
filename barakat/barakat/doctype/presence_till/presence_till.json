@@ -14,7 +14,7 @@
   {"fieldname":"api_user","fieldtype":"Link","label":"API User","options":"User","read_only":1},
   {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Pending\nActive\nSuspended\nRetired","default":"Pending","reqd":1},
   {"fieldname":"last_seen","fieldtype":"Datetime","label":"Last Seen","read_only":1},
-  {"fieldname":"last_seq","fieldtype":"Int","label":"Last Sequence","read_only":1},
+  {"fieldname":"last_seq","fieldtype":"Long Int","label":"Last Sequence","read_only":1,"description":"Must rise forever, including across watcher restarts, so it is seeded from the clock and needs more than 4 bytes."},
   {"fieldname":"watcher_version","fieldtype":"Data","label":"Watcher Version","read_only":1},
   {"fieldname":"last_clock_drift_s","fieldtype":"Int","label":"Clock Drift (s)","read_only":1},
   {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User","read_only":1},
