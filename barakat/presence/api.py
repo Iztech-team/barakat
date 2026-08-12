@@ -17,7 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
-from barakat.presence import keys, service
+from barakat.presence import keys, service, spans
 from barakat.presence.mode import is_wifi_mode, settings_for
 
 MAX_BODY_DEVICES = 512
@@ -281,14 +281,101 @@ def timeline(employee, from_date, to_date):
 		limit_page_length=0,
 	)
 
+	window_start = get_datetime(f"{from_date} 00:00:00")
+	window_end = get_datetime(f"{to_date} 23:59:59")
+
+	return {
+		"sessions": [
+			{
+				"name": row.name,
+				"branch": row.branch,
+				"inTime": str(row.in_time),
+				"outTime": str(row.out_time) if row.out_time else None,
+				"deviceKey": row.device_key,
+				"open": row.state == "Open",
+			}
+			for row in rows
+		],
+		"spans": _device_spans(employee, window_start, window_end),
+		# Where the per-device detail runs out. Past this the sighting log has been
+		# deleted and only the session block survives, so the screen can say so rather
+		# than drawing an empty day that looks like an absence.
+		"detailFrom": str(_detail_horizon(employee)),
+	}
+
+
+def _device_spans(employee, window_start, window_end):
+	"""Per-device stretches, from the raw log, for one person.
+
+	The session block cannot answer "which phone was here at 3pm": it records only the
+	device that OPENED it and never changes, so a person carrying two gets one block
+	coloured after whichever walked in first. The sighting log has appeared/gone per
+	device, which is exactly the question, for as long as the log is kept.
+	"""
+	pairings = frappe.get_all(
+		"Employee Device",
+		filters={"employee": employee},
+		fields=["device_key", "valid_from", "valid_to", "closed_at"],
+		limit_page_length=0,
+	)
+	if not pairings:
+		return []
+
+	ownership = {}
+	for row in pairings:
+		start = get_datetime(f"{row.valid_from} 00:00:00")
+		# `closed_at` is the exact moment; `valid_to` is only a date, and using it alone
+		# would let a pairing ended at 14:00 keep drawing until midnight.
+		if row.closed_at:
+			end = get_datetime(row.closed_at)
+		elif row.valid_to:
+			end = get_datetime(f"{row.valid_to} 23:59:59")
+		else:
+			end = None
+		ownership.setdefault(row.device_key, []).append((start, end))
+
+	events = frappe.get_all(
+		"Presence Sighting",
+		filters={
+			"device_key": ("in", list(ownership)),
+			"server_time": ("between", [window_start, window_end]),
+		},
+		fields=["device_key", "event", "server_time"],
+		order_by="server_time asc",
+		limit_page_length=0,
+	)
+
+	built = spans.build_spans(
+		[(row.device_key, row.event, get_datetime(row.server_time)) for row in events],
+		window_start,
+		window_end,
+		now_datetime(),
+		ownership=ownership,
+	)
+
 	return [
 		{
-			"name": row.name,
-			"branch": row.branch,
-			"inTime": str(row.in_time),
-			"outTime": str(row.out_time) if row.out_time else None,
-			"deviceKey": row.device_key,
-			"open": row.state == "Open",
+			"deviceKey": span.device_key,
+			"start": str(span.start),
+			"end": str(span.end),
+			"open": span.open_ended,
 		}
-		for row in rows
+		for span in built
 	]
+
+
+def _detail_horizon(employee):
+	"""The oldest moment the sighting log can still speak for.
+
+	Read from the log itself rather than computed from the retention setting: the
+	cleanup runs nightly, so the setting says what will eventually be true and the
+	oldest surviving row says what IS true.
+	"""
+	company = frappe.db.get_value("Employee", employee, "company")
+	oldest = frappe.db.get_value(
+		"Presence Sighting",
+		{"custom_company": company},
+		"server_time",
+		order_by="server_time asc",
+	)
+	return oldest or now_datetime()
