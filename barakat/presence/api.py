@@ -131,7 +131,14 @@ def reissue(till):
 
 
 @frappe.whitelist()
-def report(devices=None, seq=None, sent_at=None, watcher_version=None, health=None):
+def report(
+	devices=None,
+	seq=None,
+	sent_at=None,
+	watcher_version=None,
+	health=None,
+	local_url=None,
+):
 	"""One watcher's view of its branch. Writes; returns nothing readable.
 
 	This method is the entire security boundary. The watcher's user holds no DocPerm on
@@ -175,6 +182,9 @@ def report(devices=None, seq=None, sent_at=None, watcher_version=None, health=No
 			"last_clock_drift_s": drift,
 			"is_settled": 1 if settled else 0,
 			"is_blind": 1 if blind else 0,
+			# Where this till answers on the shop's own network. Only it can know -
+			# the address is private to that building and changes with DHCP.
+			"local_url": (local_url or "")[:140],
 		},
 		update_modified=False,
 	)

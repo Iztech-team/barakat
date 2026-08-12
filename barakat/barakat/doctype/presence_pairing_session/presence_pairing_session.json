@@ -1,0 +1,29 @@
+{
+ "actions": [],
+ "autoname": "field:code",
+ "creation": "2026-08-12 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["custom_company","branch","employee","code","state","device_key","till","expires_at","claimed_at"],
+ "fields": [
+  {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1},
+  {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1},
+  {"fieldname":"employee","fieldtype":"Link","label":"Employee","options":"Employee","reqd":1},
+  {"fieldname":"code","fieldtype":"Data","label":"Code","reqd":1,"unique":1,"length":32,"description":"Single use, short lived. Goes in the QR and nowhere else."},
+  {"fieldname":"state","fieldtype":"Select","label":"State","options":"Waiting\nClaimed\nExpired","default":"Waiting","reqd":1},
+  {"fieldname":"device_key","fieldtype":"Data","label":"Device Key","length":64,"read_only":1},
+  {"fieldname":"till","fieldtype":"Link","label":"Claimed By Till","options":"Presence Till","read_only":1},
+  {"fieldname":"expires_at","fieldtype":"Datetime","label":"Expires At","reqd":1},
+  {"fieldname":"claimed_at","fieldtype":"Datetime","label":"Claimed At","read_only":1}
+ ],
+ "links": [],
+ "modified": "2026-08-12 00:00:00",
+ "module": "Barakat",
+ "name": "Presence Pairing Session",
+ "owner": "Administrator",
+ "permissions": [
+  {"role":"System Manager","read":1,"write":1,"create":1,"delete":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
