@@ -40,6 +40,12 @@ fixtures = [
 					"Company-custom_disable_rounded_total",
 					"Company-custom_rounding_method",
 					"Company-custom_barakat_coa_language",
+					# Pre-existing fields that were never added here. They install
+					# fine (import reads the whole file) but export-fixtures would
+					# drop them. Found by EveryFixtureFieldIsExported, 2026-08-11.
+					"Company-custom_barakat_opening_account",
+					"Company-custom_barakat_salary_expense_account",
+					"Company-custom_scale_uom",
 					# Branch
 					"Branch-custom_pos_company",
 					"Branch-custom_pos_profiles",
@@ -52,6 +58,14 @@ fixtures = [
 					"POS Profile-custom_expense_account",
 					"POS Profile-custom_owner_deposit_account",
 					"POS Profile-custom_bank_account",
+					# POS Profile — per-till cashier limits. Absent from this list,
+					# `bench export-fixtures` would quietly drop them from
+					# custom_field.json and the next site to install would have no
+					# discount cap at all.
+					"POS Profile-custom_cashier_limits_section",
+					"POS Profile-custom_allow_ad_hoc_item",
+					"POS Profile-custom_allow_customer_creation",
+					"POS Profile-custom_max_discount_percent",
 					# Employee
 					"Employee-custom_pos_pin",
 					"Employee-custom_role_preset",
@@ -75,6 +89,9 @@ fixtures = [
 					"Customer-custom_company",
 					"Customer-custom_branch",
 					"Customer-custom_date_of_birth",
+					# Set by the till so Customer.before_insert can tell a till's
+					# request from the admin panel's.
+					"Customer-custom_pos_profile",
 					# Company markers on doctypes ERPNext gives no company field.
 					# Without these the Company User Permission has no Link field to
 					# bind to and the rows are readable by every shop on the site —
@@ -84,6 +101,12 @@ fixtures = [
 					"Product Bundle-custom_company",
 					"Supplier Group-custom_company",
 					"Territory-custom_company",
+					# Same omission as the Company fields above — these three are
+					# tenant-scoping markers, so an export that dropped them would
+					# make those rows readable by every shop on the site.
+					"Customer Group-custom_company",
+					"Price List-custom_company",
+					"UOM-custom_company",
 					# Sales Invoice / POS Invoice
 					"Sales Invoice-custom_external_id",
 					"Sales Invoice-custom_operator_employee",

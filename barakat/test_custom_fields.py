@@ -136,6 +136,40 @@ class ClosingEntryRecordsBothIdentities(unittest.TestCase):
         self.assertEqual(f["options"], "Employee")
 
 
+class EveryFixtureFieldIsExported(unittest.TestCase):
+    """hooks.py lists Custom Fields to export BY NAME — and drops the rest.
+
+    `fixtures` controls `bench export-fixtures`, not import, so a field missing
+    from that list still installs correctly and looks fine. The damage shows up
+    the next time anyone re-exports: the field vanishes from custom_field.json
+    and the site after that never gets it.
+
+    Same failure mode the Role fixture's comment describes, and the same
+    treatment — compute the check instead of trusting a hand-kept list. Caught
+    on the cashier-limit fields on 2026-08-11.
+    """
+
+    def test_no_fixture_field_is_missing_from_the_hooks_allowlist(self):
+        from barakat.hooks import fixtures
+
+        allowlisted = set()
+        for entry in fixtures:
+            if entry.get("dt") != "Custom Field":
+                continue
+            for condition in entry.get("filters", []):
+                if len(condition) == 3 and condition[1] == "in":
+                    allowlisted.update(condition[2])
+
+        declared = {f["name"] for f in _rows()}
+        missing = sorted(declared - allowlisted)
+        self.assertEqual(
+            missing,
+            [],
+            "these Custom Fields are in the fixture file but NOT in the hooks.py "
+            f"export allowlist, so export-fixtures would drop them: {missing}",
+        )
+
+
 class CashierLimitFieldsAreDeclared(unittest.TestCase):
     """The three per-till limits the POS Profile carries.
 
