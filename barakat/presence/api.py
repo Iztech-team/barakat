@@ -250,3 +250,45 @@ def _watcher_settings(company):
 		"warmup_s": settings["warmup_s"],
 		"max_devices": settings["max_devices"],
 	}
+
+
+@frappe.whitelist()
+def timeline(employee, from_date, to_date):
+	"""Every session this person had, day by day, for a date range.
+
+	Read-only and deliberately dumb: it hands back the raw stretches and lets the screen
+	decide how to draw them. A session that starts before midnight and ends after it is
+	returned once, on the day it STARTED, with its real times — splitting it here would
+	invent two shifts out of one night.
+	"""
+	frappe.get_doc("Employee", employee).check_permission("read")
+
+	rows = frappe.get_all(
+		"Presence Session",
+		filters={
+			"employee": employee,
+			"in_time": ("between", [f"{from_date} 00:00:00", f"{to_date} 23:59:59"]),
+		},
+		fields=[
+			"name",
+			"branch",
+			"in_time",
+			"out_time",
+			"device_key",
+			"state",
+		],
+		order_by="in_time asc",
+		limit_page_length=0,
+	)
+
+	return [
+		{
+			"name": row.name,
+			"branch": row.branch,
+			"inTime": str(row.in_time),
+			"outTime": str(row.out_time) if row.out_time else None,
+			"deviceKey": row.device_key,
+			"open": row.state == "Open",
+		}
+		for row in rows
+	]

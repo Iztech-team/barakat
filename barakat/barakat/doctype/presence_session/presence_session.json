@@ -3,13 +3,14 @@
  "creation": "2026-08-11 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["custom_company","branch","employee","in_time","out_time","state","checkin_in","checkin_out"],
+ "field_order": ["custom_company","branch","employee","in_time","out_time","state","device_key","checkin_in","checkin_out"],
  "fields": [
   {"fieldname":"custom_company","fieldtype":"Link","label":"Company","options":"Company","reqd":1},
   {"fieldname":"branch","fieldtype":"Link","label":"Branch","options":"Branch","reqd":1},
   {"fieldname":"employee","fieldtype":"Link","label":"Employee","options":"Employee","reqd":1},
   {"fieldname":"in_time","fieldtype":"Datetime","label":"In","reqd":1},
   {"fieldname":"out_time","fieldtype":"Datetime","label":"Out","description":"When the device actually vanished, not when the wait ran out."},
+  {"fieldname":"device_key","fieldtype":"Data","label":"Device","read_only":1,"length":64,"description":"The phone whose arrival opened this session. A person may hold more than one, and without this a session cannot say which."},
   {"fieldname":"state","fieldtype":"Select","label":"State","options":"Open\nClosed\nSuperseded","default":"Open","reqd":1},
   {"fieldname":"checkin_in","fieldtype":"Link","label":"Check-in (IN)","options":"Employee Checkin","read_only":1},
   {"fieldname":"checkin_out","fieldtype":"Link","label":"Check-in (OUT)","options":"Employee Checkin","read_only":1}

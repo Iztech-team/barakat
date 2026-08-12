@@ -166,12 +166,12 @@ def apply_decisions(till, decisions):
 			continue
 
 		if decision.kind == engine.ARRIVED:
-			_open_session(till, employee, decision.at)
+			_open_session(till, employee, decision.at, decision.device_key)
 		else:
 			_close_session(till, employee, decision.at)
 
 
-def _open_session(till, employee, when):
+def _open_session(till, employee, when, device_key):
 	existing = frappe.db.exists(
 		"Presence Session",
 		{
@@ -191,6 +191,7 @@ def _open_session(till, employee, when):
 			"branch": till.branch,
 			"employee": employee,
 			"in_time": when,
+			"device_key": device_key,
 			"state": "Open",
 		}
 	).insert(ignore_permissions=True)
