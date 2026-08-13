@@ -413,6 +413,46 @@ class TestPresenceEndToEnd(FrappeTestCase):
 			"the asking is the only evidence the key is gone — it must be recorded",
 		)
 
+	def test_reissue_actually_kills_the_old_key(self):
+		"""It said so in its own docstring and did not do it.
+
+		Clearing `key_issued_at` only makes the SERVER forget it handed one out. The
+		credential kept working, because nothing disabled the account — so a till
+		reissued after being stolen or reimaged carried on reporting on the old key,
+		and the panel sat on "Collecting its key" for ever, since the till had no reason
+		to ask for a replacement it did not need.
+		"""
+		self._join()
+		till = self._approve()
+		self._join()
+		user = frappe.db.get_value("Presence Till", till, "api_user")
+		self.assertEqual(frappe.db.get_value("User", user, "enabled"), 1)
+
+		api.reissue(till)
+
+		self.assertEqual(
+			frappe.db.get_value("User", user, "enabled"),
+			0,
+			"the old key must stop working the moment reissue is pressed",
+		)
+
+	def test_the_till_collects_a_working_key_after_a_reissue(self):
+		"""Revoking must not strand the till — asking again has to bring it back."""
+		self._join()
+		till = self._approve()
+		self._join()
+		api.reissue(till)
+
+		again = self._join()
+		self.assertEqual(again["status"], "approved")
+		self.assertTrue(again["api_secret"], "a fresh secret must be handed over")
+		self.assertEqual(
+			frappe.db.get_value("User", frappe.db.get_value("Presence Till", till, "api_user"), "enabled"),
+			1,
+			"collecting the new key must re-enable the account",
+		)
+		self.assertIsNotNone(frappe.db.get_value("Presence Till", till, "key_issued_at"))
+
 	def test_a_pending_till_asking_repeatedly_is_not_a_lost_key(self):
 		"""Waiting for a manager is normal and must not look like a fault."""
 		self._join()

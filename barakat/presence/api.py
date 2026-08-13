@@ -170,6 +170,18 @@ def reissue(till):
 	doc = frappe.get_doc("Presence Till", till)
 	doc.check_permission("write")
 
+	# The old key has to actually DIE, which this promised and did not do.
+	#
+	# Clearing `key_issued_at` only makes the server forget it handed one out; the
+	# credential itself kept working, because the account was never disabled. So a till
+	# reissued after being stolen or reimaged carried on reporting on the old key, and
+	# the Admin Panel sat on "Collecting its key" for ever — the till had no reason to
+	# ask for a new one, since the one it held was fine.
+	#
+	# Revoking is safe here: the next `request_join` re-enables the account and rotates
+	# the secret, so the till collects a fresh key and carries on by itself.
+	keys.revoke(doc)
+
 	frappe.db.set_value(
 		"Presence Till",
 		doc.name,
