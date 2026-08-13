@@ -343,6 +343,68 @@ class TestPairingAndMap(FrappeTestCase):
 		finally:
 			frappe.defaults.set_user_default("Company", self.company)
 
+	def test_pairing_a_phone_that_is_already_here_opens_the_shift(self):
+		"""The gap that made the first day of every enrolment invisible.
+
+		An arrival is a TRANSITION — a device that was absent and is now present. A
+		phone paired at the counter never makes that transition: it was already on the
+		wifi when the QR was scanned, so it is already in the branch's present set and
+		nothing opens a session. The person's shift would not start until they left the
+		shop and came back, which on the day they are enrolled means the whole day goes
+		unrecorded — the exact day somebody is watching to see whether this works.
+		"""
+		# The till reports the phone BEFORE anyone pairs it, as it does for every device
+		# on the network, paired or not.
+		service.ingest(self._till(), [PHONE], now_datetime(), settled=True)
+		self.assertFalse(
+			self._open_session(),
+			"an unknown phone must not open anything",
+		)
+
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		name = self._open_session()
+		self.assertTrue(name, "the shift must open the moment the phone is paired")
+		self.assertEqual(
+			frappe.db.get_value("Presence Session", name, "device_key"), PHONE
+		)
+
+	def test_pairing_a_phone_that_is_NOT_on_the_wifi_opens_nothing(self):
+		"""A QR sent by message, or scanned from the back office, is not evidence.
+
+		The device has to be on the branch's live list. Otherwise pairing would clock
+		somebody in from wherever they happen to be.
+		"""
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], TABLET)
+		frappe.set_user("Administrator")
+
+		self.assertFalse(self._open_session())
+
+	def test_pairing_twice_does_not_open_a_second_shift(self):
+		service.ingest(self._till(), [PHONE], now_datetime(), settled=True)
+		first = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(first["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		second = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(second["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertEqual(
+			frappe.db.count(
+				"Presence Session",
+				{"employee": self.employee, "branch": BRANCH, "state": "Open"},
+			),
+			1,
+		)
+
 	def test_a_code_cannot_be_used_twice(self):
 		started = pairing.start(self.employee, BRANCH)
 		self._as_till()

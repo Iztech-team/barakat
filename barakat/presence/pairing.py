@@ -25,7 +25,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, now_datetime
 
-from barakat.presence import keys
+from barakat.presence import keys, service
 from barakat.presence.mode import is_wifi_mode, settings_for
 
 SESSION = "Presence Pairing Session"
@@ -159,6 +159,7 @@ def claim(code, device_key):
 		frappe.throw(_("No device was identified."))
 
 	_pair(row.employee, device_key, row.custom_company)
+	_start_session_if_already_here(till, row.employee, device_key)
 
 	frappe.db.set_value(
 		SESSION,
@@ -205,6 +206,38 @@ def _pair(employee, device_key, company):
 			"paired_by": frappe.session.user,
 		}
 	).insert(ignore_permissions=True)
+
+
+def _start_session_if_already_here(till, employee, device_key):
+	"""A phone paired while its owner is standing in the shop is here NOW.
+
+	Arrival is a TRANSITION: a device that was not on the network and now is. A phone
+	paired at the counter never makes that transition — it was already on the wifi when
+	the QR was scanned, so it is already in the branch's present set and nothing new
+	happens. Without this, the person's first session would not open until they left the
+	shop and came back, which on the day they are enrolled means their whole shift goes
+	unrecorded. That is precisely the day somebody is watching to see whether this works.
+
+	The session starts NOW, not from when the device was first seen. They may well have
+	been here for hours, but until this moment nothing could attribute that phone to a
+	person, and attendance we could not attribute is attendance we should not invent.
+
+	Only if the device is on the branch's live list. A phone paired from a back office,
+	or over a QR sent by message, is not evidence its owner is in the shop.
+	"""
+	seen = frappe.db.exists(
+		"Presence Live Device",
+		{
+			"device_key": device_key,
+			"branch": till.branch,
+			"custom_company": till.custom_company,
+		},
+	)
+	if not seen:
+		return False
+
+	service._open_session(till, employee, now_datetime(), device_key)
+	return True
 
 
 def _reporting_till(branch, company):
