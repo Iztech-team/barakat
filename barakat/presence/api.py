@@ -63,6 +63,16 @@ def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
 		# Already collected. Nothing on the server can hand it out again - Frappe keeps
 		# only a hash of the secret - so a lost key is reissued by a manager, never
 		# recovered.
+		#
+		# And the asking itself is the news. A till only reaches this endpoint when it
+		# has nothing stored locally, so a till we have already issued a key to is a
+		# till whose key is GONE - reimaged, reinstalled, profile wiped. Before this was
+		# recorded, that till sat in the Admin Panel as Active and simply never reported,
+		# indistinguishable from a branch with a network fault, and every minute of its
+		# staff's attendance was lost while somebody looked at the router.
+		frappe.db.set_value(
+			"Presence Till", till.name, "asked_again_at", now_datetime()
+		)
 		return {"status": "active"}
 
 	credentials = keys.issue_key(till)
@@ -142,10 +152,14 @@ def reactivate(till):
 	if frappe.db.exists("User", email):
 		frappe.db.set_value("User", email, "enabled", 1)
 
+	# `asked_again_at` goes with the key. It records a till complaining that it has
+	# nothing to report with; having just been given a fresh chance to collect one, the
+	# complaint is answered, and leaving it set would keep the Admin Panel asking a
+	# manager to fix something they have already fixed.
 	frappe.db.set_value(
 		"Presence Till",
 		doc.name,
-		{"status": "Active", "key_issued_at": None},
+		{"status": "Active", "key_issued_at": None, "asked_again_at": None},
 	)
 	return {"status": "awaiting-collection"}
 
@@ -157,7 +171,9 @@ def reissue(till):
 	doc.check_permission("write")
 
 	frappe.db.set_value(
-		"Presence Till", doc.name, {"key_issued_at": None, "status": "Active"}
+		"Presence Till",
+		doc.name,
+		{"key_issued_at": None, "status": "Active", "asked_again_at": None},
 	)
 	return {"status": "awaiting-collection"}
 

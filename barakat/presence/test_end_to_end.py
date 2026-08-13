@@ -383,3 +383,69 @@ class TestPresenceEndToEnd(FrappeTestCase):
 
 		self.assertEqual(departures, [])
 		self.assertTrue(self._open_session(), "a dead branch sent everybody home")
+
+	# ------------------------------------------------- a till that lost its key
+
+	def test_a_till_that_lost_its_key_says_so_instead_of_going_quiet(self):
+		"""The failure that used to be indistinguishable from a network fault.
+
+		A reimaged PC comes back with an empty store and asks to join. The server has
+		already issued this till a key and cannot issue it again — Frappe keeps only a
+		hash — so it is told "active" and it reports nothing, for ever. In the Admin
+		Panel that looked exactly like a branch whose router was down, and the fix
+		(reissue) is nothing like the fix somebody would go looking for.
+		"""
+		self._join()
+		till = self._approve()
+		first = self._join()
+		self.assertEqual(first["status"], "approved")
+		self.assertIsNone(
+			frappe.db.get_value("Presence Till", till, "asked_again_at"),
+			"collecting a key for the first time is not a complaint",
+		)
+
+		# The PC is reimaged: the app has no credentials and asks again.
+		again = self._join()
+		self.assertEqual(again["status"], "active")
+		self.assertNotIn("api_key", again, "a key is never handed out twice")
+		self.assertIsNotNone(
+			frappe.db.get_value("Presence Till", till, "asked_again_at"),
+			"the asking is the only evidence the key is gone — it must be recorded",
+		)
+
+	def test_a_pending_till_asking_repeatedly_is_not_a_lost_key(self):
+		"""Waiting for a manager is normal and must not look like a fault."""
+		self._join()
+		self._join()
+		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
+		self.assertIsNone(
+			frappe.db.get_value("Presence Till", till, "asked_again_at")
+		)
+
+	def test_reissuing_answers_the_complaint(self):
+		"""The badge must clear when the manager does the thing it asked for."""
+		self._join()
+		till = self._approve()
+		self._join()
+		self._join()
+		self.assertIsNotNone(frappe.db.get_value("Presence Till", till, "asked_again_at"))
+
+		api.reissue(till)
+		self.assertIsNone(
+			frappe.db.get_value("Presence Till", till, "asked_again_at"),
+			"a manager who has just reissued must not still be asked to reissue",
+		)
+		self.assertIsNone(frappe.db.get_value("Presence Till", till, "key_issued_at"))
+
+		# And the till collects the new key on its next ask, which is the whole point.
+		self.assertEqual(self._join()["status"], "approved")
+
+	def test_reactivating_a_suspended_till_also_clears_it(self):
+		self._join()
+		till = self._approve()
+		self._join()
+		self._join()
+		api.suspend(till)
+		api.reactivate(till)
+		self.assertIsNone(frappe.db.get_value("Presence Till", till, "asked_again_at"))
+		self.assertEqual(self._join()["status"], "approved")
