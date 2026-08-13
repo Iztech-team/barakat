@@ -34,9 +34,20 @@ SESSION = "Presence Pairing Session"
 @frappe.whitelist()
 def start(employee, branch):
 	"""Open a pairing window for this person at this branch. Manager work."""
-	company = frappe.defaults.get_user_default("Company") or frappe.db.get_value(
-		"Employee", employee, "company"
-	)
+	# THE EMPLOYEE's company, and nothing else.
+	#
+	# This used to prefer `frappe.defaults.get_user_default("Company")`, which is the
+	# operator's own convenience setting and has nothing to do with whose phone is being
+	# paired. Worse, it falls back to the SITE-WIDE default when the user has none — so
+	# on a site carrying twenty companies, a manager pairing a phone for an E2E Shop
+	# employee resolved "Iztech Valley", found no wifi mode there, and was told the
+	# feature was switched off for a company they were not looking at.
+	#
+	# It poisoned everything downstream too: the till lookup, the settings, and the
+	# company stamped on the pairing request — which is then compared against the till's
+	# at claim time. A pairing that had somehow got past the mode check would have been
+	# refused later, for a reason nobody could have read.
+	company = frappe.db.get_value("Employee", employee, "company")
 	if not company:
 		frappe.throw(_("Cannot tell which company this employee belongs to."))
 

@@ -312,6 +312,37 @@ class TestPairingAndMap(FrappeTestCase):
 		self.assertIn("192.168.1.5:7331", started["url"])
 		self.assertIn(started["code"], started["url"])
 
+	def test_the_company_comes_from_the_employee_not_the_operator(self):
+		"""The bug that made pairing unusable on a site with more than one company.
+
+		`start` used to prefer `frappe.defaults.get_user_default("Company")`, which is
+		the operator's own setting and, when they have none, the SITE-WIDE default. On a
+		site carrying twenty companies a manager was told wifi presence was switched off
+		— for a company they were not looking at and whose employee they were not pairing.
+
+		The whole suite missed it because setUp sets that default to the same company as
+		the employee, so the wrong lookup returned the right answer. Here it deliberately
+		does not, and points at a company that does not exist at all: if anything ever
+		reads it again, this fails rather than passing by luck.
+		"""
+		frappe.defaults.set_user_default("Company", "A Company That Does Not Exist")
+		try:
+			started = pairing.start(self.employee, BRANCH)
+			self.assertIn(started["code"], started["url"])
+
+			stamped = frappe.db.get_value(
+				"Presence Pairing Session",
+				{"code": started["code"]},
+				"custom_company",
+			)
+			self.assertEqual(
+				stamped,
+				frappe.db.get_value("Employee", self.employee, "company"),
+				"the pairing must belong to the employee's company, not the operator's",
+			)
+		finally:
+			frappe.defaults.set_user_default("Company", self.company)
+
 	def test_a_code_cannot_be_used_twice(self):
 		started = pairing.start(self.employee, BRANCH)
 		self._as_till()
