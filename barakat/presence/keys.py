@@ -12,7 +12,10 @@ It must never be the POS's own login. That account can read customers, prices an
 invoices; a watcher key must not be a till account.
 """
 
+import hashlib
+
 import frappe
+from frappe.utils import validate_email_address
 
 WATCHER_ROLE = "Barakat Presence Watcher"
 
@@ -38,8 +41,42 @@ def ensure_watcher_role():
 
 
 def user_name_for(till):
-	"""Deterministic, so re-approving a till never orphans an account."""
-	return f"presence-till-{till.name}@barakat.local".replace(" ", "-").lower()
+	"""Deterministic, so re-approving a till never orphans an account.
+
+	The obvious address is the till's own name, and for a profile called "Front Counter"
+	it is a perfectly legal one. It is not always legal. A POS Profile named in Arabic
+	produces an Arabic address, Frappe refuses it as an email, and the till is answered
+	417 by every request it will ever make — no key, no watcher, no attendance, and a row
+	in the Admin Panel reading Active the whole time.
+
+	Which is not an edge case for these shops, it is the ordinary case: on 2026-08-13 a
+	till asked twice a minute for fifty-one minutes on that account, and is still Active
+	with no key today.
+
+	So the readable address is kept whenever it is valid, and a fingerprint of the very
+	same name stands in when it is not. Keeping it matters as much as fixing it — moving
+	every till to a new scheme would orphan the account each one is already authenticating
+	with. The Arabic name is not lost: it stays on the user's `first_name`, which has no
+	such restriction.
+	"""
+	readable = f"presence-till-{till.name}@barakat.local".replace(" ", "-").lower()
+	if validate_email_address(readable):
+		return readable
+
+	# Truncated only as far as collision resistance allows; this names a login.
+	digest = hashlib.sha256(str(till.name).encode("utf-8")).hexdigest()[:24]
+	return f"presence-till-{digest}@barakat.local"
+
+
+def account_for(till):
+	"""The account this till actually holds, which outranks any rule for deriving one.
+
+	`user_name_for` has to be able to change — it just did — and every derivation is a
+	guess about the past. The till records what it was really given, so a reissue rotates
+	the key the watcher is using and a revoke disables the account that is really open.
+	Deriving instead would have quietly done neither, while reporting success.
+	"""
+	return till.get("api_user") or user_name_for(till)
 
 
 def issue_key(till):
@@ -52,7 +89,7 @@ def issue_key(till):
 	from frappe.core.doctype.user.user import generate_keys
 
 	ensure_watcher_role()
-	email = user_name_for(till)
+	email = account_for(till)
 
 	if not frappe.db.exists("User", email):
 		user = frappe.get_doc(
@@ -102,7 +139,7 @@ def _assign_role(user):
 
 def revoke(till):
 	"""Disable the till's account. History is kept; the key stops working at once."""
-	email = user_name_for(till)
+	email = account_for(till)
 	if frappe.db.exists("User", email):
 		frappe.db.set_value("User", email, "enabled", 0)
 
