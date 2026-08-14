@@ -587,6 +587,31 @@ class TestPresenceEndToEnd(FrappeTestCase):
 			"asking must never overwrite who actually holds the key",
 		)
 
+	def test_a_broken_diagnostic_write_does_not_refuse_the_till(self):
+		"""The 15 minutes of 417s on 2026-08-13.
+
+		A deploy puts new code live before `migrate` reaches every site — a bench with a
+		dozen sites migrates them one at a time — so for a few minutes the code can want
+		a column the database has not got. Recording who asked is a note for a manager;
+		being answered at all is the job, and the job must not depend on the note.
+		"""
+		import unittest.mock as mock
+
+		self._join()
+		till = self._approve()
+		self._join()
+
+		with mock.patch.object(
+			frappe.db, "set_value", side_effect=Exception("Unknown column 'asked_again_by'")
+		):
+			result = api.request_join(PROFILE, machine_name="DESK-E2E-01")
+
+		self.assertEqual(
+			result["status"],
+			"active",
+			"the till must still get an answer when the note cannot be written",
+		)
+
 	def test_reissuing_clears_who_asked(self):
 		self._join()
 		till = self._approve()

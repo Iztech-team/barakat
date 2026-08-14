@@ -75,11 +75,24 @@ def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
 		# a reissue the new key goes to whichever machine asks first. Recording the name
 		# lets a manager see that the computer asking is not the computer the key was
 		# issued to, before they hand out another one.
-		frappe.db.set_value(
-			"Presence Till",
-			till.name,
-			{"asked_again_at": now_datetime(), "asked_again_by": machine_name},
-		)
+		#
+		# Never at the cost of the answer, though. This is a note for a manager; being
+		# let in is the job. On 2026-08-13 a deploy put this code live fifteen minutes
+		# before `migrate` reached this site, so the column did not exist yet, the write
+		# threw, and every till asking to join got a 417 twice a minute until the schema
+		# caught up. A diagnostic must not be able to do that — and a bench with a dozen
+		# sites migrates them one at a time, so that window is normal, not exceptional.
+		try:
+			frappe.db.set_value(
+				"Presence Till",
+				till.name,
+				{"asked_again_at": now_datetime(), "asked_again_by": machine_name},
+			)
+		except Exception:
+			frappe.log_error(
+				title="presence: could not record a re-ask",
+				message=frappe.get_traceback(),
+			)
 		return {"status": "active"}
 
 	credentials = keys.issue_key(till)
