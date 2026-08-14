@@ -15,7 +15,7 @@ can name somebody else's. That is the rule that failed once on Contact and Item 
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import get_datetime, getdate, now_datetime
 
 from barakat.presence import keys, service, spans
 from barakat.presence.mode import is_wifi_mode, settings_for
@@ -467,7 +467,7 @@ def _device_spans(employee, window_start, window_end):
 	pairings = frappe.get_all(
 		"Employee Device",
 		filters={"employee": employee},
-		fields=["device_key", "valid_from", "valid_to", "closed_at"],
+		fields=["device_key", "valid_from", "valid_to", "closed_at", "creation"],
 		limit_page_length=0,
 	)
 	if not pairings:
@@ -475,7 +475,7 @@ def _device_spans(employee, window_start, window_end):
 
 	ownership = {}
 	for row in pairings:
-		start = get_datetime(f"{row.valid_from} 00:00:00")
+		start = _pairing_began(row)
 		# `closed_at` is the exact moment; `valid_to` is only a date, and using it alone
 		# would let a pairing ended at 14:00 keep drawing until midnight.
 		if row.closed_at:
@@ -514,6 +514,34 @@ def _device_spans(employee, window_start, window_end):
 		}
 		for span in built
 	]
+
+
+def _pairing_began(row):
+	"""The moment a phone became this person's, to the second.
+
+	`valid_from` is a Date, so on its own it means midnight — and a phone paired at 20:25
+	then draws the whole evening before it, hours when nothing on earth could say whose
+	pocket it was in. The map showed a block starting at 19:45 beside a session that
+	opened at 20:25, on the same screen, from the same person's data.
+
+	Which was the more visible half of one mistake. Attendance deliberately starts at the
+	pairing and not at first sighting — `_start_session_if_already_here` says why: time we
+	could not attribute is time we must not invent — and drawing from midnight quietly
+	invented exactly that, everywhere except in the totals.
+
+	`creation` is when the pairing row was written, which is when somebody scanned the QR.
+	Used only when the pairing began on the day it was recorded: a row deliberately
+	back-dated to an earlier day means the whole of that day, which is what back-dating is
+	for.
+
+	The closing side already knew all this — it prefers `closed_at` over `valid_to` for
+	precisely this reason. Only half the fix was ever in.
+	"""
+	midnight = get_datetime(f"{row.valid_from} 00:00:00")
+	if not row.get("creation"):
+		return midnight
+	created = get_datetime(row.creation)
+	return created if created.date() == getdate(row.valid_from) else midnight
 
 
 def _detail_horizon(employee):

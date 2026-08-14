@@ -13,7 +13,7 @@ that can be replayed, or claimed by the wrong branch, is somebody standing in a 
 they have never worked in.
 """
 
-from datetime import timedelta
+from datetime import datetime, time as dt_time, timedelta
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -582,6 +582,80 @@ class TestPairingAndMap(FrappeTestCase):
 			{span["deviceKey"] for span in result["spans"]},
 			"another person's phone was drawn on this person's map",
 		)
+
+	def _sight(self, device_key, event, at):
+		frappe.get_doc(
+			{
+				"doctype": "Presence Sighting",
+				"custom_company": self.company,
+				"branch": BRANCH,
+				"device_key": device_key,
+				"event": event,
+				"server_time": at,
+			}
+		).insert(ignore_permissions=True)
+
+	def _pair_at(self, device_key, at):
+		"""A pairing made at a real moment today, the way scanning a QR makes one."""
+		doc = frappe.get_doc(
+			{
+				"doctype": "Employee Device",
+				"custom_company": self.company,
+				"employee": self.employee,
+				"device_key": device_key,
+				"valid_from": str(at.date()),
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Employee Device", doc.name, "creation", at, update_modified=False
+		)
+
+	def test_a_phone_does_not_draw_the_hours_before_it_was_paired(self):
+		"""The map said 19:45; the shift said 20:25. Same screen, same person.
+
+		`valid_from` is a Date, so ownership beginning at it began at MIDNIGHT — and every
+		sighting from midnight until the scan got drawn as this person's time, hours when
+		nothing could say whose pocket the phone was in. Attendance itself starts at the
+		pairing on purpose. The picture of it has to agree.
+		"""
+		today = now_datetime().date()
+		at = lambda h, m: datetime.combine(today, dt_time(h, m))
+
+		self._sight(PHONE, "appeared", at(19, 45))
+		self._pair_at(PHONE, at(20, 25))
+		self._sight(PHONE, "gone", at(20, 53))
+
+		result = api.timeline(self.employee, str(today), str(today))
+
+		self.assertEqual(len(result["spans"]), 1)
+		span = result["spans"][0]
+		self.assertEqual(
+			str(span["start"]),
+			str(at(20, 25)),
+			"the map drew time from before the phone was anybody's",
+		)
+		self.assertEqual(str(span["end"]), str(at(20, 53)))
+
+	def test_a_back_dated_pairing_still_means_the_whole_of_that_day(self):
+		"""The exception, and the reason the fix is not simply "use `creation`".
+
+		A row deliberately dated to an earlier day is somebody saying this phone was
+		theirs from then. Only a pairing recorded on the day it began can be narrowed to
+		the moment it was recorded.
+		"""
+		today = now_datetime().date()
+		yesterday = today - timedelta(days=1)
+		at = lambda h, m: datetime.combine(today, dt_time(h, m))
+
+		# Written today, but dated to yesterday — so today is entirely theirs.
+		self._pair(PHONE, valid_from=str(yesterday))
+		self._sight(PHONE, "appeared", at(6, 0))
+		self._sight(PHONE, "gone", at(7, 0))
+
+		result = api.timeline(self.employee, str(today), str(today))
+
+		self.assertEqual(len(result["spans"]), 1, "a back-dated pairing drew nothing")
+		self.assertEqual(str(result["spans"][0]["start"]), str(at(6, 0)))
 
 	def test_a_person_with_no_history_gets_empty_lists_not_an_error(self):
 		today = str(now_datetime().date())
