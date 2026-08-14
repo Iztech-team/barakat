@@ -15,6 +15,8 @@ from barakat.presence.mode import MANUAL, WIFI
 
 BRANCH = "E2E Presence Branch"
 PROFILE = "E2E Presence Profile"
+# A second till at the same branch, for the "one of two" case.
+SECOND_PROFILE = "E2E Presence Profile 2"
 PHONE = "e2edeadbeef01"
 STRANGER = "e2ecafef00d99"
 
@@ -34,7 +36,10 @@ class TestPresenceEndToEnd(FrappeTestCase):
 					"doctype": "Branch",
 					"branch": BRANCH,
 					"custom_pos_company": cls.company,
-					"custom_pos_profiles": [{"pos_profile": PROFILE}],
+					"custom_pos_profiles": [
+						{"pos_profile": PROFILE},
+						{"pos_profile": SECOND_PROFILE},
+					],
 				}
 			).insert(ignore_links=True, ignore_permissions=True)
 
@@ -44,8 +49,9 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		cls._wipe()
 		if frappe.db.exists("Branch", BRANCH):
 			frappe.delete_doc("Branch", BRANCH, force=True, ignore_permissions=True)
-		if frappe.db.exists("POS Profile", PROFILE):
-			frappe.delete_doc("POS Profile", PROFILE, force=True, ignore_permissions=True)
+		for name in (PROFILE, SECOND_PROFILE):
+			if frappe.db.exists("POS Profile", name):
+				frappe.delete_doc("POS Profile", name, force=True, ignore_permissions=True)
 		frappe.db.commit()
 		super().tearDownClass()
 
@@ -63,13 +69,14 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		Note what is NOT bypassed: `Presence Till` still resolves its own branch and
 		company for real, which is the part under test.
 		"""
-		if frappe.db.exists("POS Profile", PROFILE):
-			return
-		doc = frappe.get_doc({"doctype": "POS Profile", "company": cls.company})
-		doc.name = PROFILE
-		doc.flags.ignore_validate = True
-		doc.flags.ignore_mandatory = True
-		doc.insert(ignore_permissions=True, ignore_mandatory=True, ignore_links=True)
+		for name in (PROFILE, SECOND_PROFILE):
+			if frappe.db.exists("POS Profile", name):
+				continue
+			doc = frappe.get_doc({"doctype": "POS Profile", "company": cls.company})
+			doc.name = name
+			doc.flags.ignore_validate = True
+			doc.flags.ignore_mandatory = True
+			doc.insert(ignore_permissions=True, ignore_mandatory=True, ignore_links=True)
 
 	@classmethod
 	def _wipe(cls):
@@ -80,6 +87,10 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		):
 			frappe.db.delete(doctype, {"branch": BRANCH})
 		frappe.db.delete("Employee Device", {"device_key": ("in", [PHONE, STRANGER])})
+		for extra in frappe.get_all(
+			"Presence Till", filters={"pos_profile": SECOND_PROFILE}, pluck="name"
+		):
+			frappe.delete_doc("Presence Till", extra, force=True, ignore_permissions=True)
 		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
 		if till:
 			user = frappe.db.get_value("Presence Till", till, "api_user")
@@ -489,3 +500,97 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		api.reactivate(till)
 		self.assertIsNone(frappe.db.get_value("Presence Till", till, "asked_again_at"))
 		self.assertEqual(self._join()["status"], "approved")
+
+	# ------------------------------------------------- suspending the last watcher
+
+	def test_suspending_the_last_till_closes_the_branch_shifts(self):
+		"""The trap that left people clocked in for ever.
+
+		The sweep refuses to send anybody home when no settled watcher has reported —
+		a branch nobody can see is unreachable, not empty. Suspending the last till
+		inherited that protection: the shifts simply stayed open, indefinitely, and
+		nothing anywhere said so.
+		"""
+		self._join()
+		till = self._approve()
+		self._join()
+		self._pair_phone()
+		service.ingest(
+			frappe.get_doc("Presence Till", till), [PHONE], now_datetime(), settled=True
+		)
+		self.assertTrue(self._open_session(), "the shift must be open to start with")
+
+		result = api.suspend(till)
+
+		self.assertEqual(result["sessions_closed"], 1)
+		self.assertFalse(self._open_session(), "the shift must not be left open")
+		closed = frappe.db.get_value(
+			"Presence Session",
+			{"employee": self.employee, "branch": BRANCH},
+			["state", "out_time"],
+			as_dict=True,
+		)
+		self.assertEqual(closed.state, "Closed")
+		self.assertIsNotNone(closed.out_time, "a closed shift needs an end")
+
+	def test_suspending_one_of_two_tills_leaves_the_shifts_alone(self):
+		"""A branch with a second till still has eyes."""
+		self._join()
+		till = self._approve()
+		self._join()
+		self._pair_phone()
+		service.ingest(
+			frappe.get_doc("Presence Till", till), [PHONE], now_datetime(), settled=True
+		)
+
+		# A second till at the same branch, active and watching.
+		second = frappe.get_doc(
+			{
+				"doctype": "Presence Till",
+				"pos_profile": SECOND_PROFILE,
+				"machine_name": "DESK-E2E-02",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+
+		result = api.suspend(till)
+
+		self.assertEqual(result["sessions_closed"], 0)
+		self.assertTrue(self._open_session(), "the other till can still see the shop")
+		frappe.delete_doc("Presence Till", second.name, force=True, ignore_permissions=True)
+
+	def test_a_different_computer_asking_is_recorded(self):
+		"""A till is keyed by POS Profile, so a second machine is the SAME till.
+
+		After a reissue the new key goes to whichever machine asks first, so a manager
+		needs to be able to see that the computer asking is not the one the key was
+		issued to — before they hand out another.
+		"""
+		self._join()
+		till = self._approve()
+		self._join()
+		self.assertEqual(
+			frappe.db.get_value("Presence Till", till, "machine_name"),
+			"DESK-E2E-01",
+			"the key is stamped with the machine that collected it",
+		)
+
+		api.request_join(PROFILE, machine_name="DESK-IMPOSTOR")
+
+		self.assertEqual(
+			frappe.db.get_value("Presence Till", till, "asked_again_by"),
+			"DESK-IMPOSTOR",
+		)
+		self.assertEqual(
+			frappe.db.get_value("Presence Till", till, "machine_name"),
+			"DESK-E2E-01",
+			"asking must never overwrite who actually holds the key",
+		)
+
+	def test_reissuing_clears_who_asked(self):
+		self._join()
+		till = self._approve()
+		self._join()
+		api.request_join(PROFILE, machine_name="DESK-IMPOSTOR")
+		api.reissue(till)
+		self.assertIsNone(frappe.db.get_value("Presence Till", till, "asked_again_by"))

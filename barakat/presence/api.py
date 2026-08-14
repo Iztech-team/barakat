@@ -70,16 +70,32 @@ def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
 		# recorded, that till sat in the Admin Panel as Active and simply never reported,
 		# indistinguishable from a branch with a network fault, and every minute of its
 		# staff's attendance was lost while somebody looked at the router.
+		# WHO asked matters as much as that somebody did. A till is keyed by POS Profile,
+		# so a second machine selling under the same profile is the same till — and after
+		# a reissue the new key goes to whichever machine asks first. Recording the name
+		# lets a manager see that the computer asking is not the computer the key was
+		# issued to, before they hand out another one.
 		frappe.db.set_value(
-			"Presence Till", till.name, "asked_again_at", now_datetime()
+			"Presence Till",
+			till.name,
+			{"asked_again_at": now_datetime(), "asked_again_by": machine_name},
 		)
 		return {"status": "active"}
 
 	credentials = keys.issue_key(till)
+	# Stamped with the machine that COLLECTED it, not the one that first asked. A till
+	# record can be created by one computer and approved days later, by which time the
+	# hardware may have been replaced; the key belongs to whatever machine is holding it
+	# now, and that is what a later mismatch has to be measured against.
 	frappe.db.set_value(
 		"Presence Till",
 		till.name,
-		{"api_user": credentials["user"], "key_issued_at": now_datetime()},
+		{
+			"api_user": credentials["user"],
+			"key_issued_at": now_datetime(),
+			"machine_name": machine_name or till.machine_name,
+			"machine_fingerprint": machine_fingerprint or till.machine_fingerprint,
+		},
 	)
 	return {
 		"status": "approved",
@@ -119,13 +135,66 @@ def approve(till):
 
 @frappe.whitelist()
 def suspend(till):
-	"""Stop accepting this till at once. Its account is disabled with it."""
+	"""Stop accepting this till at once. Its account is disabled with it.
+
+	If it was the last pair of eyes at its branch, every open shift there is closed —
+	see `_close_branch_sessions` for why that is not the same as a till going dark.
+	"""
 	doc = frappe.get_doc("Presence Till", till)
 	doc.check_permission("write")
 
 	keys.revoke(doc)
 	frappe.db.set_value("Presence Till", doc.name, "status", "Suspended")
-	return {"status": "suspended"}
+	closed = _close_branch_sessions(doc)
+	return {"status": "suspended", "sessions_closed": closed}
+
+
+def _close_branch_sessions(till):
+	"""Close open shifts at a branch that has just lost its last watcher.
+
+	The departure sweep deliberately refuses to send anybody home when no settled
+	watcher has reported recently: a branch nobody can see is unreachable, not empty,
+	and a till losing power must never clock out a whole shop. Suspending the last till
+	inherits that protection and turns it into a trap — the shifts simply stay open, for
+	ever, and nobody is told.
+
+	The difference is that suspending is deliberate. The server knows exactly why the
+	eyes went away, and it knows the moment they did, so it can say so instead of
+	leaving a record that claims somebody is still at work a week later.
+
+	`out_time` is NOW, not each person's last sighting. They may well still be standing
+	in the shop; what ended at this instant is our ability to see them, and that is the
+	honest thing to write down. Only when no other ACTIVE till remains — a branch with a
+	second till still has eyes, and closing on its behalf would clock people out while
+	it can see them perfectly well.
+	"""
+	others = frappe.db.count(
+		"Presence Till",
+		{
+			"branch": till.branch,
+			"custom_company": till.custom_company,
+			"status": "Active",
+			"name": ("!=", till.name),
+		},
+	)
+	if others:
+		return 0
+
+	now = now_datetime()
+	names = frappe.get_all(
+		"Presence Session",
+		filters={
+			"branch": till.branch,
+			"custom_company": till.custom_company,
+			"state": "Open",
+		},
+		pluck="name",
+	)
+	for session in names:
+		frappe.db.set_value(
+			"Presence Session", session, {"out_time": now, "state": "Closed"}
+		)
+	return len(names)
 
 
 @frappe.whitelist()
@@ -159,7 +228,12 @@ def reactivate(till):
 	frappe.db.set_value(
 		"Presence Till",
 		doc.name,
-		{"status": "Active", "key_issued_at": None, "asked_again_at": None},
+		{
+			"status": "Active",
+			"key_issued_at": None,
+			"asked_again_at": None,
+			"asked_again_by": None,
+		},
 	)
 	return {"status": "awaiting-collection"}
 
@@ -185,7 +259,12 @@ def reissue(till):
 	frappe.db.set_value(
 		"Presence Till",
 		doc.name,
-		{"key_issued_at": None, "status": "Active", "asked_again_at": None},
+		{
+			"key_issued_at": None,
+			"status": "Active",
+			"asked_again_at": None,
+			"asked_again_by": None,
+		},
 	)
 	return {"status": "awaiting-collection"}
 
