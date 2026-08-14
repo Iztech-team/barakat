@@ -64,10 +64,16 @@ def start(employee, branch):
 			)
 		)
 	if not till.local_url:
+		# It reports one only while its pairing server is actually listening, so this is
+		# never "we have not heard yet" on a till that has been running a while — it is
+		# that till telling us phones cannot reach it. Which is a thing somebody can fix,
+		# so the message says how rather than describing the state.
 		frappe.throw(
-			_("Till {0} has not said where it can be reached on the shop network yet.").format(
-				till.name
-			)
+			_(
+				"Till {0} cannot accept phones right now. Close the POS on that computer "
+				"and open it again, then try once more. Its Settings screen shows the "
+				"reason under Wifi watcher."
+			).format(till.name)
 		)
 
 	# One open window per person at a time. A second click replaces the first rather
