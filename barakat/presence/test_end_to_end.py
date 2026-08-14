@@ -588,12 +588,12 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		)
 
 	def test_a_broken_diagnostic_write_does_not_refuse_the_till(self):
-		"""The 15 minutes of 417s on 2026-08-13.
+		"""Recording who asked is a note. Being answered at all is the job.
 
 		A deploy puts new code live before `migrate` reaches every site — a bench with a
 		dozen sites migrates them one at a time — so for a few minutes the code can want
-		a column the database has not got. Recording who asked is a note for a manager;
-		being answered at all is the job, and the job must not depend on the note.
+		a column the database has not got. Whatever the cause, a note that cannot be
+		written must not cost a till its enrolment.
 		"""
 		import unittest.mock as mock
 

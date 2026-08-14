@@ -77,11 +77,11 @@ def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
 		# issued to, before they hand out another one.
 		#
 		# Never at the cost of the answer, though. This is a note for a manager; being
-		# let in is the job. On 2026-08-13 a deploy put this code live fifteen minutes
-		# before `migrate` reached this site, so the column did not exist yet, the write
-		# threw, and every till asking to join got a 417 twice a minute until the schema
-		# caught up. A diagnostic must not be able to do that — and a bench with a dozen
-		# sites migrates them one at a time, so that window is normal, not exceptional.
+		# let in is the job, and a diagnostic that can refuse entry has its priorities
+		# backwards. A bench migrates its sites one at a time, so new code routinely runs
+		# for a few minutes against a schema that has not caught up — an ordinary window,
+		# not an exceptional one, and reason enough on its own for this write to be
+		# unable to take the endpoint down with it.
 		try:
 			frappe.db.set_value(
 				"Presence Till",
