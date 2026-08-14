@@ -24,6 +24,8 @@ from barakat.presence.mode import WIFI
 
 BRANCH = "Map Presence Branch"
 PROFILE = "Map Presence Profile"
+# A second till at the same branch, for "which one answers the QR".
+SECOND_PROFILE = "Map Presence Profile 2"
 PHONE = "map0deadbeef1"
 TABLET = "map0deadbeef2"
 
@@ -45,7 +47,10 @@ class TestPairingAndMap(FrappeTestCase):
 					"doctype": "Branch",
 					"branch": BRANCH,
 					"custom_pos_company": cls.company,
-					"custom_pos_profiles": [{"pos_profile": PROFILE}],
+					"custom_pos_profiles": [
+						{"pos_profile": PROFILE},
+						{"pos_profile": SECOND_PROFILE},
+					],
 				}
 			).insert(ignore_links=True, ignore_permissions=True)
 
@@ -53,7 +58,11 @@ class TestPairingAndMap(FrappeTestCase):
 	def tearDownClass(cls):
 		frappe.set_user("Administrator")
 		cls._wipe()
-		for doctype, name in (("Branch", BRANCH), ("POS Profile", PROFILE)):
+		for doctype, name in (
+			("Branch", BRANCH),
+			("POS Profile", PROFILE),
+			("POS Profile", SECOND_PROFILE),
+		):
 			if frappe.db.exists(doctype, name):
 				frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
 		frappe.db.commit()
@@ -61,13 +70,14 @@ class TestPairingAndMap(FrappeTestCase):
 
 	@classmethod
 	def _ensure_pos_profile(cls):
-		if frappe.db.exists("POS Profile", PROFILE):
-			return
-		doc = frappe.get_doc({"doctype": "POS Profile", "company": cls.company})
-		doc.name = PROFILE
-		doc.flags.ignore_validate = True
-		doc.flags.ignore_mandatory = True
-		doc.insert(ignore_permissions=True, ignore_mandatory=True, ignore_links=True)
+		for name in (PROFILE, SECOND_PROFILE):
+			if frappe.db.exists("POS Profile", name):
+				continue
+			doc = frappe.get_doc({"doctype": "POS Profile", "company": cls.company})
+			doc.name = name
+			doc.flags.ignore_validate = True
+			doc.flags.ignore_mandatory = True
+			doc.insert(ignore_permissions=True, ignore_mandatory=True, ignore_links=True)
 
 	@classmethod
 	def _wipe(cls):
@@ -87,6 +97,10 @@ class TestPairingAndMap(FrappeTestCase):
 			{"employee": ("in", [cls.employee, cls.other_employee])},
 		)
 		frappe.db.delete("Presence Pairing Session", {"branch": BRANCH})
+		for extra in frappe.get_all(
+			"Presence Till", filters={"pos_profile": SECOND_PROFILE}, pluck="name"
+		):
+			frappe.delete_doc("Presence Till", extra, force=True, ignore_permissions=True)
 		till = frappe.db.exists("Presence Till", {"pos_profile": PROFILE})
 		if till:
 			user = frappe.db.get_value("Presence Till", till, "api_user")
@@ -311,6 +325,51 @@ class TestPairingAndMap(FrappeTestCase):
 		started = pairing.start(self.employee, BRANCH)
 		self.assertIn("192.168.1.5:7331", started["url"])
 		self.assertIn(started["code"], started["url"])
+
+	def test_the_qr_skips_a_till_that_cannot_open_the_door(self):
+		"""The freshest till is not always the one that can answer.
+
+		A till reports an address only while its pairing server is listening. Taking the
+		newest and giving up if it happened to be a broken one made a whole branch's
+		pairing depend on its busiest till — while a healthy one stood beside it, able
+		to do the job perfectly well, since every till at a branch watches the same
+		network.
+		"""
+		# A SECOND till at this branch, reporting more recently than the first, but with
+		# no address — its pairing server did not start.
+		broken = frappe.get_doc(
+			{
+				"doctype": "Presence Till",
+				"pos_profile": SECOND_PROFILE,
+				"machine_name": "DESK-BROKEN",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Presence Till",
+			broken.name,
+			{"last_seen": add_to_date(now_datetime(), seconds=5), "local_url": None},
+		)
+
+		started = pairing.start(self.employee, BRANCH)
+
+		# It used the healthy till's address, not the broken newer one.
+		self.assertIn("192.168.1.5:7331", started["url"])
+		frappe.delete_doc("Presence Till", broken.name, force=True, ignore_permissions=True)
+
+	def test_when_no_till_can_open_the_door_it_says_so(self):
+		"""And says how many are reporting, so it does not read as 'nothing is on'."""
+		frappe.db.set_value("Presence Till", self.till_name, "local_url", None)
+
+		with self.assertRaises(frappe.ValidationError) as caught:
+			pairing.start(self.employee, BRANCH)
+
+		message = str(caught.exception)
+		self.assertIn("can accept phones right now", message)
+		self.assertIn("Close the POS", message)
+		# It must say how many ARE reporting, or it reads as "nothing is switched on"
+		# and sends somebody hunting the wrong fault.
+		self.assertIn("(1 reporting)", message)
 
 	def test_the_company_comes_from_the_employee_not_the_operator(self):
 		"""The bug that made pairing unusable on a site with more than one company.

@@ -56,24 +56,29 @@ def start(employee, branch):
 
 	frappe.get_doc("Employee", employee).check_permission("write")
 
-	till = _reporting_till(branch, company)
-	if not till:
+	alive = _reporting_tills(branch, company)
+	if not alive:
 		frappe.throw(
 			_("No till at {0} is reporting right now, so nothing can see the phone.").format(
 				branch
 			)
 		)
-	if not till.local_url:
-		# It reports one only while its pairing server is actually listening, so this is
-		# never "we have not heard yet" on a till that has been running a while — it is
-		# that till telling us phones cannot reach it. Which is a thing somebody can fix,
-		# so the message says how rather than describing the state.
+
+	# The freshest till that can actually ANSWER, not simply the freshest.
+	#
+	# A till reports an address only while its pairing server is listening, so a till
+	# with none is one that cannot open the door. Taking the newest and giving up if it
+	# happened to be that one made a branch's whole pairing depend on its busiest till,
+	# while a perfectly healthy till stood beside it — for a job any till at the branch
+	# can do, since they all watch the same network.
+	till = next((row for row in alive if row.local_url), None)
+	if not till:
 		frappe.throw(
 			_(
-				"Till {0} cannot accept phones right now. Close the POS on that computer "
-				"and open it again, then try once more. Its Settings screen shows the "
-				"reason under Wifi watcher."
-			).format(till.name)
+				"No till at {0} can accept phones right now ({1} reporting). Close the POS "
+				"on one of those computers and open it again, then try once more. Its "
+				"Settings screen shows the reason under Wifi watcher."
+			).format(branch, len(alive))
 		)
 
 	# One open window per person at a time. A second click replaces the first rather
@@ -246,21 +251,20 @@ def _start_session_if_already_here(till, employee, device_key):
 	return True
 
 
-def _reporting_till(branch, company):
-	"""A till at this branch that is actually alive right now.
+def _reporting_tills(branch, company):
+	"""Every till at this branch that is alive, freshest first.
 
-	A pairing needs eyes in the room. Choosing the most recently heard-from till means
-	the QR points at one that can answer, rather than one that was switched off an hour
-	ago.
+	A pairing needs eyes in the room, and the caller wants the one most likely to
+	answer — but it needs the REST of the list too, because the freshest till is not
+	always the one that can open the door.
 	"""
-	rows = frappe.get_all(
+	return frappe.get_all(
 		"Presence Till",
 		filters={"branch": branch, "custom_company": company, "status": "Active"},
 		fields=["name", "local_url", "last_seen"],
 		order_by="last_seen desc",
-		limit=1,
+		limit_page_length=0,
 	)
-	return rows[0] if rows else None
 
 
 @frappe.whitelist()
