@@ -109,3 +109,53 @@ def _branch_is_covered(state, now, stale_after):
 		settled and (now - reported_at) <= stale_after
 		for reported_at, settled in state.till_last_report.values()
 	)
+
+
+def last_contact(state):
+	"""The most recent moment any till at this branch spoke to us, or None.
+
+	Any till, warmed up or not: this answers "when did we last know anything", which a
+	watcher still in its warm-up can answer perfectly well.
+	"""
+	if not state.till_last_report:
+		return None
+	return max(reported_at for reported_at, _settled in state.till_last_report.values())
+
+
+def abandoned(state, now, dark_after):
+	"""Write off a branch whose tills stopped reporting altogether.
+
+	`tick` deliberately refuses to age anyone out while the branch is uncovered — one
+	till losing power must not send a whole shop home. Correct, and on its own it leaves
+	the opposite fault: nothing ever closes those shifts, so everybody who was in the
+	shop when the till went dark stays "at work" for ever. That is not an edge case. It
+	is what happens every single evening when the last till is switched off.
+
+	So after the branch has been silent long enough that a restart is no longer a
+	plausible explanation, the people still standing in the record are written off.
+
+	Two things make this safe to do bluntly:
+
+	  - The departure is dated to the last moment we had EVIDENCE — the device's own
+	    last sighting, or the till's last word if that came first. Never `now`. So the
+	    record says "we knew until 17:12", which is exactly what we knew, and waiting
+	    longer before deciding costs nothing in accuracy. That is why `dark_after` can
+	    afford to be generous rather than clever.
+	  - It only ever CLOSES. A branch that comes back reports its devices, they are
+	    absent from `present`, and each one arrives again — a new session, with an
+	    honest gap between the two where nobody could see the room.
+	"""
+	contact = last_contact(state)
+	if contact is None or now - contact <= dark_after:
+		return []
+
+	decisions = []
+	for device_key in sorted(state.present):
+		last_seen = state.last_seen.get(device_key, contact)
+		state.present.discard(device_key)
+		# Whichever ran out first. A device seen at 17:12 by a till that then reported
+		# until 17:20 was last EVIDENCED at 17:12.
+		decisions.append(
+			Decision(DEPARTED, device_key, min(last_seen, contact))
+		)
+	return decisions

@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from barakat.presence import api, service
 from barakat.presence.mode import MANUAL, WIFI
@@ -363,7 +363,14 @@ class TestPresenceEndToEnd(FrappeTestCase):
 		self.assertTrue(self._open_session(), "the shift was closed too early")
 
 	def test_a_branch_nobody_can_see_never_sends_anyone_home(self):
-		"""Unreachable is not empty. This is the failure that would go unnoticed."""
+		"""Unreachable is not empty. This is the failure that would go unnoticed.
+
+		About a SHORT outage, deliberately. A branch that stays dark is eventually
+		written off — see `test_a_till_going_dark_forever_closes_the_shift_it_left_open`,
+		which exists because never doing so left every evening's shifts open for ever.
+		The rule this test guards is that the writing-off is not immediate: a till that
+		blinks must not end anybody's day.
+		"""
 		self._pair_phone()
 		self._join()
 		till = self._approve()
@@ -376,17 +383,19 @@ class TestPresenceEndToEnd(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 		# The phone aged out AND the till went silent - a power cut, not a quiet shop.
+		# Twenty minutes: past the departure wait, so the phone alone would have aged
+		# out, but nowhere near long enough to call the branch abandoned.
 		frappe.db.set_value(
 			"Presence Live Device",
 			f"{BRANCH}::{PHONE}",
 			"last_seen",
-			add_to_date(now_datetime(), minutes=-60),
+			add_to_date(now_datetime(), minutes=-20),
 		)
 		frappe.db.set_value(
 			"Presence Till",
 			till,
 			"last_seen",
-			add_to_date(now_datetime(), minutes=-60),
+			add_to_date(now_datetime(), minutes=-20),
 			update_modified=False,
 		)
 
@@ -585,6 +594,107 @@ class TestPresenceEndToEnd(FrappeTestCase):
 			frappe.db.get_value("Presence Till", till, "machine_name"),
 			"DESK-E2E-01",
 			"asking must never overwrite who actually holds the key",
+		)
+
+	def _report_once(self, till):
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=1)
+		finally:
+			frappe.set_user("Administrator")
+
+	def _age_branch(self, till, minutes):
+		"""Push the till's last word AND the phone's last sighting into the past."""
+		when = add_to_date(now_datetime(), minutes=-minutes)
+		frappe.db.set_value(
+			"Presence Live Device", f"{BRANCH}::{PHONE}", "last_seen", when
+		)
+		frappe.db.set_value(
+			"Presence Till", till, "last_seen", when, update_modified=False
+		)
+		return when
+
+	def test_a_till_going_dark_forever_closes_the_shift_it_left_open(self):
+		"""The bug this was written for, end to end.
+
+		On 2026-08-15 a till stopped reporting at 16:34 and a shift was still open past
+		18:00 — the Admin Panel drew it as running, so somebody who had gone home an
+		hour earlier was shown at work. `tick` will not act on a dark branch, which is
+		right, and nothing else was closing them, which was not.
+		"""
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+		self._report_once(till)
+		self.assertTrue(self._open_session(), "the shift never opened")
+
+		went_dark = self._age_branch(till, 90)
+		service.sweep(BRANCH, self.company)
+
+		name = frappe.db.exists(
+			"Presence Session",
+			{"employee": self.employee, "branch": BRANCH, "state": "Closed"},
+		)
+		self.assertTrue(name, "the shift is still open after the till went dark")
+		out_time = get_datetime(
+			frappe.db.get_value("Presence Session", name, "out_time")
+		)
+		# Dated to the last evidence, never to the sweep that noticed. Ninety minutes
+		# nobody was there must not be paid.
+		self.assertLess(
+			abs((out_time - went_dark).total_seconds()),
+			90,
+			f"closed at {out_time}, but the last sighting was {went_dark}",
+		)
+
+	def test_a_till_quiet_for_only_a_moment_keeps_its_shift_open(self):
+		"""A restart, an update, a brief internet drop. Nobody went home."""
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+		self._report_once(till)
+
+		self._age_branch(till, 20)
+		service.sweep(BRANCH, self.company)
+
+		self.assertTrue(
+			self._open_session(),
+			"a till quiet for twenty minutes ended somebody's shift",
+		)
+
+	def test_a_branch_that_wakes_up_opens_a_NEW_shift(self):
+		"""The gap has to be honest at both ends.
+
+		Somebody still standing there when the till comes back gets a fresh session,
+		not a resumed one — nothing could see the room in between, and the record must
+		not pretend otherwise.
+		"""
+		self._pair_phone()
+		self._join()
+		till = self._approve()
+		self._join()
+		self._report_once(till)
+
+		self._age_branch(till, 90)
+		service.sweep(BRANCH, self.company)
+		self.assertFalse(self._open_session(), "the dark branch left a shift open")
+
+		# The till comes back, and the phone is still on the wifi.
+		self._as_till(till)
+		try:
+			api.report(devices=[{"id": PHONE}], seq=2)
+		finally:
+			frappe.set_user("Administrator")
+
+		self.assertTrue(self._open_session(), "the returning till opened no shift")
+		self.assertEqual(
+			frappe.db.count(
+				"Presence Session", {"employee": self.employee, "branch": BRANCH}
+			),
+			2,
+			"the closed shift and the new one should both survive, as two",
 		)
 
 	def test_a_broken_diagnostic_write_does_not_refuse_the_till(self):

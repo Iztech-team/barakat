@@ -304,12 +304,21 @@ def sweep(branch, company):
 	settings = settings_for(company)
 	state = load_state(branch, company, settings["warmup_s"])
 
+	now = now_datetime()
+	stale_after = timedelta(seconds=max(settings["heartbeat_s"] * 5, 300))
+
 	decisions = engine.tick(
 		state,
-		now_datetime(),
+		now,
 		timedelta(minutes=settings["departure_wait_minutes"]),
-		timedelta(seconds=max(settings["heartbeat_s"] * 5, 300)),
+		stale_after,
 	)
+	if not decisions:
+		# Nothing aged out. Either the branch is covered and everyone really is still
+		# here, or it is dark — and a dark branch is the one `tick` will not act on, so
+		# without this its open shifts would never close at all. Every evening's last
+		# till being switched off is that case.
+		decisions = engine.abandoned(state, now, _dark_after(settings, stale_after))
 	if not decisions:
 		return []
 
@@ -320,6 +329,31 @@ def sweep(branch, company):
 		record_sightings(till, decisions)
 		apply_decisions(till, decisions, state.present)
 	return decisions
+
+
+#: How long a branch must be silent before its open shifts are written off.
+#:
+#: Generous on purpose. A till restarts for an update, a cashier reboots the PC, the
+#: shop's internet drops for ten minutes — none of those mean the staff went home, and
+#: closing on any of them would produce a torn shift that a manager then has to explain.
+#:
+#: Being generous costs nothing, which is the whole reason it can be. The shift is
+#: closed at the last moment we had evidence, not at the moment we noticed, so waiting
+#: an extra half hour before deciding changes nothing about the hours recorded.
+DARK_AFTER = timedelta(minutes=45)
+
+
+def _dark_after(settings, stale_after):
+	"""Never shorter than the windows the branch already runs on.
+
+	A shop that waits an hour before calling somebody departed must not have its whole
+	branch written off in forty-five minutes.
+	"""
+	return max(
+		DARK_AFTER,
+		stale_after,
+		timedelta(minutes=settings["departure_wait_minutes"]),
+	)
 
 
 def _any_till(branch, company):

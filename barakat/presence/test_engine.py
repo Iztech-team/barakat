@@ -14,7 +14,9 @@ from barakat.presence.engine import (
 	DEPARTED,
 	BranchState,
 	Report,
+	abandoned,
 	apply_report,
+	last_contact,
 	tick,
 )
 
@@ -653,6 +655,140 @@ class TestValueShape(EngineCase):
 		self.assertEqual(second.present, set())
 		self.assertEqual(second.last_seen, {})
 		self.assertEqual(second.till_last_report, {})
+
+
+class TestAbandonedBranch(unittest.TestCase):
+	"""A branch whose tills stopped reporting at all.
+
+	`tick` refuses to act here on purpose — one till losing power must not send a shop
+	home. The cost of that refusal is that nothing ever closes those shifts, so every
+	evening the last till is switched off and the whole shop stays "at work" for ever.
+	This is the other half of the rule.
+	"""
+
+	DARK = timedelta(minutes=45)
+
+	def _shop(self, *, till_at, device_at):
+		"""One device present, one till, both stamped where the test wants them."""
+		state = BranchState()
+		apply_report(state, Report("till-1", device_at, frozenset({"dev-a"})))
+		state.till_last_report["till-1"] = (till_at, True)
+		return state
+
+	def test_a_branch_dark_past_the_window_writes_everyone_off(self):
+		state = self._shop(till_at=at(0), device_at=at(0))
+
+		decisions = abandoned(state, at(60 * 60), self.DARK)
+
+		self.assertEqual(len(decisions), 1)
+		self.assertEqual(decisions[0].kind, DEPARTED)
+		self.assertEqual(decisions[0].device_key, "dev-a")
+
+	def test_the_departure_is_dated_to_the_last_evidence_not_to_now(self):
+		"""The whole reason a generous window costs nothing.
+
+		Noticing at 09:00 that a till died at 08:00 must not record an hour of work
+		nobody did.
+		"""
+		state = self._shop(till_at=at(0), device_at=at(0))
+
+		decisions = abandoned(state, at(60 * 60), self.DARK)
+
+		self.assertEqual(decisions[0].at, at(0))
+
+	def test_the_earlier_of_the_two_evidences_wins(self):
+		# The till kept reporting for another ten minutes, but it stopped SEEING this
+		# device at minute two. Two is when we last knew.
+		state = self._shop(till_at=at(600), device_at=at(120))
+
+		decisions = abandoned(state, at(3 * 60 * 60), self.DARK)
+
+		self.assertEqual(decisions[0].at, at(120))
+
+	def test_a_till_that_went_quiet_a_moment_ago_is_left_alone(self):
+		# A restart, an update, a ten-minute internet drop. Not a closed shop.
+		state = self._shop(till_at=at(0), device_at=at(0))
+
+		self.assertEqual(abandoned(state, at(10 * 60), self.DARK), [])
+
+	def test_exactly_at_the_window_is_not_yet_dark(self):
+		state = self._shop(till_at=at(0), device_at=at(0))
+
+		self.assertEqual(abandoned(state, at(45 * 60), self.DARK), [])
+
+	def test_a_branch_that_never_reported_writes_nobody_off(self):
+		# Nothing to conclude from a branch we have never heard from.
+		state = BranchState()
+
+		self.assertEqual(abandoned(state, at(60 * 60), self.DARK), [])
+
+	def test_an_empty_shop_going_dark_produces_nothing(self):
+		state = BranchState()
+		state.till_last_report["till-1"] = (at(0), True)
+
+		self.assertEqual(abandoned(state, at(60 * 60), self.DARK), [])
+
+	def test_writing_off_is_not_repeated_on_the_next_sweep(self):
+		"""Twice would close a shift that is already closed, or reopen a story."""
+		state = self._shop(till_at=at(0), device_at=at(0))
+		abandoned(state, at(60 * 60), self.DARK)
+
+		self.assertEqual(abandoned(state, at(61 * 60), self.DARK), [])
+
+	def test_a_branch_that_comes_back_sees_an_ARRIVAL_not_a_silence(self):
+		"""The gap has to be honest at both ends.
+
+		Somebody who was in the shop when the till died and is still there when it
+		wakes must get a NEW session, not a resumed one — we genuinely could not see
+		the room in between and must not claim otherwise.
+		"""
+		state = self._shop(till_at=at(0), device_at=at(0))
+		abandoned(state, at(60 * 60), self.DARK)
+
+		decisions = apply_report(
+			state, Report("till-1", at(61 * 60), frozenset({"dev-a"}))
+		)
+
+		self.assertEqual([d.kind for d in decisions], [ARRIVED])
+		self.assertEqual(decisions[0].at, at(61 * 60))
+
+	def test_an_unsettled_till_still_counts_as_contact(self):
+		# Warming up is not silence — we heard from the machine, which is the only
+		# question being asked here.
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+		state.till_last_report["till-1"] = (at(0), False)
+
+		self.assertEqual(abandoned(state, at(10 * 60), self.DARK), [])
+
+	def test_the_freshest_till_decides_how_dark_the_branch_is(self):
+		# One till died this morning, another is still talking. Not dark.
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a"})))
+		state.till_last_report["till-1"] = (at(0), True)
+		state.till_last_report["till-2"] = (at(59 * 60), True)
+
+		self.assertEqual(abandoned(state, at(60 * 60), self.DARK), [])
+
+	def test_last_contact_reads_the_newest_of_several_tills(self):
+		state = BranchState()
+		state.till_last_report["till-1"] = (at(0), True)
+		state.till_last_report["till-2"] = (at(300), True)
+
+		self.assertEqual(last_contact(state), at(300))
+
+	def test_last_contact_of_a_silent_branch_is_None(self):
+		self.assertIsNone(last_contact(BranchState()))
+
+	def test_every_device_present_is_written_off_not_just_one(self):
+		state = BranchState()
+		apply_report(state, Report("till-1", at(0), frozenset({"dev-a", "dev-b", "dev-c"})))
+		state.till_last_report["till-1"] = (at(0), True)
+
+		decisions = abandoned(state, at(60 * 60), self.DARK)
+
+		self.assertEqual({d.device_key for d in decisions}, {"dev-a", "dev-b", "dev-c"})
+		self.assertEqual(state.present, set())
 
 
 if __name__ == "__main__":

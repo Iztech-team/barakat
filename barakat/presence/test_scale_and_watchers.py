@@ -223,13 +223,19 @@ class TestManyWatchersAndDevices(FrappeTestCase):
 		self.assertFalse(self._open_session())
 
 	def test_every_till_going_quiet_freezes_the_branch(self):
-		"""Nobody can see the shop, so nobody may be marked as having left it."""
+		"""Nobody can see the shop, so nobody may be marked as having left it.
+
+		A SHORT silence, deliberately. A branch that stays dark is eventually written
+		off — otherwise the shifts open when the last till is switched off at closing
+		time would never close at all. What this guards is that the freeze is real
+		while the outage is plausibly a restart.
+		"""
 		self._pair(PHONE)
 		service.ingest(self.till_a, [PHONE], now_datetime(), settled=True)
 
-		self._age(PHONE, 120)
-		self._alive(self.till_a.name, minutes_ago=120)
-		self._alive(self.till_b.name, minutes_ago=120)
+		self._age(PHONE, 20)
+		self._alive(self.till_a.name, minutes_ago=20)
+		self._alive(self.till_b.name, minutes_ago=20)
 		service.sweep(BRANCH, self.company)
 
 		self.assertTrue(
