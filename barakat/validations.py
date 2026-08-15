@@ -309,10 +309,24 @@ def validate_employee_pin(doc, method):
 			(c for c in (d["emp_company"], d["branch_company"]) if c in companies),
 			company_a,
 		)
+		# Deliberately says neither the PIN nor whose it is.
+		#
+		# This message used to read "PIN <b>4471</b> is already assigned to
+		# <b>Ahmad</b>", which made the save form a PIN oracle: anyone who could
+		# edit an Employee could type candidate PINs and be told, one at a time,
+		# exactly which colleague owned each one. Guessing a manager's PIN that
+		# way needed no database access and no permissions beyond editing a single
+		# employee record.
+		#
+		# The person hitting this is choosing a new PIN, and "pick another" is all
+		# they need. The clash is logged for anyone genuinely diagnosing it.
+		frappe.logger("barakat").info(
+			f"duplicate POS PIN rejected for {doc.name or 'new employee'}: "
+			f"clashes with {d['name']} in {clash}"
+		)
 		frappe.throw(
-			f"PIN <b>{pin}</b> is already assigned to employee "
-			f"<b>{d['employee_name']}</b> ({d['name']}) "
-			f"in company <b>{clash}</b>. Each employee in a company must have a unique PIN.",
+			"This PIN is already in use by another employee in this company. "
+			"Please choose a different PIN.",
 			title="Duplicate PIN",
 		)
 

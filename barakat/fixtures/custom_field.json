@@ -184,6 +184,7 @@
   "label": "POS PIN (4-6 digits)",
   "fieldtype": "Data",
   "length": 6,
+  "no_copy": 1,
   "insert_after": ""
  },
  {

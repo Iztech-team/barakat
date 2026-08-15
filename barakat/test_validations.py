@@ -243,19 +243,33 @@ class EmployeePinUniqueness(FrappeTestCase):
                 duplicates=[self._dupe(branch_company=self.BRANCH_CO)],
             )
 
-    def test_the_message_names_the_company_the_two_actually_share(self):
-        with self.assertRaisesRegex(frappe.ValidationError, self.BRANCH_CO):
+    def test_the_message_gives_nothing_away(self):
+        """The duplicate error must not be usable as a PIN oracle.
+
+        It used to read "PIN <b>4471</b> is already assigned to <b>Ahmad</b> in
+        company <b>X</b>", which turned the employee form into a lookup service:
+        type a candidate PIN, and be told whose it is. Anyone who could edit one
+        employee could find a manager's PIN that way, with no database access.
+        """
+        with self.assertRaises(frappe.ValidationError) as caught:
             self._run(
                 self._doc(company=self.EMP_CO, branch="Nablus Main"),
                 branch_company=self.BRANCH_CO,
                 duplicates=[
-                    # Divergent: its own company is one we are NOT scoped to, so
-                    # naming `emp_company` would name an unrelated company.
                     self._dupe(
                         emp_company="Unrelated Co", branch_company=self.BRANCH_CO
                     )
                 ],
             )
+
+        message = str(caught.exception)
+        self.assertNotIn("1234", message)
+        self.assertNotIn("Someone Else", message)
+        self.assertNotIn("HR-EMP-00099", message)
+        self.assertNotIn(self.BRANCH_CO, message)
+        self.assertNotIn("Unrelated Co", message)
+        # It still has to be useful to the person choosing a PIN.
+        self.assertIn("already in use", message)
 
     # --- editing an existing employee -------------------------------------
 
