@@ -456,28 +456,180 @@ def timeline(employee, from_date, to_date):
 	}
 
 
-def _device_spans(employee, window_start, window_end):
-	"""Per-device stretches, from the raw log, for one person.
+@frappe.whitelist()
+def branch_day(branch, day):
+	"""Everyone at one branch, across one day. The other axis of the same picture.
 
-	The session block cannot answer "which phone was here at 3pm": it records only the
-	device that OPENED it and never changes, so a person carrying two gets one block
-	coloured after whichever walked in first. The sighting log has appeared/gone per
-	device, which is exactly the question, for as long as the log is kept.
+	`timeline` answers "one person, many days". A manager standing in a shop has the
+	opposite question — "who was here today, and when" — and answering it by calling
+	`timeline` once per employee would be one HTTP round trip per person on the payroll.
+
+	Staff are listed even with nothing to show. An empty row says "assigned here, no
+	sign of them today", which is a fact a manager can act on; omitting them makes
+	absent and never-paired look identical, and telling those two apart is most of what
+	this feature is for.
 	"""
-	pairings = frappe.get_all(
+	company = frappe.db.get_value("Branch", branch, "custom_pos_company")
+	if not company:
+		frappe.throw(_("Branch {0} has no company set.").format(branch))
+	frappe.get_doc("Branch", branch).check_permission("read")
+
+	window_start = get_datetime(f"{day} 00:00:00")
+	window_end = get_datetime(f"{day} 23:59:59")
+
+	rows = frappe.get_all(
+		"Presence Session",
+		filters={
+			"branch": branch,
+			"custom_company": company,
+			"in_time": ("between", [window_start, window_end]),
+		},
+		fields=["name", "employee", "in_time", "out_time", "device_key", "state"],
+		order_by="in_time asc",
+		limit_page_length=0,
+	)
+
+	sessions_by = {}
+	for row in rows:
+		sessions_by.setdefault(row.employee, []).append(
+			{
+				"name": row.name,
+				"branch": branch,
+				"inTime": str(row.in_time),
+				"outTime": str(row.out_time) if row.out_time else None,
+				"deviceKey": row.device_key,
+				"open": row.state == "Open",
+			}
+		)
+
+	# Assigned to the branch, PLUS anyone the day already has a session for. A person
+	# moved to another branch last week still worked here on the day being looked at,
+	# and a day that quietly dropped them would be a day that disagrees with itself.
+	people = _staff_at_branch(branch, company)
+	known = {row["employee"] for row in people}
+	for employee in sessions_by:
+		if employee not in known:
+			people.append(
+				{
+					"employee": employee,
+					"employeeName": frappe.db.get_value(
+						"Employee", employee, "employee_name"
+					)
+					or employee,
+					"stillHere": False,
+				}
+			)
+
+	spans_by = _spans_by_employee(
+		company, [row["employee"] for row in people], window_start, window_end
+	)
+
+	return {
+		"branch": branch,
+		"day": str(day),
+		"staff": [
+			{
+				**row,
+				"sessions": sessions_by.get(row["employee"], []),
+				"spans": spans_by.get(row["employee"], []),
+			}
+			for row in people
+		],
+		"detailFrom": str(_detail_horizon_for_company(company)),
+	}
+
+
+def _staff_at_branch(branch, company):
+	"""Everyone who works at this branch, by either route.
+
+	ERPNext's Employee carries ONE `branch` link, so Barakat keeps the rest in the
+	`POS Employee Branch` child table — a person can work at three shops and the native
+	field can only name one. Asking only the native field would silently hide most of a
+	multi-branch shop's staff.
+
+	`get_list`, not `get_all`: this decides whose attendance a user may look at, and the
+	tenant boundary is enforced by permissions rather than by the filters above.
+	"""
+	seen = {}
+	for row in frappe.get_list(
+		"Employee",
+		filters={"company": company, "status": "Active", "branch": branch},
+		fields=["name", "employee_name"],
+		limit_page_length=0,
+	):
+		seen[row.name] = row.employee_name or row.name
+
+	assigned = frappe.get_all(
+		"POS Employee Branch",
+		filters={"branch": branch, "parenttype": "Employee"},
+		pluck="parent",
+		limit_page_length=0,
+	)
+	if assigned:
+		for row in frappe.get_list(
+			"Employee",
+			filters={
+				"company": company,
+				"status": "Active",
+				"name": ("in", list(set(assigned))),
+			},
+			fields=["name", "employee_name"],
+			limit_page_length=0,
+		):
+			seen[row.name] = row.employee_name or row.name
+
+	return [
+		{"employee": name, "employeeName": label, "stillHere": True}
+		for name, label in sorted(seen.items(), key=lambda pair: pair[1].lower())
+	]
+
+
+def _spans_by_employee(company, employees, window_start, window_end):
+	"""Per-device stretches for a whole branch, in one pass over the log.
+
+	Built once for every device rather than once per person: the sighting table is the
+	biggest thing this feature writes, and a shop with thirty staff would otherwise scan
+	it thirty times to draw one screen.
+	"""
+	if not employees:
+		return {}
+
+	ownership = _ownership_for(employees)
+	if not ownership:
+		return {}
+
+	built = _spans_from_log(ownership, window_start, window_end)
+
+	out = {}
+	for span in built:
+		# WHO held it at that moment, not who holds it now — the same rule the session
+		# layer applies, so a phone handed over at noon splits between two people
+		# instead of giving the whole day to whoever has it today.
+		employee = service.employee_for(span.device_key, company, span.start)
+		if not employee:
+			continue
+		out.setdefault(employee, []).append(
+			{
+				"deviceKey": span.device_key,
+				"start": str(span.start),
+				"end": str(span.end),
+				"open": span.open_ended,
+			}
+		)
+	return out
+
+
+def _ownership_for(employees):
+	"""Device → the stretches during which it belonged to one of these people."""
+	rows = frappe.get_all(
 		"Employee Device",
-		filters={"employee": employee},
+		filters={"employee": ("in", employees)},
 		fields=["device_key", "valid_from", "valid_to", "closed_at", "creation"],
 		limit_page_length=0,
 	)
-	if not pairings:
-		return []
-
 	ownership = {}
-	for row in pairings:
+	for row in rows:
 		start = _pairing_began(row)
-		# `closed_at` is the exact moment; `valid_to` is only a date, and using it alone
-		# would let a pairing ended at 14:00 keep drawing until midnight.
 		if row.closed_at:
 			end = get_datetime(row.closed_at)
 		elif row.valid_to:
@@ -485,7 +637,11 @@ def _device_spans(employee, window_start, window_end):
 		else:
 			end = None
 		ownership.setdefault(row.device_key, []).append((start, end))
+	return ownership
 
+
+def _spans_from_log(ownership, window_start, window_end):
+	"""The shared half of every span query: read the log, fold it into stretches."""
 	events = frappe.get_all(
 		"Presence Sighting",
 		filters={
@@ -496,14 +652,42 @@ def _device_spans(employee, window_start, window_end):
 		order_by="server_time asc",
 		limit_page_length=0,
 	)
-
-	built = spans.build_spans(
+	return spans.build_spans(
 		[(row.device_key, row.event, get_datetime(row.server_time)) for row in events],
 		window_start,
 		window_end,
 		now_datetime(),
 		ownership=ownership,
 	)
+
+
+def _detail_horizon_for_company(company):
+	"""Where the sighting log runs out, for a whole company."""
+	oldest = frappe.db.get_value(
+		"Presence Sighting",
+		{"custom_company": company},
+		"server_time",
+		order_by="server_time asc",
+	)
+	return oldest or now_datetime()
+
+
+def _device_spans(employee, window_start, window_end):
+	"""Per-device stretches, from the raw log, for one person.
+
+	The session block cannot answer "which phone was here at 3pm": it records only the
+	device that OPENED it and never changes, so a person carrying two gets one block
+	coloured after whichever walked in first. The sighting log has appeared/gone per
+	device, which is exactly the question, for as long as the log is kept.
+
+	One person is the branch case with a list of one, so both go through the same
+	ownership and folding code. Two implementations of "when did this device belong to
+	somebody" would drift, and the half that drifted would be the one nobody was
+	looking at.
+	"""
+	ownership = _ownership_for([employee])
+	if not ownership:
+		return []
 
 	return [
 		{
@@ -512,7 +696,7 @@ def _device_spans(employee, window_start, window_end):
 			"end": str(span.end),
 			"open": span.open_ended,
 		}
-		for span in built
+		for span in _spans_from_log(ownership, window_start, window_end)
 	]
 
 
