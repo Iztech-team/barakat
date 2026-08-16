@@ -13,7 +13,7 @@ from datetime import datetime, time as dt_time, timedelta
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import now_datetime
+from frappe.utils import get_datetime, now_datetime
 
 from barakat.presence import api
 from barakat.presence.mode import WIFI
@@ -381,6 +381,93 @@ class TestBranchDay(FrappeTestCase):
 		self._sight(PHONE, "gone", datetime.combine(y, dt_time(17, 0)))
 
 		self.assertEqual(self._row(self._day(), self.alice)["spans"], [])
+
+	# ------------------------------------------------- a stretch with no end
+
+	def _till(self, last_seen, branch=BRANCH, status="Active"):
+		"""A till row with a chosen last-heard-from moment."""
+		name = f"Day Till {branch}"
+		if not frappe.db.exists("Presence Till", name):
+			doc = frappe.new_doc("Presence Till")
+			doc.name = name
+			doc.pos_profile = name
+			doc.branch = branch
+			doc.custom_company = self.company
+			doc.status = status
+			doc.db_insert()
+		frappe.db.set_value(
+			"Presence Till",
+			name,
+			{
+				"last_seen": last_seen,
+				"status": status,
+				"branch": branch,
+				"custom_company": self.company,
+			},
+			update_modified=False,
+		)
+		self.addCleanup(frappe.db.delete, "Presence Till", {"name": name})
+		return name
+
+	def test_an_unfinished_stretch_stops_where_the_watching_stopped(self):
+		"""The block that grew a second every second, for ever.
+
+		A phone with no `gone` has no end, and the stretch used to be drawn to NOW. That
+		is right only while somebody is watching — and when the tills go quiet no
+		departure is ever recorded, because the sweep refuses to age anyone out of a
+		branch nobody can see. So the block kept lengthening and kept saying "still
+		here", with the shift beside it long since closed, and no amount of refreshing
+		changed it. Seen live on 2026-08-16.
+		"""
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+		# Nothing since. The last till reported at 02:00 and went quiet.
+		self._till(last_seen=self.at(2))
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		self.assertEqual(len(spans), 1)
+		self.assertEqual(
+			spans[0]["end"][:19],
+			str(self.at(2))[:19],
+			"the stretch ran past the last moment anything could see the phone",
+		)
+
+	def test_a_branch_still_reporting_draws_right_up_to_now(self):
+		"""The common case must not be shortened by the bound above."""
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+		self._till(last_seen=now_datetime())
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		gap = (now_datetime() - get_datetime(spans[0]["end"])).total_seconds()
+		self.assertLess(abs(gap), 120, "a live branch should draw to about now")
+
+	def test_a_finished_stretch_is_untouched_by_the_bound(self):
+		# It has a `gone`, so nothing here may move its end.
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+		self._sight(PHONE, "gone", self.at(3))
+		self._till(last_seen=self.at(2))
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		self.assertEqual(spans[0]["end"][:19], str(self.at(3))[:19])
+		self.assertFalse(spans[0]["open"])
+
+	def test_with_no_till_at_all_it_falls_back_to_now(self):
+		# Nothing to bound it with, and shortening on a guess would be worse than not.
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		self.assertTrue(spans[0]["open"])
 
 	# ------------------------------------------------------------- the day itself
 

@@ -521,7 +521,11 @@ def branch_day(branch, day):
 			)
 
 	spans_by = _spans_by_employee(
-		company, [row["employee"] for row in people], window_start, window_end
+		company,
+		[row["employee"] for row in people],
+		window_start,
+		window_end,
+		branch,
 	)
 
 	return {
@@ -584,7 +588,7 @@ def _staff_at_branch(branch, company):
 	]
 
 
-def _spans_by_employee(company, employees, window_start, window_end):
+def _spans_by_employee(company, employees, window_start, window_end, branch=None):
 	"""Per-device stretches for a whole branch, in one pass over the log.
 
 	Built once for every device rather than once per person: the sighting table is the
@@ -598,7 +602,9 @@ def _spans_by_employee(company, employees, window_start, window_end):
 	if not ownership:
 		return {}
 
-	built = _spans_from_log(ownership, window_start, window_end)
+	built = _spans_from_log(
+		ownership, window_start, window_end, _seen_until(company, branch)
+	)
 
 	out = {}
 	for span in built:
@@ -640,7 +646,7 @@ def _ownership_for(employees):
 	return ownership
 
 
-def _spans_from_log(ownership, window_start, window_end):
+def _spans_from_log(ownership, window_start, window_end, seen_until=None):
 	"""The shared half of every span query: read the log, fold it into stretches."""
 	events = frappe.get_all(
 		"Presence Sighting",
@@ -656,9 +662,40 @@ def _spans_from_log(ownership, window_start, window_end):
 		[(row.device_key, row.event, get_datetime(row.server_time)) for row in events],
 		window_start,
 		window_end,
-		now_datetime(),
+		seen_until or now_datetime(),
 		ownership=ownership,
 	)
+
+
+def _seen_until(company, branch=None):
+	"""The last moment anything here could have seen a phone.
+
+	A stretch with no `gone` used to be drawn to NOW, which is right only while somebody
+	is still watching. When the tills stop reporting no departure is ever recorded — the
+	sweep deliberately refuses to age anyone out of a branch nobody can see — so the
+	stretch has no end, and drawing it to now made a block that grew a second every
+	second and said "still here" for ever.
+
+	Seen live on 2026-08-16: a phone last sighted at 14:50, its till last reporting at
+	16:33, and the map still lengthening the block past 16:42 with the session beside it
+	long since closed. Refreshing could not help; the answer was being computed that way
+	every time.
+
+	So an unfinished stretch stops where the evidence stops. While a branch is reporting
+	this is within a heartbeat of now and nothing changes; once it goes quiet the block
+	stops growing, which is exactly what "we cannot see the room any more" looks like.
+	"""
+	filters = {"custom_company": company}
+	if branch:
+		filters["branch"] = branch
+	newest = frappe.db.get_value(
+		"Presence Till", filters, "last_seen", order_by="last_seen desc"
+	)
+	now = now_datetime()
+	if not newest:
+		return now
+	newest = get_datetime(newest)
+	return newest if newest < now else now
 
 
 def _detail_horizon_for_company(company):
@@ -689,6 +726,7 @@ def _device_spans(employee, window_start, window_end):
 	if not ownership:
 		return []
 
+	company = frappe.db.get_value("Employee", employee, "company")
 	return [
 		{
 			"deviceKey": span.device_key,
@@ -696,7 +734,9 @@ def _device_spans(employee, window_start, window_end):
 			"end": str(span.end),
 			"open": span.open_ended,
 		}
-		for span in _spans_from_log(ownership, window_start, window_end)
+		for span in _spans_from_log(
+			ownership, window_start, window_end, _seen_until(company)
+		)
 	]
 
 
