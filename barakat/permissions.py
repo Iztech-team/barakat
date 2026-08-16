@@ -450,8 +450,13 @@ BARAKAT_CUSTOM_ROLES = tuple(ALL_ROLE_PERMS)
 #     singles, and it must NOT get write on System Settings)
 #   - Barakat Staff Manager    -> _grant_staff_manager_perms (User write at permlevel 0
 #     only; see the permlevel-1 note in overrides/staff_roles.py)
+#   - Barakat POS PIN Reader   -> _grant_pos_pin_permlevel (Employee read+write at
+#     permlevel 1, which is where custom_pos_pin lives; the ALL_ROLE_PERMS loop only
+#     ever grants permlevel 0)
 # They are real roles and must still be exported in the hooks.py fixture.
-EXTERNALLY_PERMED_ROLES = frozenset({"Barakat Settings Manager", "Barakat Staff Manager"})
+EXTERNALLY_PERMED_ROLES = frozenset(
+	{"Barakat Settings Manager", "Barakat Staff Manager", "Barakat POS PIN Reader"}
+)
 
 # Persona preset names. `Employee.custom_role_preset` is a Link to `Role`, so a Role
 # record of the same name must exist or the Employee cannot be saved at all.
@@ -638,9 +643,16 @@ def gl_entry_scope_for(caller_roles):
 #     the AP's "record absence" flow creates AND submits in one step).
 #   - Barakat Loyalty Manager / Viewer, Currency Manager, Payment Mode Manager,
 #     Settings Manager: capabilities whose native equivalents carry far more.
+#   - Barakat POS PIN Reader: the ONLY role that can read or write
+#     `Employee.custom_pos_pin`, which sits at permlevel 1. It exists because the
+#     generated `staff: read` role cannot tell a Branch Supervisor from HR — both hold
+#     it — and a till genuinely needs its branch's PINs to authenticate cashiers
+#     offline, while HR has no business reading anyone's credential. Manager and Branch
+#     Supervisor only.
 EXTRA_ROLES = {
 	"Manager": (
 		"Barakat POS Operator",
+		"Barakat POS PIN Reader",
 		"Barakat Staff Manager",
 		"Barakat Self Service",
 		"Barakat Purchase Invoice Clerk",
@@ -652,6 +664,7 @@ EXTRA_ROLES = {
 	),
 	"Branch Supervisor": (
 		"Barakat POS Operator",
+		"Barakat POS PIN Reader",
 		"Barakat Self Service",
 		"Barakat Attendance Manager",
 		"Barakat Loyalty Viewer",

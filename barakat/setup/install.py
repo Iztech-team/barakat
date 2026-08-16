@@ -14,6 +14,11 @@ def after_install():
 		_grant_loyalty_manager_perms,
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
+		# Must run on a FRESH site too, not only on migrate: fixtures put the PIN
+		# field at permlevel 1 on install, and without the matching grants a brand
+		# new site would have the field hidden from its own Manager with nothing to
+		# say why.
+		_grant_pos_pin_permlevel,
 		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
@@ -56,6 +61,9 @@ def after_migrate():
 		_grant_staff_manager_perms,
 		_grant_barakat_role_perms,
 		_revoke_stale_barakat_perms,
+		# After the role pass: the role must exist before it can be granted, and
+		# _revoke_stale only touches permlevel 0, so it cannot undo this.
+		_grant_pos_pin_permlevel,
 		_ensure_native_report_roles,
 		_grant_owner_payment_mode_perms,
 		_relax_demo_company_user_perm,
@@ -289,6 +297,60 @@ def _grant_barakat_role_perms():
 			for perm in perms:
 				update_permission_property(doctype, role, 0, perm, 1, validate=False)
 			frappe.clear_cache(doctype=doctype)
+
+
+def _grant_pos_pin_permlevel():
+	"""Put `Employee.custom_pos_pin` behind permlevel 1, and grant it to the two
+	personas that genuinely need it.
+
+	The PIN sat at permlevel 0, so every role that could read an Employee could read
+	the credential: HR, Attendance Manager, Salary Viewer and the staff readers all got
+	it from a plain `/api/resource/Employee?fields=["custom_pos_pin"]`. A permlevel is
+	the only mechanism in Frappe that hides ONE field from a role that may see the rest
+	of the document.
+
+	Who is granted, and why it is not simply "whoever can read staff":
+
+	  - `Barakat POS PIN Reader` — read AND write. Held by Manager (sets PINs from the
+	    admin panel) and Branch Supervisor (their till pulls the branch's PINs to
+	    authenticate cashiers with no network). The generated `staff: read` role could
+	    not be used because HR holds the same one.
+	  - `System Manager` — read and write. Without this the tenant OWNER loses the
+	    field, since owners hold no Barakat role; the same omission has bitten this app
+	    before.
+
+	**Write matters as much as read.** A permlevel field is dropped from a save
+	SILENTLY for a role without the write grant — no error, the value simply does not
+	change. A Manager missing this would appear to set a PIN and not set one.
+
+	Idempotent: `add_permission` is a no-op for an existing (role, permlevel) row, and
+	the properties are re-asserted each run.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	if not frappe.db.exists("DocType", "Employee"):
+		return
+
+	# The field has to actually be at permlevel 1 for any of this to mean anything.
+	# Fixtures sync it, but fixtures run AFTER patches on a first migrate, so assert it
+	# here rather than assuming the ordering.
+	if frappe.db.exists("Custom Field", "Employee-custom_pos_pin"):
+		frappe.db.set_value(
+			"Custom Field", "Employee-custom_pos_pin", "permlevel", 1, update_modified=False
+		)
+
+	role = "Barakat POS PIN Reader"
+	if not frappe.db.exists("Role", role):
+		frappe.get_doc(
+			{"doctype": "Role", "role_name": role, "desk_access": 0}
+		).insert(ignore_permissions=True)
+
+	for grantee in (role, "System Manager"):
+		add_permission("Employee", grantee, 1)
+		for perm in ("read", "write"):
+			update_permission_property("Employee", grantee, 1, perm, 1, validate=False)
+
+	frappe.clear_cache(doctype="Employee")
 
 
 def _revoke_stale_barakat_perms():
