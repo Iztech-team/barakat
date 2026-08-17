@@ -115,10 +115,29 @@ def customer_debt(customer, company, exclude_invoice=None):
 		# A literal clause, never interpolated user input — the value is bound.
 		exclude_clause = "and name != %s"
 		params.append(exclude_invoice)
+
+	# Sales add what they left unpaid. Returns SUBTRACT the debt they cancelled,
+	# which is the value of the goods coming back less the cash handed over —
+	# `abs(total) - abs(paid_amount)`, since a return carries both negated.
+	#
+	# `outstanding_amount` cannot express the second half: ERPNext computes it as
+	# `total - paid if total > paid else 0`, and a return's total is negative, so
+	# it always lands on zero. Reading only that column left a customer who
+	# returned everything still owing the full amount until shift close, unable
+	# to buy on credit again in the meantime.
 	unconsolidated = (
 		frappe.db.sql(
 			f"""
-			select sum(outstanding_amount)
+			select sum(
+				case when is_return = 1
+					then -greatest(
+						abs(if(ifnull(rounded_total, 0) <> 0, rounded_total, grand_total))
+						- abs(paid_amount),
+						0
+					)
+					else outstanding_amount
+				end
+			)
 			from `tabPOS Invoice`
 			where customer = %s and company = %s
 			  and docstatus = 1
