@@ -67,6 +67,11 @@ fixtures = [
 					"POS Profile-custom_allow_customer_creation",
 					"POS Profile-custom_max_discount_percent",
 					"POS Profile-custom_allow_credit_sale",
+					# POS Profile — the receipt logo this till prints.
+					"POS Profile-custom_receipt_section",
+					"POS Profile-custom_receipt_logo_mode",
+					"POS Profile-custom_receipt_logo",
+					"POS Profile-custom_receipt_logo_width",
 					# Employee
 					"Employee-custom_pos_pin",
 					"Employee-custom_role_preset",
@@ -172,6 +177,10 @@ doc_events = {
 			# repoint on its next sync — so mid-shift it sells against the old
 			# branch's numbers. See validations.py for the full reasoning.
 			"barakat.validations.validate_pos_profile_warehouse_change",
+			# Normalises the three receipt-logo fields and refuses an image the
+			# till could not print. The desk and the REST API write this document
+			# too, so the rules cannot live in the Admin Panel alone.
+			"barakat.validations.validate_pos_profile_receipt_logo",
 		],
 	},
 	"Item": {

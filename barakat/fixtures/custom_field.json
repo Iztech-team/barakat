@@ -189,6 +189,49 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "POS Profile-custom_receipt_section",
+  "dt": "POS Profile",
+  "fieldname": "custom_receipt_section",
+  "label": "Receipt",
+  "fieldtype": "Section Break",
+  "insert_after": "custom_allow_credit_sale"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_receipt_logo_mode",
+  "dt": "POS Profile",
+  "fieldname": "custom_receipt_logo_mode",
+  "label": "Receipt logo",
+  "description": "Which logo prints at the top of this till's receipts. Default prints the Barakat logo, Custom prints the uploaded image, None prints no logo at all.",
+  "fieldtype": "Select",
+  "options": "Default\nCustom\nNone",
+  "default": "Default",
+  "insert_after": "custom_receipt_section"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_receipt_logo",
+  "dt": "POS Profile",
+  "fieldname": "custom_receipt_logo",
+  "label": "Receipt logo image",
+  "description": "A black-and-white PNG as a data URL, prepared by the Admin Panel. Only used when the receipt logo is set to Custom.",
+  "fieldtype": "Long Text",
+  "depends_on": "eval:doc.custom_receipt_logo_mode=='Custom'",
+  "insert_after": "custom_receipt_logo_mode"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "POS Profile-custom_receipt_logo_width",
+  "dt": "POS Profile",
+  "fieldname": "custom_receipt_logo_width",
+  "label": "Receipt logo width %",
+  "description": "How wide the logo prints, as a percentage of the paper width. 32 is the default size.",
+  "fieldtype": "Int",
+  "default": "32",
+  "insert_after": "custom_receipt_logo"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Employee-custom_pos_pin",
   "dt": "Employee",
   "fieldname": "custom_pos_pin",

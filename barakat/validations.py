@@ -3,6 +3,7 @@ import re
 import frappe
 from frappe import _
 
+from barakat import receipt_logo
 from barakat.loyalty_tier_names import first_duplicate_tier_name
 from barakat.permissions import pin_role_decision
 
@@ -613,3 +614,49 @@ def validate_pos_profile_warehouse_change(doc, method):
 			_shift_lines(open_shifts),
 		),
 	)
+
+
+class ReceiptLogoInvalid(frappe.ValidationError):
+	"""Raised when a POS Profile's receipt logo cannot be stored.
+
+	Its own class so the proxy can recognise it by `exc_type` rather than by
+	matching the message text — Frappe translates thrown messages per user
+	language, so a text match works in English and silently stops working the
+	moment an Arabic or Hebrew manager hits it.
+	"""
+
+
+def validate_pos_profile_receipt_logo(doc, method):
+	"""Normalise and check the three receipt-logo fields on a POS Profile.
+
+	This is the LAST word on those fields, not a convenience. The Admin Panel is
+	where a manager prepares a logo, but the desk and the raw REST API write the
+	same document without going anywhere near the panel's own checks — so the
+	size ceiling, the PNG-only rule and "Custom needs an image" have to live
+	here to mean anything.
+
+	A profile saved before the feature existed carries none of the three fields.
+	It must keep saving, and it must keep printing what it prints today, so an
+	absent mode reads as `Default` and an absent width as 32 (the `W * 0.32` the
+	till already draws) rather than as an error or as zero.
+	"""
+	try:
+		mode, image, width = receipt_logo.resolve(
+			doc.get("custom_receipt_logo_mode"),
+			doc.get("custom_receipt_logo"),
+			doc.get("custom_receipt_logo_width"),
+		)
+	except receipt_logo.ReceiptLogoError as err:
+		frappe.throw(
+			title=_("Receipt Logo"),
+			exc=ReceiptLogoInvalid,
+			msg=_(str(err)),
+		)
+		return
+
+	# Written back so the stored document always matches what was validated:
+	# `Default`/`None` drop the image bytes, and an out-of-range width is
+	# persisted already clamped rather than clamped again by every reader.
+	doc.custom_receipt_logo_mode = mode
+	doc.custom_receipt_logo = image
+	doc.custom_receipt_logo_width = width

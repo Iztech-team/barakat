@@ -205,6 +205,63 @@ class CashierLimitFieldsAreDeclared(unittest.TestCase):
         self.assertEqual(f["default"], "100")
 
 
+class ReceiptLogoFieldsAreDeclared(unittest.TestCase):
+    """The three fields deciding what a till prints above the shop name.
+
+    See docs/superpowers/specs/2026-08-17-receipt-logo-design.md (POS repo). The
+    DEFAULTS are the load-bearing part, and in an unusual way: they are what a
+    profile nobody has touched resolves to, so getting either wrong changes the
+    receipt at every existing shop the moment this ships. `Default` and `32`
+    together reproduce exactly the `W * 0.32` Barakat mark the till draws today.
+    """
+
+    def setUp(self):
+        self.rows = _rows()
+
+    def test_section_break_exists_after_the_cashier_limits(self):
+        f = _by_name(self.rows, "POS Profile-custom_receipt_section")
+        self.assertIsNotNone(f, "receipt section missing from fixtures")
+        self.assertEqual(f["fieldtype"], "Section Break")
+        self.assertEqual(f["insert_after"], "custom_allow_credit_sale")
+
+    def test_mode_is_a_select_of_exactly_three_options_defaulting_to_default(self):
+        f = _by_name(self.rows, "POS Profile-custom_receipt_logo_mode")
+        self.assertIsNotNone(f, "custom_receipt_logo_mode missing from fixtures")
+        self.assertEqual(f["fieldtype"], "Select")
+        # Order and spelling both matter: receipt_logo.py compares these strings
+        # exactly, and the till treats anything it does not recognise as
+        # "Default". A renamed option would silently revert every shop's logo.
+        self.assertEqual(f["options"].split("\n"), ["Default", "Custom", "None"])
+        self.assertEqual(f["default"], "Default")
+
+    def test_the_image_is_long_text_not_data(self):
+        f = _by_name(self.rows, "POS Profile-custom_receipt_logo")
+        self.assertIsNotNone(f, "custom_receipt_logo missing from fixtures")
+        # Long Text, because the value is a base64 PNG data URL. `Data` is capped
+        # at 140 characters in Frappe, which would truncate every logo into
+        # something that cannot be decoded — and it would do so silently.
+        self.assertEqual(f["fieldtype"], "Long Text")
+
+    def test_width_is_an_int_defaulting_to_32(self):
+        f = _by_name(self.rows, "POS Profile-custom_receipt_logo_width")
+        self.assertIsNotNone(f, "custom_receipt_logo_width missing from fixtures")
+        self.assertEqual(f["fieldtype"], "Int")
+        # 32, never 0 and never blank. Zero would print a logo of no width, and a
+        # blank Int reads as 0 in Frappe.
+        self.assertEqual(f["default"], "32")
+
+    def test_the_three_fields_are_ordered_under_the_section(self):
+        # Frappe lays a form out by following insert_after, so a broken chain
+        # scatters these fields into unrelated tabs of the POS Profile form.
+        chain = {
+            "POS Profile-custom_receipt_logo_mode": "custom_receipt_section",
+            "POS Profile-custom_receipt_logo": "custom_receipt_logo_mode",
+            "POS Profile-custom_receipt_logo_width": "custom_receipt_logo",
+        }
+        for name, expected in chain.items():
+            self.assertEqual(_by_name(self.rows, name)["insert_after"], expected, name)
+
+
 class CustomerPosProfileStamp(unittest.TestCase):
     def setUp(self):
         self.rows = _rows()
