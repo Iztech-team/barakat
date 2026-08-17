@@ -71,28 +71,44 @@ def get_shift_summary(opening_entry_name: str) -> dict:
 
 	opening = frappe.get_doc("POS Opening Entry", opening_entry_name)
 
+	cash_modes = get_cash_modes(opening.pos_profile)
+
 	opening_cash = 0.0
 	for row in (opening.balance_details or []):
-		if row.mode_of_payment == "Cash":
+		if row.mode_of_payment in cash_modes:
 			opening_cash = float(row.opening_amount or 0)
 			break
 
-	# Cash sales and refunds from POS Invoices linked to this profile
-	# after the opening date (standard ERPNext has no direct link on invoice)
-	invoices = frappe.db.sql("""
+	# Every tender on this profile's invoices, kept split by mode: the drawer
+	# takes only the cash-typed ones, and the rest are reported so the till can
+	# show what the shift sold rather than leaving its card takings invisible.
+	rows = frappe.db.sql("""
 		SELECT pi.name, pi.is_return,
-			COALESCE(SUM(sip.amount), 0) AS cash_amount
+			sip.mode_of_payment, COALESCE(sip.amount, 0) AS amount
 		FROM `tabPOS Invoice` pi
-		LEFT JOIN `tabSales Invoice Payment` sip
-			ON sip.parent = pi.name AND sip.mode_of_payment = 'Cash'
+		LEFT JOIN `tabSales Invoice Payment` sip ON sip.parent = pi.name
 		WHERE pi.pos_profile = %(pos_profile)s
 		  AND pi.docstatus = 1
 		  AND pi.posting_date >= %(start_date)s
-		GROUP BY pi.name
 	""", {"pos_profile": opening.pos_profile, "start_date": opening.period_start_date}, as_dict=True)
 
-	cash_sales = sum(float(inv.cash_amount or 0) for inv in invoices if not inv.is_return)
-	cash_refunds = sum(abs(float(inv.cash_amount or 0)) for inv in invoices if inv.is_return)
+	invoices = {}
+	cash_sales = 0.0
+	cash_refunds = 0.0
+	non_cash_sales: dict = {}
+	for row in rows:
+		invoices[row.name] = bool(row.is_return)
+		mode = row.mode_of_payment
+		if not mode:
+			continue
+		amount = float(row.amount or 0)
+		if mode in cash_modes:
+			if row.is_return:
+				cash_refunds += abs(amount)
+			else:
+				cash_sales += amount
+		elif not row.is_return:
+			non_cash_sales[mode] = non_cash_sales.get(mode, 0.0) + amount
 
 	# Cash movements from Journal Entries linked to this opening entry
 	journals = frappe.db.sql("""
@@ -127,6 +143,18 @@ def get_shift_summary(opening_entry_name: str) -> dict:
 
 	expected_total = opening_cash + cash_sales - cash_refunds + cash_in - cash_out
 
+	# Largest first, mirroring the till's own breakdown.
+	non_cash = sorted(
+		(
+			{"mode_of_payment": mode, "amount": amount}
+			for mode, amount in non_cash_sales.items()
+			if amount
+		),
+		key=lambda row: row["amount"],
+		reverse=True,
+	)
+	non_cash_total = sum(row["amount"] for row in non_cash)
+
 	return {
 		"opening_cash": opening_cash,
 		"cash_sales": cash_sales,
@@ -134,8 +162,39 @@ def get_shift_summary(opening_entry_name: str) -> dict:
 		"cash_in": cash_in,
 		"cash_out": cash_out,
 		"expected_total": expected_total,
-		"orders_count": len([inv for inv in invoices if not inv.is_return]),
+		"orders_count": len([name for name, is_return in invoices.items() if not is_return]),
+		"non_cash_sales": non_cash,
+		"non_cash_total": non_cash_total,
+		"total_sales": cash_sales + non_cash_total,
 	}
+
+
+def get_cash_modes(pos_profile: str) -> set:
+	"""The profile's Modes of Payment whose ERPNext `type` is Cash.
+
+	By TYPE, never by name. This compared `mode_of_payment == "Cash"` literally,
+	so a company whose cash mode is called "نقدي" got an opening balance of 0 and
+	cash sales of 0 from this endpoint — and this endpoint is the one a till
+	falls back on when its local database is gone and it is trying to close the
+	shift, so the cashier was told they were over by the entire day's takings.
+
+	The POS fixed the same bug on its own side some time ago; this is the copy
+	that was left behind.
+	"""
+	modes = frappe.get_all(
+		"POS Payment Method",
+		filters={"parent": pos_profile, "parenttype": "POS Profile"},
+		pluck="mode_of_payment",
+	)
+	if not modes:
+		return set()
+	return set(
+		frappe.get_all(
+			"Mode of Payment",
+			filters={"name": ["in", modes], "type": "Cash"},
+			pluck="name",
+		)
+	)
 
 
 @frappe.whitelist()
