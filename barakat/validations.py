@@ -4,6 +4,15 @@ import frappe
 from frappe import _
 
 from barakat.loyalty_tier_names import first_duplicate_tier_name
+from barakat.permissions import pin_role_decision
+
+
+class PosPinRoleError(frappe.ValidationError):
+	"""Raised when a PIN is being given to a persona that cannot operate a till.
+
+	Its own class so the proxy can recognise it by `exc_type` rather than matching
+	the message text, which Frappe translates per user language.
+	"""
 
 
 class POSProfileWarehouseLocked(frappe.ValidationError):
@@ -221,6 +230,65 @@ def _employee_companies(doc):
 			companies.add(branch_company)
 
 	return companies
+
+
+def _system_context():
+	"""True during install, migrate or a patch — when nothing may be refused."""
+	return bool(frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch)
+
+
+def enforce_pin_role(doc, method=None):
+	"""A POS PIN may exist only on a Manager, Branch Supervisor or Cashier.
+
+	Wired on Employee `validate`, and deliberately FIRST — ahead of
+	`validate_employee_pin` — so the uniqueness check never fires on a PIN that is
+	about to be cleared. Getting that order wrong would refuse a perfectly legal
+	role change because the PIN being discarded happened to clash with somebody.
+
+	The decision itself lives in `barakat.permissions.pin_role_decision` so it is
+	readable and testable without a bench; this function only knows about documents.
+
+	`doc.get(...)` rather than attribute access throughout: a site whose custom
+	fields have not synced has no `custom_pos_pin` at all (izdehar today), and an
+	AttributeError here would break every Employee save on it.
+
+	**Permlevel, and why there is no second guard here.** `custom_pos_pin` sits at
+	permlevel 1, so the obvious worry is that Frappe restores the stored value for a
+	caller who may not write the field — silently reverting this clear and leaving
+	the bug open with every test still green. It does not: `Document.save()` runs
+	`validate_higher_perm_levels()` BEFORE `run_before_save_methods()`, so this hook
+	is the last word. Measured on the bench, not reasoned about — an `HR Manager`
+	caller with `get_permlevel_access("write") == [0]` cleared the PIN of a
+	pre-existing HR record, and still did so with a proposed `on_update` backstop
+	removed. The backstop was deleted for being decoration. If a future Frappe
+	reorders those two calls, this stops working silently; the bench probe in
+	`docs/superpowers/specs/2026-08-17-pos-pin-role-lifecycle-design.md` is how to
+	re-check it.
+	"""
+	preset = doc.get("custom_role_preset")
+	pin = doc.get("custom_pos_pin")
+
+	stored = None
+	if doc.name:
+		# The DB layer, not the document: this must read what is actually on record
+		# even when the caller cannot see the field.
+		stored = frappe.db.get_value("Employee", doc.name, "custom_pos_pin")
+
+	decision = pin_role_decision(preset, pin, stored, system_context=_system_context())
+
+	if decision == "keep":
+		return
+
+	if decision == "refuse":
+		frappe.throw(
+			_(
+				"A POS PIN can only be given to a Manager, Branch Supervisor or Cashier."
+			),
+			PosPinRoleError,
+			title=_("Not a till role"),
+		)
+
+	doc.custom_pos_pin = ""
 
 
 def validate_employee_pin(doc, method):

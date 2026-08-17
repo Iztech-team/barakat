@@ -717,6 +717,71 @@ PERSONA_ROLE_BUNDLES = _build_persona_bundles()
 
 PERSONAS = frozenset(PERSONA_ROLE_BUNDLES)
 
+# The personas that operate a till, and therefore the only ones that may hold a POS
+# PIN.
+#
+# A PIN is a credential for the desktop POS and nothing else. An Accountant, an HR
+# clerk or an Inventory Keeper has no use for one — and until 2026-08-17 kept a
+# WORKING one after being moved off the till, because the admin panel hid the field
+# and nothing else ever looked at the role again.
+#
+# An ALLOW-LIST, deliberately: a blank or unrecognised preset is not a POS role. A
+# deny-list fails open — a persona added to the catalog next year would be a till
+# operator until somebody remembered to list it. Measured on the production bench
+# before choosing: no employee with a blank preset holds a PIN on any site, so the
+# strict reading locks nobody out.
+#
+# Three other repos keep their own copy, because none of them can import this one.
+# Change one, change all four:
+#   proxy-barakat/src/modules/roles/catalog.ts            POS_PERSONAS
+#   admin_panel_barakat/src/schemas/pages/staff/staff.ts  PIN_ROLES
+#   electrobun-pos/src/bun/auth/pos-roles.ts              POS_ROLES
+POS_PERSONAS = frozenset({"Manager", "Branch Supervisor", "Cashier"})
+
+assert POS_PERSONAS <= PERSONAS, (
+	f"POS_PERSONAS names personas that do not exist: {sorted(POS_PERSONAS - PERSONAS)}"
+)
+
+
+def is_pos_persona(preset):
+	"""True when this preset may hold a POS PIN. Blank and unknown are False."""
+	return (preset or "").strip() in POS_PERSONAS
+
+
+def pin_role_decision(preset, new_pin, stored_pin, system_context=False):
+	"""What a save should do with the PIN it is carrying: keep, clear or refuse.
+
+	Pure, so the rule can be read and tested without a bench —
+	`validations.enforce_pin_role` is the only thing that knows about documents.
+
+	The two non-POS outcomes are deliberately different, and the difference is
+	whether the PIN is being SET or merely carried along:
+
+	- **clear** — the PIN equals what is already on record, so nobody typed it. The
+	  role is what changed. Clearing it silently is right: interrupting a manager
+	  with an error about a field the admin panel does not even show them would be a
+	  worse bug than the one this closes.
+	- **refuse** — the PIN differs from the stored one, so this save is trying to
+	  give a till credential to somebody who cannot use a till. Reachable from the
+	  ERPNext desk and from a hand-made API call, never from the admin panel.
+	  Silently discarding what a person typed is its own bug.
+
+	`system_context` (install / migrate / patch) never refuses. A migration must not
+	die on this rule — it clears instead, the same stand-down `guard_role_preset`
+	makes for the same reason.
+	"""
+	if is_pos_persona(preset):
+		return "keep"
+
+	new_pin = (new_pin or "").strip()
+	if not new_pin:
+		return "keep"
+
+	if new_pin == (stored_pin or "").strip():
+		return "clear"
+
+	return "clear" if system_context else "refuse"
+
 # Roles never stripped from a persona user even though no bundle names them.
 #
 # EMPTY as of 2026-07-29. This used to hold {"Employee", "Employee Self Service"} on

@@ -139,6 +139,9 @@ doc_events = {
 		# per-company duplicate-login rule can replace ERPNext's site-wide one.
 		"before_validate": "barakat.overrides.employee_identity.scope_duplicate_login_to_company",
 		"validate": [
+			# FIRST, ahead of validate_employee_pin: a PIN this one is about to clear
+			# must never be judged for uniqueness on the way out.
+			"barakat.validations.enforce_pin_role",
 			"barakat.validations.validate_employee_pin",
 			"barakat.overrides.staff_roles.guard_role_preset",
 			"barakat.overrides.staff_roles.guard_user_permission_flag",
