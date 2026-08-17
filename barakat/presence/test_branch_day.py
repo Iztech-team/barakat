@@ -446,6 +446,31 @@ class TestBranchDay(FrappeTestCase):
 		gap = (now_datetime() - get_datetime(spans[0]["end"])).total_seconds()
 		self.assertLess(abs(gap), 120, "a live branch should draw to about now")
 
+	def test_somebody_who_has_only_just_walked_in_is_not_bounded_away(self):
+		"""The bound must never cut a stretch back to before its own start.
+
+		A till stamps `last_seen` from the moment it reports, and the sighting rows that
+		report produces are written a few milliseconds LATER. So on a live branch the
+		newest `appeared` is routinely AFTER the newest `last_seen` — by a hair, but
+		reliably, on every single report.
+
+		Bounding a live branch at `last_seen` therefore gave the current stretch an end
+		before its start, which is a length of less than nothing, and it was dropped: a
+		person who had walked in seconds ago disappeared from the map completely. That
+		is a worse bug than the one the bound was added for, and it is the reason the
+		bound is only applied once a branch has actually gone quiet.
+		"""
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		now = now_datetime()
+		self._till(last_seen=now - timedelta(milliseconds=200))
+		self._sight(PHONE, "appeared", now)
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		self.assertEqual(len(spans), 1, "a just-arrived phone was bounded out of view")
+		self.assertTrue(spans[0]["open"])
+
 	def test_a_finished_stretch_is_untouched_by_the_bound(self):
 		# It has a `gone`, so nothing here may move its end.
 		self._assign_native(self.alice)
@@ -468,6 +493,83 @@ class TestBranchDay(FrappeTestCase):
 		spans = self._row(self._day(), self.alice)["spans"]
 
 		self.assertTrue(spans[0]["open"])
+
+	# --------------------------------------------------- "still here", the sentence
+
+	def test_a_dark_branch_does_not_claim_anybody_is_still_here(self):
+		"""Bounding the block was only half of it.
+
+		`open` is the one field the screen turns into a sentence — it prints "still
+		here" — so a stretch left open by a branch nobody can see any more says
+		something false, however short the block is drawn. What is true is "we stopped
+		being able to look at 02:00", which is an end time, not a claim about now.
+		"""
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+		self._till(last_seen=self.at(2))
+
+		spans = self._row(self._day(), self.alice)["spans"]
+
+		self.assertFalse(
+			spans[0]["open"],
+			"a branch that stopped reporting hours ago still said somebody was here",
+		)
+
+	def test_a_live_branch_still_says_still_here(self):
+		"""The case the whole feature exists for must survive the fix above."""
+		self._assign_native(self.alice)
+		self._pair(self.alice, PHONE)
+		self._sight(PHONE, "appeared", self.at(1))
+		self._till(last_seen=now_datetime())
+
+		self.assertTrue(self._row(self._day(), self.alice)["spans"][0]["open"])
+
+	def test_an_open_shift_at_a_dark_branch_is_not_still_here_either(self):
+		"""The session block, not the sighting log — the same lie, a different field.
+
+		A shift is only left open because no departure was recorded, and at a dark
+		branch none ever will be: the sweep deliberately refuses to age anyone out of a
+		room nobody can see. Reading that as "on shift now" is how a closed shop showed
+		a full complement of staff.
+		"""
+		self._assign_native(self.alice)
+		self._session(self.alice, self.at(1))
+		self._till(last_seen=self.at(2))
+
+		sessions = self._row(self._day(), self.alice)["sessions"]
+
+		self.assertEqual(len(sessions), 1)
+		self.assertIsNone(sessions[0]["outTime"], "the shift really is still open")
+		self.assertFalse(sessions[0]["open"], "and it should not say anybody is here")
+
+	def test_an_open_shift_at_a_live_branch_is_still_here(self):
+		self._assign_native(self.alice)
+		self._session(self.alice, self.at(1))
+		self._till(last_seen=now_datetime())
+
+		self.assertTrue(self._row(self._day(), self.alice)["sessions"][0]["open"])
+
+	def test_the_screen_is_told_how_far_it_may_draw(self):
+		"""An open shift carries no end, so the bound has to travel with the payload.
+
+		Without it the browser falls back to its own clock, and the block grows a second
+		every second no matter what the server decided.
+		"""
+		self._assign_native(self.alice)
+		self._till(last_seen=self.at(2))
+
+		self.assertEqual(self._day()["seenUntil"][:19], str(self.at(2))[:19])
+
+	def test_the_timeline_carries_the_same_bound(self):
+		# Both views draw the same strip; a bound on only one of them is a bug waiting
+		# for somebody to switch modes.
+		self._assign_native(self.alice)
+		self._till(last_seen=self.at(2))
+
+		result = api.timeline(self.alice, str(self.today), str(self.today))
+
+		self.assertIn("seenUntil", result)
 
 	# ------------------------------------------------------------- the day itself
 

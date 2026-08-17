@@ -13,6 +13,8 @@ names no company, no branch and no till, because a caller that can name its own 
 can name somebody else's. That is the rule that failed once on Contact and Item Price.
 """
 
+from datetime import timedelta
+
 import frappe
 from frappe import _
 from frappe.utils import get_datetime, getdate, now_datetime
@@ -436,6 +438,9 @@ def timeline(employee, from_date, to_date):
 	window_start = get_datetime(f"{from_date} 00:00:00")
 	window_end = get_datetime(f"{to_date} 23:59:59")
 
+	company = frappe.db.get_value("Employee", employee, "company")
+	seen_until, watching = _watch_bound(company)
+
 	return {
 		"sessions": [
 			{
@@ -444,7 +449,7 @@ def timeline(employee, from_date, to_date):
 				"inTime": str(row.in_time),
 				"outTime": str(row.out_time) if row.out_time else None,
 				"deviceKey": row.device_key,
-				"open": row.state == "Open",
+				"open": row.state == "Open" and watching,
 			}
 			for row in rows
 		],
@@ -453,6 +458,10 @@ def timeline(employee, from_date, to_date):
 		# deleted and only the session block survives, so the screen can say so rather
 		# than drawing an empty day that looks like an absence.
 		"detailFrom": str(_detail_horizon(employee)),
+		# How far the screen may draw an unfinished stretch. A session with no out_time
+		# has no end to send, so without this the screen falls back to its own clock and
+		# grows the block for ever — the same bug `_watch_bound` fixes for spans.
+		"seenUntil": str(seen_until),
 	}
 
 
@@ -489,6 +498,8 @@ def branch_day(branch, day):
 		limit_page_length=0,
 	)
 
+	seen_until, watching = _watch_bound(company, branch)
+
 	sessions_by = {}
 	for row in rows:
 		sessions_by.setdefault(row.employee, []).append(
@@ -498,7 +509,7 @@ def branch_day(branch, day):
 				"inTime": str(row.in_time),
 				"outTime": str(row.out_time) if row.out_time else None,
 				"deviceKey": row.device_key,
-				"open": row.state == "Open",
+				"open": row.state == "Open" and watching,
 			}
 		)
 
@@ -540,6 +551,9 @@ def branch_day(branch, day):
 			for row in people
 		],
 		"detailFrom": str(_detail_horizon_for_company(company)),
+		# See `timeline`: an open session carries no end, so the screen needs the same
+		# bound the spans already carry or it draws one to its own clock.
+		"seenUntil": str(seen_until),
 	}
 
 
@@ -602,9 +616,8 @@ def _spans_by_employee(company, employees, window_start, window_end, branch=None
 	if not ownership:
 		return {}
 
-	built = _spans_from_log(
-		ownership, window_start, window_end, _seen_until(company, branch)
-	)
+	seen_until, watching = _watch_bound(company, branch)
+	built = _spans_from_log(ownership, window_start, window_end, seen_until)
 
 	out = {}
 	for span in built:
@@ -619,7 +632,7 @@ def _spans_by_employee(company, employees, window_start, window_end, branch=None
 				"deviceKey": span.device_key,
 				"start": str(span.start),
 				"end": str(span.end),
-				"open": span.open_ended,
+				"open": span.open_ended and watching,
 			}
 		)
 	return out
@@ -667,8 +680,8 @@ def _spans_from_log(ownership, window_start, window_end, seen_until=None):
 	)
 
 
-def _seen_until(company, branch=None):
-	"""The last moment anything here could have seen a phone.
+def _watch_bound(company, branch=None):
+	"""How far an unfinished stretch may be drawn, and whether anybody is still watching.
 
 	A stretch with no `gone` used to be drawn to NOW, which is right only while somebody
 	is still watching. When the tills stop reporting no departure is ever recorded — the
@@ -681,21 +694,36 @@ def _seen_until(company, branch=None):
 	long since closed. Refreshing could not help; the answer was being computed that way
 	every time.
 
-	So an unfinished stretch stops where the evidence stops. While a branch is reporting
-	this is within a heartbeat of now and nothing changes; once it goes quiet the block
-	stops growing, which is exactly what "we cannot see the room any more" looks like.
+	Both halves are returned together because they are one decision. The second is what
+	the screen prints as "still here", and a block that has stopped growing must stop
+	saying that too, or it has merely become a shorter lie.
+
+	The bound is applied ONLY once a branch has actually gone quiet — five heartbeats,
+	floor of five minutes, the same threshold the sweep runs on. While it is reporting,
+	the answer is plain `now`, and that is not a nicety: a till stamps `last_seen` from
+	the moment it reports, and the sighting rows that report produces are written a few
+	milliseconds LATER. Bounding a live branch at `last_seen` therefore cut every
+	just-arrived stretch back to before its own start, and a device that had walked in
+	seconds ago vanished from the map entirely.
 	"""
+	now = now_datetime()
+
 	filters = {"custom_company": company}
 	if branch:
 		filters["branch"] = branch
 	newest = frappe.db.get_value(
 		"Presence Till", filters, "last_seen", order_by="last_seen desc"
 	)
-	now = now_datetime()
+	# Nothing to bound it with. Shortening on a guess would be worse than not.
 	if not newest:
-		return now
+		return now, True
+
 	newest = get_datetime(newest)
-	return newest if newest < now else now
+	settings = settings_for(company)
+	stale_after = timedelta(seconds=max(settings["heartbeat_s"] * 5, 300))
+	if now - newest <= stale_after:
+		return now, True
+	return newest, False
 
 
 def _detail_horizon_for_company(company):
@@ -727,16 +755,15 @@ def _device_spans(employee, window_start, window_end):
 		return []
 
 	company = frappe.db.get_value("Employee", employee, "company")
+	seen_until, watching = _watch_bound(company)
 	return [
 		{
 			"deviceKey": span.device_key,
 			"start": str(span.start),
 			"end": str(span.end),
-			"open": span.open_ended,
+			"open": span.open_ended and watching,
 		}
-		for span in _spans_from_log(
-			ownership, window_start, window_end, _seen_until(company)
-		)
+		for span in _spans_from_log(ownership, window_start, window_end, seen_until)
 	]
 
 
