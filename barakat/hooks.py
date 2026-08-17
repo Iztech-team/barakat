@@ -66,6 +66,7 @@ fixtures = [
 					"POS Profile-custom_allow_ad_hoc_item",
 					"POS Profile-custom_allow_customer_creation",
 					"POS Profile-custom_max_discount_percent",
+					"POS Profile-custom_allow_credit_sale",
 					# Employee
 					"Employee-custom_pos_pin",
 					"Employee-custom_role_preset",

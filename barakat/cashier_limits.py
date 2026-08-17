@@ -7,7 +7,7 @@ call sites (the POS Invoice validate hook and the Customer before_insert hook)
 cannot drift apart.
 """
 
-import decimal
+from barakat.rounding import money_tolerance, round_half_up
 
 AD_HOC_ITEM_CODE = "MISC"
 
@@ -35,28 +35,6 @@ def has_ad_hoc_line(item_codes):
 	return False
 
 
-def _round_half_up(value, precision):
-	"""Round half-up, the way the till's `roundMoney` does.
-
-	Python's built-in `round` is banker's rounding, so `round(3.335, 2)` can land
-	on 3.33 while the till sends 3.34. Comparing the two directly would reject
-	the till's own maximum on exactly the subtotals where the percentage does
-	not divide cleanly.
-
-	This is NOT bit-identical to the till. `roundMoney` is
-	`Math.round(major * 100)`, which multiplies first and so sees a different
-	float; on a 19.99 subtotal at 50% it yields 9.99 where this yields 10.00.
-	The property that matters is the DIRECTION of every such disagreement: this
-	must never be smaller than the till's value, or the server would reject a
-	discount the keypad itself offered. Measured across the half-way cases, it
-	is always equal or one unit larger.
-	"""
-	quantum = decimal.Decimal(1).scaleb(-precision)
-	return float(
-		decimal.Decimal(str(value)).quantize(quantum, rounding=decimal.ROUND_HALF_UP)
-	)
-
-
 def discount_over_cap(discount_amount, total, max_percent, precision=2):
 	"""Does this order-level discount exceed the profile's cap?
 
@@ -81,9 +59,6 @@ def discount_over_cap(discount_amount, total, max_percent, precision=2):
 		return False
 
 	cap = MAX_DISCOUNT_UNLIMITED if max_percent is None else float(max_percent)
-	allowed = _round_half_up(total * cap / 100.0, precision)
+	allowed = round_half_up(total * cap / 100.0, precision)
 
-	# One tenth of the smallest unit — float noise only, now that both sides of
-	# the comparison are rounded to the same precision.
-	tolerance = 1.0 / (10 ** (precision + 1))
-	return float(discount_amount or 0.0) - allowed > tolerance
+	return float(discount_amount or 0.0) - allowed > money_tolerance(precision)

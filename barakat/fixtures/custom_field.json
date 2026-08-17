@@ -178,6 +178,17 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "POS Profile-custom_allow_credit_sale",
+  "dt": "POS Profile",
+  "fieldname": "custom_allow_credit_sale",
+  "label": "Allow selling on credit",
+  "description": "Let the cashier leave part or all of a sale unpaid, as debt against a named customer. The customer must have a credit limit set. Off by default.",
+  "fieldtype": "Check",
+  "default": "0",
+  "insert_after": "custom_max_discount_percent"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Employee-custom_pos_pin",
   "dt": "Employee",
   "fieldname": "custom_pos_pin",

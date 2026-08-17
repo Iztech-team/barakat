@@ -6,7 +6,14 @@ from frappe.utils import cint, flt, getdate
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 
 from barakat.cashier_limits import discount_over_cap, has_ad_hoc_line
+from barakat.credit_limits import (
+	credit_headroom,
+	credit_over_limit,
+	may_take_credit,
+	total_owed,
+)
 from barakat.overrides.loyalty import align_loyalty_spend
+from barakat.rounding import round_half_up
 
 
 def _rule_names(raw):
@@ -43,11 +50,87 @@ def _profile_limits(pos_profile):
 		frappe.db.get_value(
 			"POS Profile",
 			pos_profile,
-			["custom_allow_ad_hoc_item", "custom_max_discount_percent"],
+			[
+				"custom_allow_ad_hoc_item",
+				"custom_max_discount_percent",
+				"custom_allow_credit_sale",
+				"customer",
+			],
 			as_dict=True,
 		)
 		or {}
 	)
+
+
+def customer_credit_limit(customer, company):
+	"""This customer's credit limit for this company, or 0 for "none".
+
+	Only the customer's OWN row is read. ERPNext's `get_credit_limit` would fall
+	back to the Customer Group and then to `Company.credit_limit`, but credit at
+	the till is opt-in per customer by design — inheriting a group-wide default
+	would hand credit to a walk-in the moment they are added to a group.
+	"""
+	return frappe.db.get_value(
+		"Customer Credit Limit",
+		{"parent": customer, "parenttype": "Customer", "company": company},
+		"credit_limit",
+	)
+
+
+def customer_debt(customer, company, exclude_invoice=None):
+	"""What this customer already owes: consolidated AND unconsolidated.
+
+	Two terms, because ERPNext's own `get_customer_outstanding` reads GL entries
+	and a POS Invoice writes none until it is merged at shift close. Counting
+	only the GL is what would let one shift breach a limit many times over and
+	then fail to consolidate.
+
+	`exclude_invoice` keeps a re-validated invoice from being counted against
+	itself — `validate` runs again on amend and on any later save.
+	"""
+	consolidated = (
+		frappe.db.sql(
+			"""
+			select sum(debit) - sum(credit)
+			from `tabGL Entry`
+			where party_type = 'Customer' and party = %s
+			  and company = %s and is_cancelled = 0
+			""",
+			(customer, company),
+		)[0][0]
+		or 0.0
+	)
+
+	# Submitted, still unmerged, and therefore invisible above. Raw SQL for the
+	# same reason the GL query above uses it: `get_all` refuses a string
+	# aggregate ("SQL functions are not allowed as strings in SELECT"), and the
+	# only thing wanted here is the sum.
+	#
+	# `ifnull(consolidated_invoice, '') = ''` rather than `is null`: the field is
+	# a Link, and Frappe writes '' rather than NULL often enough that testing
+	# only for NULL would count already-merged invoices twice.
+	params = [customer, company]
+	exclude_clause = ""
+	if exclude_invoice:
+		# A literal clause, never interpolated user input — the value is bound.
+		exclude_clause = "and name != %s"
+		params.append(exclude_invoice)
+	unconsolidated = (
+		frappe.db.sql(
+			f"""
+			select sum(outstanding_amount)
+			from `tabPOS Invoice`
+			where customer = %s and company = %s
+			  and docstatus = 1
+			  and ifnull(consolidated_invoice, '') = ''
+			  {exclude_clause}
+			""",
+			params,
+		)[0][0]
+		or 0.0
+	)
+
+	return flt(consolidated), flt(unconsolidated)
 
 
 class BarakatPOSInvoice(POSInvoice):
@@ -55,6 +138,7 @@ class BarakatPOSInvoice(POSInvoice):
 		super().validate()
 		self.restore_pos_pricing_rule_details()
 		self.validate_cashier_limits()
+		self.validate_credit_sale()
 
 	def on_submit(self):
 		"""Submit, then make the loyalty ledger's money add up to this bill exactly once.
@@ -115,6 +199,98 @@ class BarakatPOSInvoice(POSInvoice):
 					flt(max_percent), self.pos_profile
 				),
 				title=_("Discount too large"),
+			)
+
+	def validate_credit_sale(self):
+		"""Refuse an unpaid balance the customer is not entitled to.
+
+		THE AUTHORITY for الدفع بالدين. The till checks too, but only this sees
+		every till, and only this is reached by an order pushed from a queue that
+		was filled while the till was offline — where the balance the cashier saw
+		may be hours stale.
+
+		Rejecting here is deliberately the LAST safe moment. ERPNext's own check
+		runs at consolidation, on the merged Sales Invoice, and throwing there
+		jams the whole shift close for every customer in it. Throwing here fails
+		one order, into the retry queue the cashier already understands.
+
+		See docs/superpowers/specs/2026-08-17-pos-credit-sales-design.md.
+		"""
+		if not self.pos_profile:
+			# Not a till: a consolidated or hand-made invoice. Its outstanding is
+			# the books' business, not a cashier limit.
+			return
+
+		# A credit note reduces debt. Judging it as taking debt on would block
+		# exactly the transaction that fixes an over-limit customer.
+		if cint(self.is_return):
+			return
+
+		precision = self.precision("grand_total")
+		invoice_total = flt(self.rounded_total) or flt(self.grand_total)
+		debt = flt(invoice_total) - flt(self.paid_amount)
+		# Rounded before the comparison so a fraction of an agora left by the
+		# rounded-total adjustment is not mistaken for a credit sale.
+		debt = round_half_up(debt, precision)
+		if debt <= 0:
+			return
+
+		limits = _profile_limits(self.pos_profile)
+
+		if not cint(limits.get("custom_allow_credit_sale")):
+			frappe.throw(
+				_(
+					"This till is not allowed to sell on credit. "
+					"Take the full amount, or enable 'Allow selling on credit' "
+					"on POS Profile {0}."
+				).format(self.pos_profile),
+				title=_("Credit sales not allowed"),
+			)
+
+		# Debt has to attach to a person. The walk-in customer is shared by every
+		# anonymous sale, so letting it borrow would pool unrelated strangers'
+		# debt onto one record nobody can collect from.
+		default_customer = (limits.get("customer") or "").strip()
+		if default_customer and self.customer == default_customer:
+			frappe.throw(
+				_(
+					"Choose a customer before selling on credit. "
+					"Debt cannot be recorded against the walk-in customer."
+				),
+				title=_("Customer required"),
+			)
+
+		limit = customer_credit_limit(self.customer, self.company)
+		if not may_take_credit(limit):
+			frappe.throw(
+				_(
+					"{0} has no credit limit, so this sale must be paid in full. "
+					"Set a credit limit for this customer first."
+				).format(self.customer),
+				title=_("No credit limit"),
+			)
+
+		consolidated, unconsolidated = customer_debt(
+			self.customer, self.company, exclude_invoice=self.name
+		)
+
+		if credit_over_limit(debt, limit, consolidated, unconsolidated, precision):
+			headroom = credit_headroom(limit, consolidated, unconsolidated, precision)
+			frappe.throw(
+				_(
+					"{0} may still borrow {1}, but this sale would add {2}. "
+					"Their credit limit is {3} and they already owe {4}."
+				).format(
+					self.customer,
+					frappe.format_value(headroom, {"fieldtype": "Currency"}),
+					frappe.format_value(debt, {"fieldtype": "Currency"}),
+					frappe.format_value(flt(limit), {"fieldtype": "Currency"}),
+					frappe.format_value(
+						total_owed(consolidated, unconsolidated, precision),
+						{"fieldtype": "Currency"},
+					),
+				),
+				title=_("Over the credit limit"),
 			)
 
 	def restore_pos_pricing_rule_details(self):
