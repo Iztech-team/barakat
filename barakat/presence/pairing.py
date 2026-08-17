@@ -321,21 +321,33 @@ def unpair(name):
 
 
 def _close_dangling_session(employee, company, now):
-	"""Close an open session only if this person has no live device left.
+	"""Close an open session only if nothing can still SEE this person.
 
-	If they still hold another paired phone they may genuinely still be here, and the
-	ordinary departure logic can still see them leave through it. Closing on their
-	behalf would clock them out while they are standing at the till.
+	If another of their phones is on the branch wifi right now they are evidently here,
+	and the ordinary departure logic can watch that one leave. Closing on their behalf
+	would clock them out while they are standing at the till.
+
+	The test is whether a device is LIVE, not whether one is paired. Those came apart
+	the moment somebody held a second pairing they were not carrying: the phone was
+	never on the wifi, so it could never be seen to leave, so no departure was ever
+	detected and the shift stayed open with nothing able to close it. Seen on test —
+	a manager handed one phone to a colleague, kept a second pairing for a phone that
+	was not in the building, and both of them showed as present for the same
+	three quarters of an hour.
 	"""
-	still_paired = frappe.db.count(
+	held = frappe.get_all(
 		"Employee Device",
-		{
+		filters={
 			"employee": employee,
 			"custom_company": company,
 			"valid_to": ("is", "not set"),
 		},
+		pluck="device_key",
 	)
-	if still_paired:
+	if held and frappe.db.count(
+		"Presence Live Device",
+		{"device_key": ("in", held), "custom_company": company, "present": 1},
+	):
 		return False
 
 	names = frappe.get_all(

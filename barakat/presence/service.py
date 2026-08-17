@@ -12,7 +12,7 @@ timeline and no database.
 from datetime import timedelta
 
 import frappe
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import get_datetime, getdate, now_datetime
 
 from barakat.presence import engine
 from barakat.presence.mode import settings_for
@@ -164,11 +164,11 @@ def employee_for(device_key, company, when):
 	"""
 	day = when.date() if hasattr(when, "date") else when
 
-	# Ordered, and that is not decoration. Two rows can cover one moment — a pairing
-	# given an end date in the future, or a row written by an import rather than by
-	# `_pair` — and `get_all` defaults to KEEP_DEFAULT_ORDERING, which puts no ORDER BY
-	# in the SQL at all. The database would be choosing whose attendance this is.
-	# Newest pairing wins, which is what a handover means.
+	# Ordered, and that is not decoration. Two rows can cover one moment — a handover
+	# gives both pairings the same `valid_from` — and `get_all` defaults to
+	# KEEP_DEFAULT_ORDERING, which puts no ORDER BY in the SQL at all. The database
+	# would be choosing whose attendance this is. Newest first, then the loop below
+	# walks back to whoever actually held it.
 	rows = frappe.get_all(
 		"Employee Device",
 		filters={
@@ -177,12 +177,27 @@ def employee_for(device_key, company, when):
 			"valid_from": ("<=", day),
 		},
 		or_filters=[["valid_to", "is", "not set"], ["valid_to", ">=", day]],
-		fields=["employee", "closed_at"],
+		fields=["employee", "closed_at", "valid_from", "creation"],
 		order_by="valid_from desc, creation desc",
-		limit=2,
+		limit=5,
 	)
 	for row in rows:
+		# Ended before the moment asked about.
 		if row.closed_at and row.closed_at <= when:
+			continue
+		# Had not begun yet. `valid_from` is a Date, so on the day of a handover BOTH
+		# pairings claim the whole day and newest-first would hand the morning to
+		# whoever took the phone at lunchtime — which is how one stretch was drawn on
+		# two people's rows, each of them credited with the same three quarters of an
+		# hour.
+		#
+		# The same rule `api._pairing_began` uses, and for the same reason: a pairing
+		# CREATED on the day it starts began at that moment, while one back-dated to
+		# last month says nothing about the time of day and must cover the whole of it.
+		# Keying off `valid_from == day` instead looks equivalent and is not — it is
+		# also true of a back-dated pairing on its first day, which it would then wipe
+		# out entirely.
+		if row.creation and getdate(row.creation) == row.valid_from and row.creation > when:
 			continue
 		return row.employee
 	return None

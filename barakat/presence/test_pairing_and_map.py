@@ -17,7 +17,7 @@ from datetime import datetime, time as dt_time, timedelta
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from barakat.presence import api, pairing, service
 from barakat.presence.mode import WIFI
@@ -627,6 +627,97 @@ class TestPairingAndMap(FrappeTestCase):
 			1,
 		)
 		self.assertTrue(self._open_session(), "their own shift was closed under them")
+
+	def test_a_stretch_from_before_the_handover_belongs_to_the_old_owner(self):
+		"""One phone, one hour, must not be credited to two people.
+
+		Both pairings carry the same `valid_from` — a Date — so on the day of a handover
+		each of them claims the whole day, and "newest wins" handed the morning to
+		whoever picked the phone up at lunchtime. Seen on test: a manager and a colleague
+		each showing the same three quarters of an hour, from one device.
+		"""
+		self._pair(
+			PHONE,
+			employee=self.other_employee,
+			valid_from=str(now_datetime().date()),
+		)
+		# Between the two pairings: the phone was theirs at this moment.
+		before = now_datetime()
+
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertEqual(
+			service.employee_for(PHONE, self.company, before),
+			self.other_employee,
+			"a stretch from before the swap was credited to the new owner",
+		)
+		self.assertEqual(
+			service.employee_for(PHONE, self.company, now_datetime()),
+			self.employee,
+			"and after it, to the new one",
+		)
+
+	def test_a_back_dated_pairing_still_covers_that_whole_day(self):
+		"""The rule above must not reach back and cut off an ordinary pairing.
+
+		A pairing dated to last month says nothing about the time of day it began, so
+		it has to go on covering the whole of every day it names — its `creation` is
+		when somebody typed it in, not when the phone became theirs.
+		"""
+		self._pair(PHONE, employee=self.employee, valid_from="2020-01-01")
+
+		morning = get_datetime("2020-01-01 06:00:00")
+
+		self.assertEqual(
+			service.employee_for(PHONE, self.company, morning), self.employee
+		)
+
+	def test_a_shift_is_not_kept_alive_by_a_phone_nobody_can_see(self):
+		"""The other half of the same screen.
+
+		Holding a second pairing is not evidence of being here. That phone was never on
+		the wifi, so it could never be seen to LEAVE either — no departure was ever
+		detected and the shift had nothing left that could close it.
+		"""
+		service.ingest(self._till(), [PHONE], now_datetime(), settled=True)
+		self._pair(PHONE, employee=self.other_employee)
+		# A second pairing for a phone that is not in the building.
+		self._pair("neverseen0001", employee=self.other_employee)
+		service._open_session(self._till(), self.other_employee, now_datetime(), PHONE)
+
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertFalse(
+			frappe.db.exists(
+				"Presence Session", {"employee": self.other_employee, "state": "Open"}
+			),
+			"a pairing for an absent phone kept them on shift",
+		)
+
+	def test_a_shift_IS_kept_alive_by_a_phone_that_is_on_the_wifi(self):
+		"""And the case the rule exists for. They are visibly still here."""
+		service.ingest(self._till(), [PHONE, TABLET], now_datetime(), settled=True)
+		self._pair(PHONE, employee=self.other_employee)
+		self._pair(TABLET, employee=self.other_employee)
+		service._open_session(self._till(), self.other_employee, now_datetime(), TABLET)
+
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertTrue(
+			frappe.db.exists(
+				"Presence Session", {"employee": self.other_employee, "state": "Open"}
+			),
+			"somebody visibly on the wifi was clocked out",
+		)
 
 	def test_who_owns_a_device_is_never_left_to_the_database(self):
 		"""Two rows can cover one moment; `get_all` adds no ORDER BY of its own.
