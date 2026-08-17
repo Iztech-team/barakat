@@ -190,8 +190,23 @@ def _pair(employee, device_key, company):
 
 	Closed with a date, never deleted - delete January's pairing and January's
 	attendance stops being explicable.
+
+	Handing a phone to somebody else is an UNPAIRING of the person who had it, and it
+	has to do everything `unpair` does or it leaves the same two marks behind. Seen on
+	qa-test: a phone scanned for one employee at 09:44:21 and for another at 09:45:13,
+	which left the first with a session still open a day later.
+
+	`closed_at` alongside the date, for the reason `unpair` spells out: `valid_to` is a
+	Date, and the lookup asks whether the day falls inside the range, so without the
+	moment BOTH pairings answer to this device for the rest of the handover day.
+
+	And the previous owner's open session is closed here. Nothing else ever would: a
+	departure is noticed when the device disappears, and this device now belongs to
+	somebody else, so the sweep attributes it to the new owner and the old session hangs
+	open for good — somebody showing as at work until a human spots it.
 	"""
-	today = now_datetime().date()
+	now = now_datetime()
+	today = now.date()
 
 	for name in frappe.get_all(
 		"Employee Device",
@@ -202,10 +217,16 @@ def _pair(employee, device_key, company):
 		},
 		pluck="name",
 	):
-		if frappe.db.get_value("Employee Device", name, "employee") == employee:
+		previous = frappe.db.get_value("Employee Device", name, "employee")
+		if previous == employee:
 			# Already theirs. Nothing to do, and no duplicate row.
 			return
-		frappe.db.set_value("Employee Device", name, "valid_to", today)
+		frappe.db.set_value(
+			"Employee Device", name, {"valid_to": today, "closed_at": now}
+		)
+		# After the pairing is closed, never before: this asks whether they have any
+		# live device LEFT, and the one being taken away must not count itself.
+		_close_dangling_session(previous, company, now)
 
 	frappe.get_doc(
 		{

@@ -23,3 +23,4 @@ barakat.patches.scope_contact_item_price_company
 barakat.patches.align_loyalty_purchase_amount
 barakat.patches.scrub_pos_pin_from_versions
 barakat.patches.clear_pos_pin_for_non_pos_roles
+barakat.patches.close_sessions_orphaned_by_a_handover

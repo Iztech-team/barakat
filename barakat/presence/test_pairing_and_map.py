@@ -518,6 +518,139 @@ class TestPairingAndMap(FrappeTestCase):
 			"the previous pairing was deleted instead of closed",
 		)
 
+	def test_handing_a_phone_over_closes_the_first_persons_shift(self):
+		"""Scanned for one person, then for another a minute later.
+
+		Seen on qa-test: 09:44:21 and 09:45:13 on the same phone. The pairing moved
+		correctly and the first employee's session was left open a day later — nothing
+		else can ever close it, because the device now answers to somebody else, so the
+		sweep attributes its departure to the new owner and the old shift hangs open
+		for good. On screen that is a person still at work since yesterday morning.
+		"""
+		service.ingest(self._till(), [PHONE], now_datetime(), settled=True)
+
+		first = pairing.start(self.other_employee, BRANCH)
+		self._as_till()
+		pairing.claim(first["code"], PHONE)
+		frappe.set_user("Administrator")
+		self.assertTrue(
+			frappe.db.exists(
+				"Presence Session", {"employee": self.other_employee, "state": "Open"}
+			),
+			"the first scan should have opened a shift for them",
+		)
+
+		second = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(second["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertFalse(
+			frappe.db.exists(
+				"Presence Session", {"employee": self.other_employee, "state": "Open"}
+			),
+			"the first employee was left on shift by a phone that is no longer theirs",
+		)
+
+	def test_a_handover_stops_the_old_owner_at_the_moment_not_at_midnight(self):
+		"""`valid_to` is a Date, so without the moment BOTH pairings answer all day.
+
+		The same trap `unpair` documents. Ownership decides whose attendance a stretch
+		is, so for the rest of the handover day it was being resolved from two rows
+		with nothing to choose between them.
+		"""
+		self._pair(PHONE, employee=self.other_employee)
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		row = frappe.db.get_value(
+			"Employee Device",
+			{"device_key": PHONE, "employee": self.other_employee},
+			["valid_to", "closed_at"],
+			as_dict=True,
+		)
+		self.assertIsNotNone(row.valid_to)
+		self.assertIsNotNone(
+			row.closed_at, "the old pairing ran until midnight instead of stopping now"
+		)
+		self.assertEqual(
+			service.employee_for(PHONE, self.company, now_datetime()), self.employee
+		)
+
+	def test_a_handover_leaves_the_old_owners_earlier_hours_alone(self):
+		"""Only the tail is taken. This morning was genuinely theirs."""
+		self._pair(PHONE, employee=self.other_employee, valid_from="2020-01-01")
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertEqual(
+			service.employee_for(
+				PHONE, self.company, add_to_date(now_datetime(), days=-30)
+			),
+			self.other_employee,
+		)
+
+	def test_a_handover_does_not_clock_out_somebody_carrying_another_phone(self):
+		"""They may still be standing at the till, seen through their other device."""
+		service.ingest(self._till(), [PHONE, TABLET], now_datetime(), settled=True)
+		self._pair(PHONE, employee=self.other_employee)
+		self._pair(TABLET, employee=self.other_employee)
+		service._open_session(self._till(), self.other_employee, now_datetime(), TABLET)
+
+		started = pairing.start(self.employee, BRANCH)
+		self._as_till()
+		pairing.claim(started["code"], PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertTrue(
+			frappe.db.exists(
+				"Presence Session", {"employee": self.other_employee, "state": "Open"}
+			),
+			"taking one phone clocked out somebody who still holds another",
+		)
+
+	def test_re_scanning_for_the_same_person_changes_nothing(self):
+		"""The common accident — scanning twice for one person — must be a no-op."""
+		service.ingest(self._till(), [PHONE], now_datetime(), settled=True)
+		for _ in range(2):
+			started = pairing.start(self.employee, BRANCH)
+			self._as_till()
+			pairing.claim(started["code"], PHONE)
+			frappe.set_user("Administrator")
+
+		self.assertEqual(
+			frappe.db.count("Employee Device", {"device_key": PHONE, "valid_to": ("is", "not set")}),
+			1,
+		)
+		self.assertTrue(self._open_session(), "their own shift was closed under them")
+
+	def test_who_owns_a_device_is_never_left_to_the_database(self):
+		"""Two rows can cover one moment; `get_all` adds no ORDER BY of its own.
+
+		A pairing given a future end date is invisible to the duplicate guard, which
+		looks only for rows with no `valid_to` — so the pair CAN overlap, and without an
+		order the database picks whose attendance it is.
+		"""
+		self._pair(PHONE, employee=self.other_employee)
+		frappe.db.set_value(
+			"Employee Device",
+			{"device_key": PHONE, "employee": self.other_employee},
+			"valid_to",
+			add_to_date(now_datetime(), days=30).date(),
+		)
+		self._pair(PHONE, employee=self.employee)
+
+		answers = {
+			service.employee_for(PHONE, self.company, now_datetime()) for _ in range(5)
+		}
+
+		self.assertEqual(len(answers), 1, "the same question gave different answers")
+		self.assertEqual(answers.pop(), self.employee, "the newest pairing should win")
+
 	def test_an_unknown_code_is_refused(self):
 		self._as_till()
 		with self.assertRaises(frappe.DoesNotExistError):

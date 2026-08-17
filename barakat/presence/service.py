@@ -164,6 +164,11 @@ def employee_for(device_key, company, when):
 	"""
 	day = when.date() if hasattr(when, "date") else when
 
+	# Ordered, and that is not decoration. Two rows can cover one moment — a pairing
+	# given an end date in the future, or a row written by an import rather than by
+	# `_pair` — and `get_all` defaults to KEEP_DEFAULT_ORDERING, which puts no ORDER BY
+	# in the SQL at all. The database would be choosing whose attendance this is.
+	# Newest pairing wins, which is what a handover means.
 	rows = frappe.get_all(
 		"Employee Device",
 		filters={
@@ -173,6 +178,7 @@ def employee_for(device_key, company, when):
 		},
 		or_filters=[["valid_to", "is", "not set"], ["valid_to", ">=", day]],
 		fields=["employee", "closed_at"],
+		order_by="valid_from desc, creation desc",
 		limit=2,
 	)
 	for row in rows:
