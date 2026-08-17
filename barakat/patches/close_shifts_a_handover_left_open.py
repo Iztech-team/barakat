@@ -7,10 +7,16 @@ resolves to its new owner, so the sweep credits the departure to them and the ol
 hangs open indefinitely. On screen it reads as somebody still at work — on qa-test, since
 09:44 the previous morning.
 
-Only sessions nobody can rescue are touched: the employee must have no open pairing left
-at all. If they still hold another phone they may genuinely be here, and the ordinary
-departure logic can still see them leave through it — the same rule
+Only sessions nobody can rescue are touched: none of the person's remaining devices may
+be LIVE. If another of their phones is on the branch wifi they are evidently here, and
+the ordinary departure logic can still watch that one leave — the same rule
 `pairing._close_dangling_session` applies live.
+
+Live, not merely paired. Those came apart on test, which is why this patch was rewritten:
+a manager handed one phone over and kept a pairing for a second phone that had never
+been on the wifi at all. "Do they hold another pairing" said yes and left the shift
+open; the phone it pointed at could never be seen to arrive OR leave, so no departure
+was ever detected and nothing could close it.
 
 The moment used is the handover itself, recovered from the NEXT pairing of that device:
 its `creation` is when the phone changed hands, which is the last instant the old owner
@@ -39,13 +45,22 @@ def execute():
 		if not session.device_key:
 			continue
 
-		# Anyone still holding a live device is not orphaned.
-		if frappe.db.count(
+		# Anyone still visible through another phone is not orphaned.
+		held = frappe.get_all(
 			"Employee Device",
-			{
+			filters={
 				"employee": session.employee,
 				"custom_company": session.custom_company,
 				"valid_to": ("is", "not set"),
+			},
+			pluck="device_key",
+		)
+		if held and frappe.db.count(
+			"Presence Live Device",
+			{
+				"device_key": ("in", held),
+				"custom_company": session.custom_company,
+				"present": 1,
 			},
 		):
 			continue
