@@ -512,19 +512,25 @@ class TestLoyaltyRedemptionEndToEnd(FrappeTestCase):
         self.assertEqual(si.status, "Paid")
 
 
-class TestPaidAmountSettledWithoutCash(FrappeTestCase):
+class TestPaidAmountAccountedWithoutCash(FrappeTestCase):
     """The `validate_pos_paid_amount` override that lets such a shift close.
 
     A POS sale can legitimately take no cash at all — the customer paid with points,
-    or ERPNext refused the redemption after the fact and the value became a write-off.
-    Either way `POSInvoice.clear_unallocated_mode_of_payments` strips the zero-amount
-    cash row, so the merged Sales Invoice reaches ERPNext's "At least one mode of
-    payment is required for POS invoice." check with an EMPTY payments table and the
-    shift becomes permanently unclosable.
+    ERPNext refused the redemption after the fact and the value became a write-off, or
+    the customer took the goods on credit and paid nothing. Every one of those leaves a
+    zero cash row, `POSInvoice.clear_unallocated_mode_of_payments` strips it, and the
+    merged Sales Invoice reaches ERPNext's "At least one mode of payment is required for
+    POS invoice." check with an EMPTY payments table — so the shift becomes permanently
+    unclosable for every customer in it.
 
     These build the doc in memory and call the method directly: the check reads only
-    the payments table and four totals, so nothing needs saving, and the test is not
-    pinned to any company or chart of accounts.
+    the payments table and a handful of totals, so nothing needs saving, and the test is
+    not pinned to any company or chart of accounts.
+
+    Note the totals are set deliberately, including `outstanding_amount`. A real merged
+    invoice always carries one, so a test that leaves it at 0 is describing a document
+    that cannot occur — which is exactly how the credit case stayed invisible until a
+    till hit it.
     """
 
     def _consolidated(self, **fields):
@@ -537,7 +543,7 @@ class TestPaidAmountSettledWithoutCash(FrappeTestCase):
             setattr(si, key, value)
         return si
 
-    # ── the two ways a sale ends up with no cash ────────────────────────────────
+    # ── the three ways a sale ends up with no cash row ──────────────────────────
 
     def test_allows_a_sale_paid_entirely_with_points(self):
         si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=135.0)
@@ -549,9 +555,28 @@ class TestPaidAmountSettledWithoutCash(FrappeTestCase):
         si = self._consolidated(write_off_amount=135.0)
         si.validate_pos_paid_amount()  # must not raise
 
+    def test_allows_a_sale_taken_entirely_on_credit(self):
+        # الدفع بالدين: nothing was paid, so the whole bill sits on the receivable.
+        # The debt IS the record of the sale, and BarakatPOSInvoice.validate_credit_sale
+        # already authorised it before the goods left the shop.
+        si = self._consolidated(paid_amount=0.0, outstanding_amount=135.0)
+        si.validate_pos_paid_amount()  # must not raise
+
     def test_allows_points_and_a_write_off_covering_the_total_together(self):
         si = self._consolidated(
             redeem_loyalty_points=1, loyalty_amount=100.0, write_off_amount=35.0
+        )
+        si.validate_pos_paid_amount()  # must not raise
+
+    def test_allows_part_paid_with_the_rest_taken_on_credit(self):
+        # A part-credit sale keeps a non-zero cash row in practice, so it rarely reaches
+        # here — but the two halves must add up on their own merits when it does.
+        si = self._consolidated(paid_amount=35.0, outstanding_amount=100.0)
+        si.validate_pos_paid_amount()  # must not raise
+
+    def test_allows_points_covering_part_and_debt_carrying_the_rest(self):
+        si = self._consolidated(
+            redeem_loyalty_points=1, loyalty_amount=100.0, outstanding_amount=35.0
         )
         si.validate_pos_paid_amount()  # must not raise
 
@@ -560,24 +585,28 @@ class TestPaidAmountSettledWithoutCash(FrappeTestCase):
         # whole-unit rounding a 135.29 bill is payable at 135.00, and 135.00 is exactly
         # what the points covered. Comparing against grand_total never fires.
         si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=135.0)
-        self.assertTrue(si._barakat_settled_without_cash())
+        self.assertTrue(si._barakat_accounted_without_cash())
         self.assertLess(flt(si.loyalty_amount), flt(si.grand_total))
 
-    # ── the check still fires everywhere it should ──────────────────────────────
+    # ── what the check still catches ────────────────────────────────────────────
+
+    def test_still_rejects_a_consolidated_invoice_whose_totals_do_not_add_up(self):
+        # All that honestly survives: a document that claims a 135.00 payable while
+        # accounting for only 100.00 of it by any means. Nothing owes the difference.
+        si = self._consolidated(paid_amount=0.0, outstanding_amount=100.0)
+        with self.assertRaises(frappe.ValidationError):
+            si.validate_pos_paid_amount()
 
     def test_still_rejects_a_consolidated_invoice_with_nothing_covering_it(self):
         si = self._consolidated()
         with self.assertRaises(frappe.ValidationError):
             si.validate_pos_paid_amount()
 
-    def test_still_rejects_when_the_non_cash_cover_is_only_partial(self):
-        si = self._consolidated(redeem_loyalty_points=1, loyalty_amount=100.0)
-        with self.assertRaises(frappe.ValidationError):
-            si.validate_pos_paid_amount()
-
     def test_still_rejects_an_ordinary_non_consolidated_pos_invoice(self):
-        # Nothing about a plain POS sale changes: it must still declare its tender.
-        si = self._consolidated(is_consolidated=0, redeem_loyalty_points=1, loyalty_amount=135.0)
+        # Nothing about a plain POS sale changes: it must still declare its tender, and
+        # a credit balance on one does NOT excuse it — that invoice is still being
+        # written, and validate_credit_sale is what judges the debt there.
+        si = self._consolidated(is_consolidated=0, outstanding_amount=135.0)
         with self.assertRaises(frappe.ValidationError):
             si.validate_pos_paid_amount()
 

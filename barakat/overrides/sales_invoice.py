@@ -76,52 +76,77 @@ class BarakatSalesInvoice(SalesInvoice):
 	# ── shift close: a sale that took no cash ─────────────────────────────────────
 
 	def validate_pos_paid_amount(self):
-		"""Let a consolidated invoice settled entirely without cash through.
+		"""Let a consolidated invoice through when no cash row could have survived.
 
 		Stock's check is `len(self.payments) == 0 and self.is_pos and grand_total > 0`
 		→ "At least one mode of payment is required for POS invoice." It assumes a POS
 		sale always takes money, so an empty payments table means someone forgot to
 		record the tender.
 
-		A Barakat till breaks that assumption two ways, and both produce a sale with a
-		payments table that is not merely zero but EMPTY:
+		A Barakat till breaks that assumption THREE ways, and each produces a sale with
+		a payments table that is not merely zero but EMPTY:
 
 		* the customer paid the whole bill with loyalty points, so the cash row is 0;
 		* ERPNext refused the redemption after the goods were handed over, so the POS
-		  re-sent the same value as `write_off_amount` and the cash row is 0 again.
+		  re-sent the same value as `write_off_amount` and the cash row is 0 again;
+		* the customer took the goods on credit (الدفع بالدين) and paid nothing at all,
+		  so the cash row is 0 a third time and the bill is carried as debt instead.
 
-		Either way `POSInvoice.clear_unallocated_mode_of_payments` deletes every
-		zero-amount row on validate — by design, so the desk POS does not litter an
-		invoice with the payment methods the cashier did not use. The POS Invoice then
-		submits happily, because that check lives on Sales Invoice and never runs on it.
-		The failure surfaces hours later, when the shift closes and the merge log rebuilds
-		those invoices as a real Sales Invoice: the throw fires, `create_merge_logs` rolls
-		back and the cashier is shown the unrelated "Could not find Reference Name:
-		POS-CLO-…". The shift can then NEVER be closed.
+		Every one of them `POSInvoice.clear_unallocated_mode_of_payments` deletes on
+		validate — by design, so the desk POS does not litter an invoice with the payment
+		methods the cashier did not use. Sending a zero row from the till cannot help:
+		it is the zero that is deleted. The POS Invoice then submits happily, because
+		that check lives on Sales Invoice and never runs on it. The failure surfaces
+		hours later, when the shift closes and the merge log rebuilds those invoices as a
+		real Sales Invoice: the throw fires, `create_merge_logs` rolls back and the
+		cashier is shown the unrelated "Could not find Reference Name: POS-CLO-…". The
+		shift can then NEVER be closed.
 
-		So: skip the throw only when the invoice really is fully settled — by points, by
-		write-off, or by the two together. An invoice with nothing covering it still
-		throws, which is the case the check exists for.
+		So: skip the throw when every agora of the payable is accounted for by something
+		other than a cash row — points, a write-off, money already taken, or debt owed.
+		An invoice whose own totals do not add up still throws, which is all that is left
+		of the case the check exists for.
 
 		Compare against `rounded_total`, NOT `grand_total`: with whole-unit rounding on,
 		a ₪135.29 bill is only payable at ₪135.00, and that is what the points covered.
 		Comparing against the raw total makes this override silently never fire.
 		"""
-		if len(self.payments) == 0 and self._barakat_settled_without_cash():
+		if len(self.payments) == 0 and self._barakat_accounted_without_cash():
 			return
 		super().validate_pos_paid_amount()
 
-	def _barakat_settled_without_cash(self):
-		"""True when a consolidated invoice's whole payable is covered by non-cash means.
+	def _barakat_accounted_without_cash(self):
+		"""True when a consolidated invoice's whole payable is accounted for without cash.
 
-		Deliberately not gated on `redeem_loyalty_points`: the written-off variant above
-		carries no loyalty fields at all, and it is the same sale reaching the same dead
-		end by a different route.
+		Deliberately not gated on `redeem_loyalty_points`: the written-off variant
+		carries no loyalty fields at all, and the credit variant carries neither, yet all
+		three are the same sale reaching the same dead end by different routes.
+
+		`outstanding_amount` counts as accounting for the bill, because on a credit sale
+		the debt IS the record of what happened — the customer owes it, and it is already
+		sitting on the receivable. Be clear-eyed about what that means: on a real merged
+		invoice `paid_amount + outstanding_amount` always equals the payable, so this
+		opens the guard for every consolidated invoice in practice.
+
+		That is correct, and it is the point. A consolidated invoice's payments are
+		whatever `merge_pos_invoice_into` copied from source POS Invoices that were
+		already validated — `BarakatPOSInvoice.validate_credit_sale` is THE AUTHORITY on
+		whether the debt was allowed, and it ran at the only moment the answer could be
+		known. Re-judging any of it here cannot reject a bad sale, because the goods left
+		the shop hours ago; it can only jam a whole shift for every customer in it.
+
+		What still throws is a document whose own totals disagree with each other, which
+		is the only failure a check running this late can honestly catch.
 		"""
 		if not cint(self.get("is_consolidated")):
 			return False
 		payable = flt(self.get("rounded_total")) or flt(self.get("grand_total"))
-		covered = flt(self.get("loyalty_amount")) + flt(self.get("write_off_amount"))
+		covered = (
+			flt(self.get("loyalty_amount"))
+			+ flt(self.get("write_off_amount"))
+			+ flt(self.get("paid_amount"))
+			+ flt(self.get("outstanding_amount"))
+		)
 		return payable > 0 and covered >= payable
 
 	# ── loyalty ledger ────────────────────────────────────────────────────────────
