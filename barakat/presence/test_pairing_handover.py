@@ -214,6 +214,47 @@ class TestPairingHandover(FrappeTestCase):
 			"the old owner was sent home by a question nobody had answered",
 		)
 
+	def test_the_same_phone_asking_again_hears_the_same_answer(self):
+		"""Somebody told to wait refreshes the page. That is what people do.
+
+		The ordinary answer to a second scan is "that code has already been used" - a red
+		cross, which reads as a fault to somebody who has been told to stand there.
+		"""
+		self._give(PHONE, self.old_owner)
+		code, _ = self._scan(self.new_owner)
+
+		self._as_till()
+		again = pairing.claim(code, PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertTrue(again["needs_confirmation"])
+		self.assertEqual(self._state(code), "Needs Confirmation")
+
+	def test_asking_again_does_not_keep_the_question_alive(self):
+		"""Or a manager who walked away leaves an answerable takeover open all afternoon."""
+		self._give(PHONE, self.old_owner)
+		code, _ = self._scan(self.new_owner)
+		before = frappe.db.get_value("Presence Pairing Session", {"code": code}, "expires_at")
+
+		self._as_till()
+		pairing.claim(code, PHONE)
+		frappe.set_user("Administrator")
+
+		self.assertEqual(
+			frappe.db.get_value("Presence Pairing Session", {"code": code}, "expires_at"),
+			before,
+		)
+
+	def test_a_different_phone_on_a_held_window_is_still_refused(self):
+		"""The window is spoken for. Only the phone that raised the question may repeat it."""
+		self._give(PHONE, self.old_owner)
+		code, _ = self._scan(self.new_owner)
+
+		self._as_till()
+		with self.assertRaises(frappe.ValidationError):
+			pairing.claim(code, SPARE)
+		frappe.set_user("Administrator")
+
 	def test_the_phone_is_never_told_whose_it_is(self):
 		"""That page is reachable by anyone who can guess a URL on the shop wifi."""
 		self._give(PHONE, self.old_owner)

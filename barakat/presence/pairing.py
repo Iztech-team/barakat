@@ -235,7 +235,15 @@ def claim(code, device_key):
 	row = frappe.db.get_value(
 		SESSION,
 		{"code": code},
-		["name", "state", "employee", "branch", "custom_company", "expires_at"],
+		[
+			"name",
+			"state",
+			"employee",
+			"branch",
+			"custom_company",
+			"device_key",
+			"expires_at",
+		],
 		as_dict=True,
 	)
 	if not row:
@@ -245,15 +253,30 @@ def claim(code, device_key):
 		# The code belongs to a different branch. A till may only answer for its own.
 		frappe.throw(_("That code is not for this branch."), frappe.PermissionError)
 
+	device_key = str(device_key).strip().lower()[:64]
+	if not device_key:
+		frappe.throw(_("No device was identified."))
+
+	# The same phone asking again while its manager is still deciding.
+	#
+	# Somebody who has just been told to wait will refresh the page - that is what
+	# people do - and the ordinary answer here is "that code has already been used",
+	# a red cross that reads as a fault. Say the same thing as the first time instead.
+	# The window is NOT extended: a phone must not be able to keep the question alive
+	# by asking, or a manager who walked away leaves an answerable takeover open all
+	# afternoon. A DIFFERENT phone gets the ordinary refusal below.
+	if (
+		row.state == "Needs Confirmation"
+		and row.device_key == device_key
+		and row.expires_at >= now_datetime()
+	):
+		return _pending_reply()
+
 	if row.state != "Waiting":
 		frappe.throw(_("That code has already been used."))
 	if row.expires_at < now_datetime():
 		frappe.db.set_value(SESSION, row.name, "state", "Expired")
 		frappe.throw(_("That code has expired."))
-
-	device_key = str(device_key).strip().lower()[:64]
-	if not device_key:
-		frappe.throw(_("No device was identified."))
 
 	# Whose phone is this ALREADY? Same company only - a device paired at another tenant
 	# is not this shop's business, and naming their staff here would be the Contact and
@@ -309,6 +332,11 @@ def _hold_for_confirmation(row, till, device_key, holder):
 			"expires_at": add_to_date(now_datetime(), seconds=timeout),
 		},
 	)
+	return _pending_reply()
+
+
+def _pending_reply():
+	"""What the phone is told, and it is the same however many times it asks."""
 	return {
 		"ok": False,
 		"needs_confirmation": True,
