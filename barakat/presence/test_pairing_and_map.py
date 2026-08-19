@@ -162,6 +162,22 @@ class TestPairingAndMap(FrappeTestCase):
 	def _as_till(self):
 		frappe.set_user(frappe.db.get_value("Presence Till", self.till_name, "api_user"))
 
+	def _take_over(self, code, device_key):
+		"""Scan a phone that belongs to somebody else, and let the manager say yes.
+
+		A handover is two steps now: the till's scan only ASKS. Every test below that
+		predates the question still describes what must be true once it has been
+		answered, so they go through this rather than through `claim` alone.
+		"""
+		self._as_till()
+		held = pairing.claim(code, device_key)
+		frappe.set_user("Administrator")
+		self.assertTrue(
+			held.get("needs_confirmation"),
+			"a phone that belongs to somebody else was moved without asking",
+		)
+		return pairing.confirm(code)
+
 	def _open_session(self):
 		return frappe.db.exists(
 			"Presence Session",
@@ -499,13 +515,11 @@ class TestPairingAndMap(FrappeTestCase):
 			service.employee_for(PHONE, self.company, now_datetime()), self.employee
 		)
 
-	def test_claiming_a_phone_takes_it_off_whoever_held_it(self):
+	def test_a_confirmed_handover_takes_the_phone_off_whoever_held_it(self):
 		"""A phone belongs to one person. The old pairing is CLOSED, never deleted."""
 		self._pair(PHONE, employee=self.other_employee)
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertEqual(
 			service.employee_for(PHONE, self.company, now_datetime()), self.employee
@@ -541,9 +555,7 @@ class TestPairingAndMap(FrappeTestCase):
 		)
 
 		second = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(second["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(second["code"], PHONE)
 
 		self.assertFalse(
 			frappe.db.exists(
@@ -561,9 +573,7 @@ class TestPairingAndMap(FrappeTestCase):
 		"""
 		self._pair(PHONE, employee=self.other_employee)
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		row = frappe.db.get_value(
 			"Employee Device",
@@ -583,9 +593,7 @@ class TestPairingAndMap(FrappeTestCase):
 		"""Only the tail is taken. This morning was genuinely theirs."""
 		self._pair(PHONE, employee=self.other_employee, valid_from="2020-01-01")
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertEqual(
 			service.employee_for(
@@ -602,9 +610,7 @@ class TestPairingAndMap(FrappeTestCase):
 		service._open_session(self._till(), self.other_employee, now_datetime(), TABLET)
 
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertTrue(
 			frappe.db.exists(
@@ -645,9 +651,7 @@ class TestPairingAndMap(FrappeTestCase):
 		before = now_datetime()
 
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertEqual(
 			service.employee_for(PHONE, self.company, before),
@@ -689,9 +693,7 @@ class TestPairingAndMap(FrappeTestCase):
 		service._open_session(self._till(), self.other_employee, now_datetime(), PHONE)
 
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertFalse(
 			frappe.db.exists(
@@ -708,9 +710,7 @@ class TestPairingAndMap(FrappeTestCase):
 		service._open_session(self._till(), self.other_employee, now_datetime(), TABLET)
 
 		started = pairing.start(self.employee, BRANCH)
-		self._as_till()
-		pairing.claim(started["code"], PHONE)
-		frappe.set_user("Administrator")
+		self._take_over(started["code"], PHONE)
 
 		self.assertTrue(
 			frappe.db.exists(

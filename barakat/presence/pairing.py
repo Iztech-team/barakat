@@ -19,6 +19,18 @@ The flow:
 
 The code never leaves the shop except inside the QR on the manager's screen, is good for
 two minutes, and works once.
+
+One phone, one person - so a phone that scans while it still belongs to somebody else is
+a HANDOVER, and step 4 stops. The pairing is not made, the previous owner keeps their
+phone and their open shift, and the session is parked at `Needs Confirmation` until the
+manager answers on their own screen. It used to go through silently: the first person was
+unpaired, their shift was closed, and the only trace was a row in a list nobody was
+looking at. Nothing on either screen said a word.
+
+The question can only be asked at this point in the flow, and that is worth saying plainly
+because it looks like it belongs on the button. At the moment the manager presses Pair,
+nobody knows which phone is coming - that is the entire reason the QR exists. The device
+is not known until it scans, so neither is the clash.
 """
 
 import frappe
@@ -29,6 +41,10 @@ from barakat.presence import keys, service
 from barakat.presence.mode import is_wifi_mode, settings_for
 
 SESSION = "Presence Pairing Session"
+
+# The states a pairing window can still move out of. Anything else is finished, and a
+# finished window is never revived - a second scan means a second code.
+LIVE_STATES = ("Waiting", "Needs Confirmation")
 
 
 @frappe.whitelist()
@@ -83,7 +99,12 @@ def start(employee, branch):
 
 	# One open window per person at a time. A second click replaces the first rather
 	# than leaving two codes alive.
-	frappe.db.delete(SESSION, {"employee": employee, "state": "Waiting"})
+	#
+	# `Needs Confirmation` counts as open. A window waiting on a manager's answer is one
+	# they can still say yes to, so leaving it behind while minting a fresh code would let
+	# a takeover they had walked away from be confirmed minutes later, out of a dialog
+	# they had already replaced.
+	frappe.db.delete(SESSION, {"employee": employee, "state": ("in", LIVE_STATES)})
 
 	timeout = settings_for(company)["pairing_timeout_s"]
 	code = frappe.generate_hash(length=12)
@@ -109,25 +130,90 @@ def start(employee, branch):
 
 @frappe.whitelist()
 def status(code):
-	"""Has the phone scanned yet? Polled by the manager's screen."""
+	"""Has the phone scanned yet? Polled by the manager's screen.
+
+	Read permission on the person being paired, because this now answers with a SECOND
+	person's name - whoever holds the phone. The code is a short-lived hash and this is
+	only ever polled by the screen that minted it, but "hard to guess" is not a permission
+	check, and what it hands out stopped being harmless the day it started naming staff.
+	"""
 	row = frappe.db.get_value(
 		SESSION,
 		{"code": code},
-		["name", "state", "employee", "device_key", "expires_at", "custom_company"],
+		[
+			"name",
+			"state",
+			"employee",
+			"device_key",
+			"conflict_employee",
+			"branch",
+			"expires_at",
+			"custom_company",
+		],
 		as_dict=True,
 	)
 	if not row:
 		frappe.throw(_("Unknown pairing code."), frappe.DoesNotExistError)
 
-	if row.state == "Waiting" and row.expires_at < now_datetime():
+	frappe.get_doc("Employee", row.employee).check_permission("read")
+
+	# Both live states expire. `Needs Confirmation` especially: a window nothing timed out
+	# would sit there until somebody happened to open the screen again, and they would be
+	# answering for a scan from last week against a room they cannot see.
+	if row.state in LIVE_STATES and row.expires_at < now_datetime():
 		frappe.db.set_value(SESSION, row.name, "state", "Expired")
 		row.state = "Expired"
+
+	# Counted on the server. The browser's clock is not the site's, and the whole point of
+	# the number is that it agrees with the moment `confirm` starts refusing.
+	remaining = 0
+	if row.state in LIVE_STATES:
+		remaining = max(0, int((row.expires_at - now_datetime()).total_seconds()))
 
 	return {
 		"state": row.state,
 		"employee": row.employee,
 		"deviceKey": row.device_key,
 		"shownAs": (row.device_key or "")[-4:],
+		"expiresInS": remaining,
+		# Not only while the question is open. A window that was ANSWERED still has to be
+		# able to say who it was about - the screen that says "nothing changed, that
+		# phone still counts for X" reads this after the answer, and gated on the live
+		# state it named nobody at all. `_conflict_payload` returns None on a window that
+		# never had a clash, so an ordinary pairing is unaffected.
+		"conflict": _conflict_payload(row),
+	}
+
+
+def _conflict_payload(row):
+	"""Who holds this phone, and what taking it away from them would end.
+
+	`onTheClock` is the part a manager actually decides on. Moving a phone closes the
+	previous owner's open session, and somebody told only "this is Ahmad's phone" has not
+	been told that pressing the button also sends Ahmad home in the record.
+
+	Names, not ids. `HR-EMP-00374` is not a person to anybody standing at a till.
+	"""
+	employee = row.conflict_employee
+	if not employee:
+		return None
+
+	name, branch = frappe.db.get_value("Employee", employee, ["employee_name", "branch"]) or (None, None)
+
+	return {
+		"employee": employee,
+		"employeeName": name or employee,
+		"branch": branch,
+		"onTheClock": bool(
+			frappe.db.exists(
+				"Presence Session",
+				{
+					"employee": employee,
+					"custom_company": row.custom_company,
+					"state": "Open",
+				},
+			)
+		),
 	}
 
 
@@ -169,6 +255,13 @@ def claim(code, device_key):
 	if not device_key:
 		frappe.throw(_("No device was identified."))
 
+	# Whose phone is this ALREADY? Same company only - a device paired at another tenant
+	# is not this shop's business, and naming their staff here would be the Contact and
+	# Item Price leak again, through a door a till can open.
+	holder = _current_owner(device_key, row.custom_company)
+	if holder and holder != row.employee:
+		return _hold_for_confirmation(row, till, device_key, holder)
+
 	_pair(row.employee, device_key, row.custom_company)
 	_start_session_if_already_here(till, row.employee, device_key)
 
@@ -185,8 +278,217 @@ def claim(code, device_key):
 	return {"ok": True, "employee": row.employee}
 
 
-def _pair(employee, device_key, company):
+def _hold_for_confirmation(row, till, device_key, holder):
+	"""Park the window and change NOTHING. A manager has to answer first.
+
+	Returned, not thrown, and the difference is not stylistic. A `frappe.throw` rolls the
+	transaction back, which would throw away the very row that records the question - the
+	window would go back to Waiting and the manager would keep watching a QR for a phone
+	that had already scanned. A throw is also what the phone draws as a red cross, and
+	nothing here has failed.
+
+	The reply to the phone names nobody. That page is reachable by anyone who can guess a
+	URL on the shop wifi, and "this phone belongs to Ahmad" is not a sentence it should be
+	able to be made to say.
+
+	The clock restarts. What ran out was the time to SCAN, which has now happened; the
+	manager's answer is a separate wait, and inheriting the stub of the first one would put
+	a dialog on screen that expires while it is being read.
+	"""
+	timeout = settings_for(row.custom_company)["pairing_timeout_s"]
+
+	frappe.db.set_value(
+		SESSION,
+		row.name,
+		{
+			"state": "Needs Confirmation",
+			"device_key": device_key,
+			"conflict_employee": holder,
+			"till": till.name,
+			"held_at": now_datetime(),
+			"expires_at": add_to_date(now_datetime(), seconds=timeout),
+		},
+	)
+	return {
+		"ok": False,
+		"needs_confirmation": True,
+		"message": _("Almost there. Ask your manager to confirm on their screen."),
+	}
+
+
+def _current_owner(device_key, company):
+	"""The employee holding this device right now, or None.
+
+	Open rows only. A closed pairing is history and must never stand in the way of a new
+	owner - the same rule `Employee Device.validate` enforces on the way in.
+	"""
+	rows = frappe.get_all(
+		"Employee Device",
+		filters={
+			"device_key": device_key,
+			"custom_company": company,
+			"valid_to": ("is", "not set"),
+		},
+		pluck="employee",
+		limit=1,
+	)
+	return rows[0] if rows else None
+
+
+@frappe.whitelist()
+def confirm(code):
+	"""Yes, move that phone. Manager work, and the only way a takeover ever happens.
+
+	Everything is checked again here rather than trusted from the moment of the scan. A
+	minute passed while somebody read a dialog, and in that minute the phone can have been
+	unpaired, handed to a third person, or the branch's last till suspended. The manager
+	answered a question about the shop as it was; this refuses to act on the answer if the
+	shop has moved on.
+	"""
+	row = _live_session(code, "Needs Confirmation")
+
+	# A till holds a key that can `claim`. It must never be able to answer the question
+	# `claim` is not allowed to answer for itself, or a stolen till key could walk a phone
+	# off one person and onto another.
+	#
+	# Before the permission check, not after. A till account has no write on an Employee
+	# today, so behind that check this would never run and the rule would be stated by
+	# nothing - which is exactly the arrangement that fails quietly the day somebody
+	# widens what a till may write.
+	_refuse_a_till()
+	frappe.get_doc("Employee", row.employee).check_permission("write")
+
+	if not is_wifi_mode(row.custom_company):
+		frappe.throw(_("Wifi presence is not enabled for this company."))
+
+	holder = _current_owner(row.device_key, row.custom_company)
+	if holder == row.employee:
+		# Somebody got there first - a second manager, or the phone scanning again after
+		# the first confirmation. The end state asked for is the end state we are in.
+		_settle(row)
+		return {"ok": True, "employee": row.employee, "already": True}
+	if holder is not None and holder != row.conflict_employee:
+		# The phone changed hands under the manager, or was unpaired and given to somebody
+		# else entirely. The dialog they answered named the wrong person, so their answer
+		# cannot be applied to this.
+		frappe.throw(_("That phone has changed hands since you were asked. Start the pairing again."))
+
+	# `holder is None` goes through on purpose: the clash was resolved while they were
+	# deciding - somebody pressed Stop counting - and a takeover of nobody is an ordinary
+	# pairing. Refusing would make a manager redo a scan to reach a state nothing objects
+	# to.
+	note = None
+	if holder:
+		note = _("Handed over to {0}, confirmed by {1}.").format(row.employee, frappe.session.user)
+
+	_pair(row.employee, row.device_key, row.custom_company, note=note)
+
+	till = _live_till(row)
+	if till:
+		_start_session_if_already_here(till, row.employee, row.device_key)
+
+	_settle(row)
+	return {"ok": True, "employee": row.employee, "took_over_from": holder}
+
+
+@frappe.whitelist()
+def cancel(code):
+	"""No, leave it. Manager work.
+
+	Closes the window rather than leaving it to time out. Two minutes of a live code after
+	somebody has said no is two minutes in which the same phone can scan again and put the
+	question back on a screen nobody is watching any more.
+	"""
+	row = _live_session(code, "Needs Confirmation")
+	_refuse_a_till()
+	frappe.get_doc("Employee", row.employee).check_permission("write")
+
+	frappe.db.set_value(SESSION, row.name, "state", "Cancelled")
+	return {"ok": True}
+
+
+def _refuse_a_till():
+	"""Neither half of the answer is a till's to give. See `confirm` for why."""
+	if keys.till_for_current_user():
+		frappe.throw(_("A till may not answer a handover."), frappe.PermissionError)
+
+
+def _live_session(code, expected_state):
+	"""The window behind a code, or a refusal that says which of the two went wrong."""
+	row = frappe.db.get_value(
+		SESSION,
+		{"code": code},
+		[
+			"name",
+			"state",
+			"employee",
+			"branch",
+			"custom_company",
+			"device_key",
+			"conflict_employee",
+			"till",
+			"expires_at",
+		],
+		as_dict=True,
+	)
+	if not row:
+		frappe.throw(_("Unknown pairing code."), frappe.DoesNotExistError)
+	if row.state != expected_state:
+		frappe.throw(_("That code has already been answered."))
+	if row.expires_at < now_datetime():
+		frappe.db.set_value(SESSION, row.name, "state", "Expired")
+		frappe.throw(_("That code has expired. Start the pairing again."))
+	return row
+
+
+def _live_till(row):
+	"""A till at this branch that is still Active, or None.
+
+	Not necessarily the till that took the scan - it may have been suspended in the
+	meantime, and suspending the last till at a branch closes every open shift there on
+	purpose. Opening a fresh one behind that would create a session with nothing left in
+	the building able to close it, which is the failure this feature spends the most care
+	avoiding.
+
+	Only `branch` and `custom_company` are ever read off it, so the branch's own row is as
+	good as the one that answered the QR.
+	"""
+	names = frappe.get_all(
+		"Presence Till",
+		filters={
+			"branch": row.branch,
+			"custom_company": row.custom_company,
+			"status": "Active",
+		},
+		pluck="name",
+		limit=1,
+	)
+	if not names:
+		return None
+	return frappe._dict(name=names[0], branch=row.branch, custom_company=row.custom_company)
+
+
+def _settle(row):
+	"""Mark the window finished.
+
+	`conflict_employee` is left exactly as it was written when the question was asked. It
+	records WHY this window was held, which is the half that cannot be reconstructed
+	afterwards - what was decided is readable off the Employee Device rows either way.
+	"""
+	frappe.db.set_value(
+		SESSION,
+		row.name,
+		{"state": "Claimed", "claimed_at": now_datetime()},
+	)
+
+
+def _pair(employee, device_key, company, note=None):
 	"""Attach the device, closing whoever held it before.
+
+	Nothing reaches this with somebody else's phone unless a manager has said so out loud.
+	`claim` parks a clash at `Needs Confirmation` and `confirm` is what calls this - which
+	is why the takeover is still written here in full rather than being made impossible:
+	the handover is legitimate, it just is not silent any more.
 
 	Closed with a date, never deleted - delete January's pairing and January's
 	attendance stops being explicable.
@@ -222,7 +524,16 @@ def _pair(employee, device_key, company):
 			# Already theirs. Nothing to do, and no duplicate row.
 			return
 		frappe.db.set_value(
-			"Employee Device", name, {"valid_to": today, "closed_at": now}
+			"Employee Device",
+			name,
+			{
+				"valid_to": today,
+				"closed_at": now,
+				# Why this ended, on the row it ended. A closed pairing next to an open
+				# one for the same phone reads as a mystery six months later; a line
+				# saying who took it and who allowed it reads as a decision.
+				**({"notes": note} if note else {}),
+			},
 		)
 		# After the pairing is closed, never before: this asks whether they have any
 		# live device LEFT, and the one being taken away must not count itself.
