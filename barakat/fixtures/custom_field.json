@@ -558,6 +558,16 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Payment Entry-custom_pos_opening_entry",
+  "dt": "Payment Entry",
+  "fieldname": "custom_pos_opening_entry",
+  "label": "POS Opening Entry",
+  "fieldtype": "Link",
+  "options": "POS Opening Entry",
+  "insert_after": "custom_external_id"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Journal Entry-custom_pos_opening_entry",
   "dt": "Journal Entry",
   "fieldname": "custom_pos_opening_entry",

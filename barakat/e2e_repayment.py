@@ -290,6 +290,81 @@ def run():
     check("cleared again", owed(), 0.0)
     assert inv3.name
 
+    print("\n6d. a repayment is tied to its shift, and listable")
+    from barakat.api.credit import list_customer_repayments, list_shift_repayments
+
+    oe = frappe.get_all(
+        "POS Opening Entry",
+        filters={"pos_profile": profile, "docstatus": 1},
+        pluck="name",
+        order_by="creation desc",
+        limit=1,
+    )[0]
+    inv4 = credit_sale(60, 0)
+    res5 = record_customer_repayment(
+        cust.name, company, 60, mode, profile,
+        external_id=f"e2e-{stamp}-shift", pos_opening_entry=oe,
+    )
+    pe5 = frappe.get_doc("Payment Entry", res5["paymentEntry"])
+    check("the payment is stamped with the shift", pe5.custom_pos_opening_entry, oe)
+
+    shift_list = list_shift_repayments(oe)
+    names = [r["name"] for r in shift_list["repayments"]]
+    check("the shift listing finds it", res5["paymentEntry"] in names, True)
+    check("and totals it", shift_list["total"] >= 60, True)
+
+    cust_list = list_customer_repayments(cust.name, company)
+    all_names = [r["name"] for r in cust_list["repayments"]]
+    check("the customer listing finds it too", res5["paymentEntry"] in all_names, True)
+    check(
+        "the customer listing counts every repayment made",
+        cust_list["total"] >= 4,
+        True,
+    )
+    row = next(r for r in cust_list["repayments"] if r["name"] == res5["paymentEntry"])
+    check("the row carries the amount", row["amount"], 60.0)
+    check("and the method", row["modeOfPayment"], mode)
+    check("and who recorded it", bool(row["recordedBy"]), True)
+
+    print("\n6e. a payment with no shift belongs to no shift")
+    inv5 = credit_sale(25, 0)
+    res6 = record_customer_repayment(
+        cust.name, company, 25, mode, profile, external_id=f"e2e-{stamp}-noshift"
+    )
+    no_shift = frappe.get_doc("Payment Entry", res6["paymentEntry"])
+    check("it carries no shift", no_shift.custom_pos_opening_entry, None)
+    check(
+        "so the shift listing does not claim it",
+        res6["paymentEntry"] not in [r["name"] for r in list_shift_repayments(oe)["repayments"]],
+        True,
+    )
+    check(
+        "but the customer still sees it",
+        res6["paymentEntry"] in [r["name"] for r in list_customer_repayments(cust.name, company)["repayments"]],
+        True,
+    )
+
+    print("\n6f. a cancelled repayment is not a payment")
+    inv6 = credit_sale(35, 0)
+    res7 = record_customer_repayment(
+        cust.name, company, 35, mode, profile, external_id=f"e2e-{stamp}-cancel"
+    )
+    frappe.get_doc("Payment Entry", res7["paymentEntry"]).cancel()
+    check(
+        "a cancelled payment drops out of the listing",
+        res7["paymentEntry"] not in [r["name"] for r in list_customer_repayments(cust.name, company)["repayments"]],
+        True,
+    )
+    assert inv4.name and inv5.name and inv6.name
+    # Clear whatever those left so section 7 still measures full headroom.
+    left = get_customer_credit(cust.name, company)["owed"]
+    if left > 0:
+        record_customer_repayment(
+            cust.name, company, left, mode, profile, external_id=f"e2e-{stamp}-clear2"
+        )
+    check("cleared before the headroom check", owed(), 0.0)
+
+
     print("\n7. headroom recovers, so they can buy on credit again")
     standing = get_customer_credit(cust.name, company)
     check("full headroom is back", standing["headroom"], 1000.0)

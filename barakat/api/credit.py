@@ -125,7 +125,13 @@ def mode_deposit_account(mode_of_payment, company, pos_profile=None):
 
 @frappe.whitelist()
 def record_customer_repayment(
-	customer, company, amount, mode_of_payment, pos_profile=None, external_id=None
+	customer,
+	company,
+	amount,
+	mode_of_payment,
+	pos_profile=None,
+	external_id=None,
+	pos_opening_entry=None,
 ):
 	"""Take money off what a customer owes, as a submitted Payment Entry.
 
@@ -271,6 +277,12 @@ def record_customer_repayment(
 	entry.reference_date = frappe.utils.nowdate()
 	if external_id:
 		entry.custom_external_id = external_id
+	# Which shift took the money. Without it the Admin Panel's shift page cannot
+	# show a repayment at all: a Payment Entry carries no period of its own, and
+	# guessing one from its posting date would attribute a payment to whichever
+	# shift happened to be open on the same day.
+	if pos_opening_entry:
+		entry.custom_pos_opening_entry = pos_opening_entry
 	if pos_profile:
 		entry.cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center")
 	for name, allocated in allocations:
@@ -301,4 +313,142 @@ def record_customer_repayment(
 		"onAccount": unallocated,
 		"owedBefore": owed,
 		"owedAfter": total_owed(after_consolidated, after_unconsolidated, precision),
+	}
+
+
+def _repayment_rows(filters, limit=None, offset=0):
+	"""Submitted receipts against customers, newest first.
+
+	Shared by the two listings below so the shape they return cannot drift —
+	the Admin Panel renders both through the same row component.
+
+	`docstatus = 1` only: a draft has taken no money and a cancelled one has
+	given it back, and showing either as a payment invites a customer to be
+	told they have paid when they have not.
+	"""
+	conditions = ["pe.docstatus = 1", "pe.payment_type = 'Receive'", "pe.party_type = 'Customer'"]
+	values = {}
+	for field, value in filters.items():
+		conditions.append(f"pe.{field} = %({field})s")
+		values[field] = value
+
+	limit_clause = ""
+	if limit is not None:
+		limit_clause = "limit %(limit)s offset %(offset)s"
+		values["limit"] = int(limit)
+		values["offset"] = int(offset)
+
+	rows = frappe.db.sql(
+		f"""
+		select pe.name, pe.party as customer, pe.posting_date, pe.creation,
+		       pe.paid_amount, pe.mode_of_payment, pe.paid_to,
+		       pe.custom_pos_opening_entry as pos_opening_entry,
+		       pe.reference_no, pe.owner,
+		       pe.paid_from_account_currency as currency,
+		       pe.unallocated_amount
+		from `tabPayment Entry` pe
+		where {" and ".join(conditions)}
+		order by pe.creation desc
+		{limit_clause}
+		""",
+		values,
+		as_dict=1,
+	)
+
+	# Which invoices each payment settled. One query for the page rather than
+	# one per row: a customer with a long history would otherwise cost a query
+	# per payment, and this list is read on a page a manager opens often.
+	names = [r.name for r in rows]
+	allocations = {}
+	if names:
+		for a in frappe.db.sql(
+			"""
+			select parent, reference_name, allocated_amount
+			from `tabPayment Entry Reference`
+			where parent in %(names)s and allocated_amount > 0
+			""",
+			{"names": names},
+			as_dict=1,
+		):
+			allocations.setdefault(a.parent, []).append(
+				{"invoice": a.reference_name, "amount": a.allocated_amount}
+			)
+
+	return [
+		{
+			"name": r.name,
+			"customer": r.customer,
+			"postingDate": str(r.posting_date) if r.posting_date else None,
+			"createdAt": str(r.creation) if r.creation else None,
+			"amount": r.paid_amount,
+			"currency": r.currency,
+			"modeOfPayment": r.mode_of_payment,
+			"account": r.paid_to,
+			"posOpeningEntry": r.pos_opening_entry,
+			# A repayment taken at a till carries the profile in reference_no;
+			# one keyed in at the desk does not, which is how the Admin Panel
+			# tells the two apart without a second field.
+			"reference": r.reference_no,
+			"recordedBy": r.owner,
+			"allocated": allocations.get(r.name, []),
+			# Money that could not name an invoice yet — a still-open shift's
+			# debt. Reported so a manager is not left wondering why a balance
+			# has not moved against a specific invoice.
+			"onAccount": r.unallocated_amount or 0.0,
+		}
+		for r in rows
+	]
+
+
+@frappe.whitelist()
+def list_customer_repayments(customer, company=None, limit=20, offset=0):
+	"""What this customer has paid off, newest first.
+
+	Every receipt against the customer, not only the ones taken at a till: a
+	manager asking "has he paid?" needs the answer, and a payment keyed in at
+	the desk settles the same debt as one taken at the counter.
+	"""
+	if not customer:
+		frappe.throw(_("Customer is required."))
+	if not frappe.has_permission("Customer", doc=customer):
+		frappe.throw(_("Not permitted to read this customer."), frappe.PermissionError)
+
+	filters = {"party": customer}
+	if company:
+		filters["company"] = company
+
+	total = frappe.db.count(
+		"Payment Entry",
+		{
+			"party_type": "Customer",
+			"party": customer,
+			"payment_type": "Receive",
+			"docstatus": 1,
+			**({"company": company} if company else {}),
+		},
+	)
+	return {
+		"repayments": _repayment_rows(filters, limit=limit, offset=offset),
+		"total": total,
+	}
+
+
+@frappe.whitelist()
+def list_shift_repayments(opening_entry):
+	"""Debt repaid during one shift.
+
+	Keyed on the opening entry the till stamped onto the Payment Entry. A
+	payment with no such stamp belongs to no shift — it was keyed in at the
+	desk — and is deliberately absent rather than guessed into the nearest one.
+	"""
+	if not opening_entry:
+		frappe.throw(_("opening_entry is required."))
+	if not frappe.has_permission("POS Opening Entry", doc=opening_entry):
+		frappe.throw(_("Not permitted to read this shift."), frappe.PermissionError)
+
+	rows = _repayment_rows({"custom_pos_opening_entry": opening_entry})
+	return {
+		"repayments": rows,
+		"total": sum(r["amount"] or 0 for r in rows),
+		"count": len(rows),
 	}
