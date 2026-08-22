@@ -82,3 +82,136 @@ def set_customer_credit_limit(customer, company, credit_limit):
 
 	doc.save()
 	return get_customer_credit(customer, company)
+
+
+@frappe.whitelist()
+def record_customer_repayment(
+	customer, company, amount, mode_of_payment, pos_profile=None
+):
+	"""Take money off what a customer owes, as a submitted Payment Entry.
+
+	ONLINE ONLY, by design, and the till enforces that too: a repayment cannot
+	be queued the way a sale can. A queued repayment would let a customer pay
+	the same debt twice on two tills, and would let the cap below be evaluated
+	against a debt that has since changed.
+
+	The cap is recomputed HERE against a freshly-read debt and never taken from
+	the caller. The till's figure is a snapshot: between fetching it and taking
+	the money, another till may have sold to the same customer, or a refund may
+	have cancelled part of it.
+
+	Allocation is oldest invoice first, and only against CONSOLIDATED invoices —
+	a POS Invoice from a still-open shift writes no GL and ERPNext will not let
+	a Payment Entry reference one. Whatever is left over is held on the
+	customer's account and reconciles itself when the shift consolidates.
+	"""
+	from erpnext.accounts.party import get_party_account
+
+	from barakat.credit_repayment import allocate_repayment, valid_repayment
+
+	if not customer or not company:
+		frappe.throw(_("Customer and company are both required."))
+	if not mode_of_payment:
+		frappe.throw(_("A mode of payment is required."))
+
+	# Taking money against a customer's account is a write, so read permission
+	# on the customer is not enough on its own.
+	if not frappe.has_permission("Customer", doc=customer):
+		frappe.throw(_("Not permitted to read this customer."), frappe.PermissionError)
+	if not frappe.has_permission("Payment Entry", ptype="create"):
+		frappe.throw(_("Not permitted to record payments."), frappe.PermissionError)
+
+	precision = frappe.get_precision("POS Invoice", "grand_total") or 2
+	try:
+		paid = float(amount)
+	except (TypeError, ValueError):
+		frappe.throw(_("The amount is not a number."))
+
+	consolidated, unconsolidated = customer_debt(customer, company)
+	owed = total_owed(consolidated, unconsolidated, precision)
+
+	ok, reason = valid_repayment(paid, owed, precision)
+	if not ok:
+		# Distinct messages, because they send the cashier to different places:
+		# one is a wrong customer, the other a wrong number.
+		frappe.throw(
+			{
+				"amount_not_positive": _("Enter an amount greater than zero."),
+				"nothing_owed": _("{0} does not owe anything.").format(customer),
+				"over_debt": _("That is more than {0} owes ({1}).").format(
+					customer, frappe.format_value(owed, {"fieldtype": "Currency"})
+				),
+			}[reason]
+		)
+
+	# Oldest first: it is what an accountant expects, and it keeps the ageing
+	# report honest — paying the newest invoice first would leave an old debt
+	# ageing on the report while the customer is in fact paying regularly.
+	outstanding = frappe.get_all(
+		"Sales Invoice",
+		filters={
+			"customer": customer,
+			"company": company,
+			"docstatus": 1,
+			"outstanding_amount": [">", 0],
+		},
+		fields=["name", "outstanding_amount"],
+		order_by="posting_date asc, creation asc",
+	)
+	allocations, unallocated = allocate_repayment(
+		paid, [(row.name, row.outstanding_amount) for row in outstanding], precision
+	)
+
+	cash_account = None
+	if pos_profile:
+		cash_account = frappe.db.get_value(
+			"POS Profile", pos_profile, "custom_cash_account"
+		)
+	if not cash_account:
+		frappe.throw(
+			_(
+				"This till has no cash account. Set custom_cash_account on the POS Profile."
+			)
+		)
+
+	entry = frappe.new_doc("Payment Entry")
+	entry.payment_type = "Receive"
+	entry.company = company
+	entry.party_type = "Customer"
+	entry.party = customer
+	entry.mode_of_payment = mode_of_payment
+	entry.paid_from = get_party_account("Customer", customer, company)
+	entry.paid_to = cash_account
+	entry.paid_amount = paid
+	entry.received_amount = paid
+	entry.reference_no = pos_profile or "POS"
+	entry.reference_date = frappe.utils.nowdate()
+	if pos_profile:
+		entry.cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center")
+	for name, allocated in allocations:
+		entry.append(
+			"references",
+			{
+				"reference_doctype": "Sales Invoice",
+				"reference_name": name,
+				"allocated_amount": allocated,
+			},
+		)
+	entry.insert()
+	entry.submit()
+
+	after_consolidated, after_unconsolidated = customer_debt(customer, company)
+	return {
+		"paymentEntry": entry.name,
+		"customer": customer,
+		"amount": paid,
+		"allocated": [
+			{"invoice": name, "amount": allocated} for name, allocated in allocations
+		],
+		# Money covering debt that has no invoice yet. Reported so the till can
+		# say so plainly rather than leaving the cashier to wonder why the
+		# customer still shows a balance.
+		"onAccount": unallocated,
+		"owedBefore": owed,
+		"owedAfter": total_owed(after_consolidated, after_unconsolidated, precision),
+	}
