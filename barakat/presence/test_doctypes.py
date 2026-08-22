@@ -258,6 +258,53 @@ class TestPresenceTillRules(FrappeTestCase):
 
 		self.assertEqual(till.branch, TEST_BRANCH)
 
+	def test_moving_a_profile_to_another_branch_moves_its_till(self):
+		"""🚨 The silent misattribution this hook exists for.
+
+		A till stores its branch and only its own save refreshes it - and nothing saves
+		it in normal operation, because a report writes straight to the database. So
+		reassigning a POS Profile used to change nothing: every sighting kept landing on
+		the branch the till had left, marking one person present in a shop they are not
+		in while the shop they ARE in showed empty. No error, just wrong numbers.
+		"""
+		other = "Presence Test Branch Two"
+		till = self._till("DESK-MOVE")
+		self.assertEqual(till.branch, TEST_BRANCH)
+
+		# Take the profile off its branch, which is half of any move.
+		source = frappe.get_doc("Branch", TEST_BRANCH)
+		source.custom_pos_profiles = []
+		source.save(ignore_permissions=True)
+
+		if not frappe.db.exists("Branch", other):
+			frappe.get_doc(
+				{
+					"doctype": "Branch",
+					"branch": other,
+					"custom_pos_company": self.company,
+					"custom_pos_profiles": [{"pos_profile": TEST_PROFILE}],
+				}
+			).insert(ignore_links=True)
+		else:
+			target = frappe.get_doc("Branch", other)
+			target.custom_pos_profiles = [{"pos_profile": TEST_PROFILE}]
+			target.save(ignore_permissions=True)
+
+		self.assertEqual(
+			frappe.db.get_value("Presence Till", till.name, "branch"), other
+		)
+
+	def test_orphaning_a_profile_does_not_block_the_branch_edit(self):
+		"""A till whose profile belongs to no branch cannot be re-saved, correctly.
+
+		That must not stop a manager taking the profile off the branch - the till stops
+		being able to report either way, and a branch nobody can edit is worse.
+		"""
+		self._till("DESK-ORPHAN")
+		source = frappe.get_doc("Branch", TEST_BRANCH)
+		source.custom_pos_profiles = []
+		source.save(ignore_permissions=True)  # must not raise
+
 	def test_a_till_can_be_suspended_and_retired(self):
 		till = self._till("DESK-D")
 

@@ -166,6 +166,11 @@ doc_events = {
 	},
 	"Branch": {
 		"validate": "barakat.overrides.branch.validate_branch",
+		# A Presence Till stores the branch it reports for, and only its own save
+		# refreshes it - which nothing does, because reports write straight to the
+		# database. Without this, moving a profile between branches left attendance
+		# landing on the branch the till had left, for ever and with no error.
+		"on_update": "barakat.overrides.branch.branch_on_update",
 	},
 	"Company": {
 		"on_update": "barakat.scale_unit.company_on_update",
