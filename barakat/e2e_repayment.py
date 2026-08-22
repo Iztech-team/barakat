@@ -239,6 +239,57 @@ def run():
         "does not owe",
     )
 
+    print("\n6b. a customer may settle by card, and it goes to the card account")
+    # Another debt to settle, this time not in cash.
+    inv2 = credit_sale(200, 0)
+    card = None
+    for row in prof.payments:
+        mode_type = frappe.db.get_value(
+            "Mode of Payment", row.mode_of_payment, "type"
+        )
+        if mode_type != "Cash":
+            card = row.mode_of_payment
+            break
+    if not card:
+        print("  .... skipped: this profile offers no non-cash method")
+    else:
+        card_account = frappe.db.get_value(
+            "Mode of Payment Account",
+            {"parent": card, "company": company},
+            "default_account",
+        )
+        res4 = record_customer_repayment(
+            cust.name, company, 200, card, profile, external_id=f"e2e-{stamp}-card"
+        )
+        pe4 = frappe.get_doc("Payment Entry", res4["paymentEntry"])
+        check("the card repayment is submitted", pe4.docstatus, 1)
+        check("it names the method the customer used", pe4.mode_of_payment, card)
+        check("and it does NOT land in the till drawer", pe4.paid_to != prof.custom_cash_account, True)
+        if card_account:
+            check("it lands in the card's own account", pe4.paid_to, card_account)
+        check("the debt is cleared all the same", res4["owedAfter"], 0.0)
+
+    print("\n6c. a method this till does not offer is refused")
+    # Give them a debt first. The debt checks run before the method check —
+    # deliberately, because "this customer owes nothing" is the message a
+    # cashier can act on and a bad method is a programming error. Without a
+    # debt here the test would pass on the wrong refusal.
+    inv3 = credit_sale(50, 0)
+    throws(
+        "an unknown mode cannot take money",
+        lambda: record_customer_repayment(
+            cust.name, company, 10, "Definitely Not A Mode", profile
+        ),
+        "not a payment method",
+    )
+    check("and the debt is untouched by the refusal", owed(), 50.0)
+    # Put them back to zero so section 7 still measures full headroom.
+    record_customer_repayment(
+        cust.name, company, 50, mode, profile, external_id=f"e2e-{stamp}-clear"
+    )
+    check("cleared again", owed(), 0.0)
+    assert inv3.name
+
     print("\n7. headroom recovers, so they can buy on credit again")
     standing = get_customer_credit(cust.name, company)
     check("full headroom is back", standing["headroom"], 1000.0)

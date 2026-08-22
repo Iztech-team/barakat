@@ -84,6 +84,45 @@ def set_customer_credit_limit(customer, company, credit_limit):
 	return get_customer_credit(customer, company)
 
 
+def mode_deposit_account(mode_of_payment, company, pos_profile=None):
+	"""Where money taken through this payment method belongs.
+
+	The mode's OWN account first, so a card repayment lands with the card
+	takings rather than in the drawer. Getting this wrong is not cosmetic: the
+	drawer would be reported as holding money that is really at the bank, and
+	the cashier would be asked to account for notes nobody ever handed them.
+
+	The POS Profile's cash account is the fallback and only for a CASH-type
+	mode — that account IS the physical drawer, and naming it for a card would
+	reintroduce exactly the error above.
+	"""
+	from erpnext.accounts.doctype.journal_entry.journal_entry import (
+		get_default_bank_cash_account,
+	)
+
+	account = frappe.db.get_value(
+		"Mode of Payment Account",
+		{"parent": mode_of_payment, "company": company},
+		"default_account",
+	)
+	if account:
+		return account
+
+	mode_type = frappe.db.get_value("Mode of Payment", mode_of_payment, "type")
+	if mode_type == "Cash" and pos_profile:
+		till_cash = frappe.db.get_value(
+			"POS Profile", pos_profile, "custom_cash_account"
+		)
+		if till_cash:
+			return till_cash
+
+	# Last resort: whatever ERPNext itself would pick for this mode.
+	resolved = get_default_bank_cash_account(
+		company, "Cash" if mode_type == "Cash" else "Bank", mode_of_payment=mode_of_payment
+	)
+	return (resolved or {}).get("account")
+
+
 @frappe.whitelist()
 def record_customer_repayment(
 	customer, company, amount, mode_of_payment, pos_profile=None, external_id=None
@@ -193,16 +232,29 @@ def record_customer_repayment(
 		paid, [(row.name, row.outstanding_amount) for row in outstanding], precision
 	)
 
-	cash_account = None
-	if pos_profile:
-		cash_account = frappe.db.get_value(
-			"POS Profile", pos_profile, "custom_cash_account"
+	# The mode must be one this till actually offers. Without this a caller
+	# could name any Mode of Payment in the system and the money would land in
+	# an account this branch has nothing to do with.
+	offered = (
+		frappe.get_all(
+			"POS Payment Method",
+			filters={"parent": pos_profile},
+			pluck="mode_of_payment",
 		)
-	if not cash_account:
+		if pos_profile
+		else []
+	)
+	if offered and mode_of_payment not in offered:
+		frappe.throw(
+			_("{0} is not a payment method on this till.").format(mode_of_payment)
+		)
+
+	deposit_account = mode_deposit_account(mode_of_payment, company, pos_profile)
+	if not deposit_account:
 		frappe.throw(
 			_(
-				"This till has no cash account. Set custom_cash_account on the POS Profile."
-			)
+				"No account is set for {0}. Set its default account on the Mode of Payment, or custom_cash_account on the POS Profile."
+			).format(mode_of_payment)
 		)
 
 	entry = frappe.new_doc("Payment Entry")
@@ -212,7 +264,7 @@ def record_customer_repayment(
 	entry.party = customer
 	entry.mode_of_payment = mode_of_payment
 	entry.paid_from = get_party_account("Customer", customer, company)
-	entry.paid_to = cash_account
+	entry.paid_to = deposit_account
 	entry.paid_amount = paid
 	entry.received_amount = paid
 	entry.reference_no = pos_profile or "POS"
