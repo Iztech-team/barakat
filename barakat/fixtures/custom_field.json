@@ -548,6 +548,16 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Payment Entry-custom_external_id",
+  "dt": "Payment Entry",
+  "fieldname": "custom_external_id",
+  "label": "External Id",
+  "fieldtype": "Data",
+  "unique": 1,
+  "insert_after": ""
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Journal Entry-custom_pos_opening_entry",
   "dt": "Journal Entry",
   "fieldname": "custom_pos_opening_entry",

@@ -86,7 +86,7 @@ def set_customer_credit_limit(customer, company, credit_limit):
 
 @frappe.whitelist()
 def record_customer_repayment(
-	customer, company, amount, mode_of_payment, pos_profile=None
+	customer, company, amount, mode_of_payment, pos_profile=None, external_id=None
 ):
 	"""Take money off what a customer owes, as a submitted Payment Entry.
 
@@ -126,6 +126,37 @@ def record_customer_repayment(
 		paid = float(amount)
 	except (TypeError, ValueError):
 		frappe.throw(_("The amount is not a number."))
+
+	# A dropped response is indistinguishable from a refusal, so a cashier who
+	# presses again after a timeout would otherwise take the customer's money
+	# twice. The till generates this key ONCE per attempt at the dialog, not per
+	# press, and a second call carrying it returns the first entry untouched.
+	#
+	# Checked before the cap below rather than after: the debt has already moved
+	# by the time a retry arrives, so re-validating a duplicate would refuse it
+	# as "more than they owe" and leave the cashier believing nothing happened.
+	if external_id:
+		existing = frappe.db.get_value(
+			"Payment Entry",
+			{"custom_external_id": external_id, "docstatus": ["!=", 2]},
+			"name",
+		)
+		if existing:
+			consolidated, unconsolidated = customer_debt(customer, company)
+			owed_now = total_owed(consolidated, unconsolidated, precision)
+			return {
+				"paymentEntry": existing,
+				"externalId": external_id,
+				# The till prints its receipt from the FIRST answer, so this says
+				# plainly that no second payment was taken.
+				"reused": True,
+				"customer": customer,
+				"amount": paid,
+				"allocated": [],
+				"onAccount": 0.0,
+				"owedBefore": owed_now,
+				"owedAfter": owed_now,
+			}
 
 	consolidated, unconsolidated = customer_debt(customer, company)
 	owed = total_owed(consolidated, unconsolidated, precision)
@@ -186,6 +217,8 @@ def record_customer_repayment(
 	entry.received_amount = paid
 	entry.reference_no = pos_profile or "POS"
 	entry.reference_date = frappe.utils.nowdate()
+	if external_id:
+		entry.custom_external_id = external_id
 	if pos_profile:
 		entry.cost_center = frappe.db.get_value("POS Profile", pos_profile, "cost_center")
 	for name, allocated in allocations:
@@ -203,6 +236,8 @@ def record_customer_repayment(
 	after_consolidated, after_unconsolidated = customer_debt(customer, company)
 	return {
 		"paymentEntry": entry.name,
+		"externalId": external_id,
+		"reused": False,
 		"customer": customer,
 		"amount": paid,
 		"allocated": [
