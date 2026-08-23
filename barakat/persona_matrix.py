@@ -68,6 +68,12 @@ MODULE_DOCTYPES = {
 		"Device",
 		"Sales Invoice",
 		"POS Invoice Merge Log",
+		# Named here rather than hand-permissioned so it inherits BOTH halves of
+		# this map: the generated pos Reader/Writer roles, and COMPANY_SCOPED_DOCTYPES
+		# in hooks.py — a layout carries a `company`, and one shop must not see
+		# another's. The till's own read comes from Barakat POS Operator instead;
+		# a cashier holds no pos Reader role.
+		"Product Shortcut Layout",
 	),
 	"products": (
 		"Item",
@@ -269,6 +275,7 @@ TILL_REQUIRED_READS = (
 	"Global Defaults",
 	"Device",
 	"POS Scale Settings",
+	"Product Shortcut Layout",
 	"Company",
 	"Currency",
 	"Branch",

@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "autoname": "field:layout_name",
+ "creation": "2026-08-22 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "layout_name",
+  "company",
+  "disabled",
+  "items"
+ ],
+ "fields": [
+  {
+   "fieldname": "layout_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Layout Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Product Shortcut Layout Item"
+  }
+ ],
+ "istable": 0,
+ "links": [],
+ "modified": "2026-08-22 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Barakat",
+ "name": "Product Shortcut Layout",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

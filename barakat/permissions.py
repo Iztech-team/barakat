@@ -101,6 +101,11 @@ BARAKAT_ROLE_PERMS = {
 		"Device": ("read",),
 		"System Settings": ("read",),
 		"Global Defaults": ("read",),
+		# The till reads its assigned shortcut layout straight off /api/resource
+		# during the profile pull. Without this the fetch 403s and the cashier
+		# silently gets no shortcuts — the pull is best-effort by design, so
+		# nothing else would report the failure.
+		"Product Shortcut Layout": ("read",),
 	},
 	# Attendance without `HR User`. HR User is the only native role with Attendance
 	# write, but it also carries `Employee` write — Branch Supervisor is

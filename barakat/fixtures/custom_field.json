@@ -77,6 +77,16 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "POS Profile-custom_product_shortcut_layout",
+  "dt": "POS Profile",
+  "fieldname": "custom_product_shortcut_layout",
+  "label": "Product Shortcut Layout",
+  "fieldtype": "Link",
+  "options": "Product Shortcut Layout",
+  "insert_after": "custom_branch"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "POS Profile-custom_cash_account",
   "dt": "POS Profile",
   "fieldname": "custom_cash_account",

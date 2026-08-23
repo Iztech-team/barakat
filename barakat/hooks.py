@@ -18,7 +18,19 @@ COMPANY_SCOPED_DOCTYPES = tuple(
 fixtures = [
 	{
 		"dt": "DocType",
-		"filters": [["name", "in", ["POS Employee Branch", "Device", "Branch POS Profile"]]],
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"POS Employee Branch",
+					"Device",
+					"Branch POS Profile",
+					"Product Shortcut Layout",
+					"Product Shortcut Layout Item",
+				],
+			]
+		],
 	},
 	{
 		"dt": "Role",
@@ -58,6 +70,7 @@ fixtures = [
 					"POS Profile-custom_expense_account",
 					"POS Profile-custom_owner_deposit_account",
 					"POS Profile-custom_bank_account",
+					"POS Profile-custom_product_shortcut_layout",
 					# POS Profile — per-till cashier limits. Absent from this list,
 					# `bench export-fixtures` would quietly drop them from
 					# custom_field.json and the next site to install would have no
