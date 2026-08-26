@@ -19,20 +19,47 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, getdate, now_datetime
 
-from barakat.presence import keys, service, spans
+from barakat.presence import keys, service, spans, watch
 from barakat.presence.mode import is_wifi_mode, settings_for
 
 MAX_BODY_DEVICES = 512
 MAX_CLOCK_DRIFT_S = 300
 
+#: A till's last error is written for a person to read on the tills board, not archived.
+#: The column is Small Text; a POS that sends a stack trace must be trimmed rather than
+#: allowed to fail the whole report, because the report is also how we learn it is alive.
+MAX_ERROR_CHARS = 500
+
+
+def _flag(value):
+	"""A boolean that survived a query string.
+
+	Over HTTP everything arrives as text, so `False` reaches here as `"false"` - which is
+	a non-empty string and therefore true to Python. Every flag on these endpoints has to
+	go through this, and the one that did not is why it exists.
+	"""
+	if isinstance(value, str):
+		return value.strip().lower() not in ("", "0", "false", "none", "null")
+	return bool(value)
+
 
 @frappe.whitelist()
-def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
+def request_join(
+	pos_profile, machine_name=None, machine_fingerprint=None, wants_heartbeat=None
+):
 	"""Ask to be let in. Called by the POS under its own session.
 
 	Returns `pending` until a manager approves, then hands the key over exactly once.
 	There is no bootstrap mode and no weaker entrance: the till is already authenticated
 	as itself, which is what removes the need for one.
+
+	`wants_heartbeat` is how a POS says it understands the split between the heartbeat
+	and the wifi sweep. It exists for the version skew, which is not hypothetical: tills
+	auto-update on their own schedule, so a server that has shipped is talking to months
+	of older builds. An older build has never heard of a shop with the sweep switched
+	off - hand it a key in manual mode and it will scan the branch network every two
+	seconds for ever, for sightings this server then throws away. So an older build is
+	told `off`, exactly as it always was, and only a build that asks gets the key.
 	"""
 	if not pos_profile:
 		frappe.throw(_("pos_profile is required."))
@@ -52,7 +79,7 @@ def request_join(pos_profile, machine_name=None, machine_fingerprint=None):
 		)
 		till.insert(ignore_permissions=True)
 
-	if not is_wifi_mode(till.custom_company):
+	if not is_wifi_mode(till.custom_company) and not _flag(wants_heartbeat):
 		return {"status": "off"}
 
 	if till.status in ("Suspended", "Retired"):
@@ -292,6 +319,7 @@ def report(
 	watcher_version=None,
 	health=None,
 	local_url=None,
+	pos_version=None,
 ):
 	"""One watcher's view of its branch. Writes; returns nothing readable.
 
@@ -306,10 +334,21 @@ def report(
 	if till.status != "Active":
 		frappe.throw(_("This till is {0}.").format(till.status), frappe.PermissionError)
 
-	if not is_wifi_mode(till.custom_company):
-		frappe.throw(_("Wifi presence is not enabled."), frappe.PermissionError)
+	# NOT a refusal any more, and the difference is the whole point of the tills board.
+	#
+	# A report has two halves. "I am alive, and here is how I am doing" is true of every
+	# till in every shop, and is the only thing a shop that has never heard of wifi
+	# attendance is sending. "Here is who I can see" is an answer about people, and is
+	# believed only where somebody deliberately turned that on.
+	#
+	# So the sightings are DROPPED here rather than refused. Refusing would fail the
+	# whole request, and the request is also how the till says it is up - a company that
+	# switched to manual this morning would vanish from the board rather than go quiet
+	# about attendance. The till is told `wifi_enabled` in the reply and stops sweeping
+	# on its own; until it does, whatever it already collected simply goes nowhere.
+	wifi = is_wifi_mode(till.custom_company)
 
-	devices = _clean_devices(devices, till)
+	devices = _clean_devices(devices, till) if wifi else []
 	seq = _check_sequence(till, seq)
 	drift = _clock_drift(sent_at)
 
@@ -324,7 +363,8 @@ def report(
 	blind = bool(health.get("blind"))
 	settled = not bool(health.get("warming_up"))
 
-	service.ingest(till, devices, seen_at, settled=settled, blind=blind)
+	if wifi:
+		service.ingest(till, devices, seen_at, settled=settled, blind=blind)
 
 	frappe.db.set_value(
 		"Presence Till",
@@ -334,6 +374,7 @@ def report(
 			"last_seq": seq,
 			"watcher_version": watcher_version,
 			"last_clock_drift_s": drift,
+			**_health_fields(health, pos_version, seen_at),
 			"is_settled": 1 if settled else 0,
 			"is_blind": 1 if blind else 0,
 			# Where this till answers on the shop's own network. Only it can know -
@@ -346,8 +387,191 @@ def report(
 	return {
 		"ok": True,
 		"server_time": str(seen_at),
-		"next_heartbeat_s": settings_for(till.custom_company)["heartbeat_s"],
+		# How soon to come back. Shrinks on its own while somebody has the tills board
+		# open for this company - see barakat/presence/watch.py.
+		"next_heartbeat_s": watch.heartbeat_for(
+			till.custom_company, settings_for(till.custom_company)["heartbeat_s"]
+		),
+		# Repeated on every report, not just at enrolment, so switching the mode in the
+		# Admin Panel reaches a running watcher without anybody restarting a till.
+		"wifi_enabled": wifi,
 	}
+
+
+@frappe.whitelist()
+def till_board():
+	"""The half of the tills board that a Presence Till row cannot answer.
+
+	Who is standing at each till, and what it has taken today. Both already exist in
+	ERPNext, so the till is never asked for either - it could not be trusted with the
+	takings, and it does not reliably know which employee is signed in after a handover.
+
+	**Takes no arguments on purpose.** Every other read in this module derives its scope
+	from the thing being asked about, on the rule that a caller able to name its own
+	scope can name somebody else's. There is nothing here to be asked about, so instead
+	of accepting a company this reads `Presence Till` through ordinary permissions and
+	lets whatever comes back define the scope. A caller who can see no tills gets an
+	empty board, and there is no argument to get wrong.
+
+	Reading this is also what makes the shop go live: see `watch.mark_watching`.
+	"""
+	tills = frappe.get_all(
+		"Presence Till",
+		fields=["name", "pos_profile", "custom_company"],
+		limit_page_length=0,
+	)
+	if not tills:
+		return {"watching_for_s": watch.WATCH_TTL_S, "tills": []}
+
+	for company in {t.custom_company for t in tills if t.custom_company}:
+		watch.mark_watching(company)
+
+	profiles = [t.pos_profile for t in tills if t.pos_profile]
+	shifts = _open_shifts(profiles)
+	takings = _todays_takings(profiles)
+
+	return {
+		"watching_for_s": watch.WATCH_TTL_S,
+		"tills": [
+			{
+				"till": till.name,
+				"pos_profile": till.pos_profile,
+				"shift": shifts.get(till.pos_profile),
+				"today": takings.get(till.pos_profile, {"invoices": 0, "total": 0.0}),
+			}
+			for till in tills
+		],
+	}
+
+
+def _open_shifts(profiles):
+	"""The one open shift per profile, and who opened it.
+
+	`status`, not merely "the newest entry": a closed shift must read as nobody at the
+	till, or last night's cashier stands there all night on screen. ERPNext allows only
+	one open entry per profile, so the newest is also the only one.
+	"""
+	if not profiles:
+		return {}
+
+	rows = frappe.get_all(
+		"POS Opening Entry",
+		filters={"pos_profile": ("in", profiles), "status": "Open", "docstatus": 1},
+		fields=[
+			"name",
+			"pos_profile",
+			"period_start_date",
+			"custom_opened_by_staff as cashier",
+		],
+		limit_page_length=0,
+		ignore_permissions=True,
+	)
+
+	# Named in one query rather than one per row. A cashier's name is on Employee, and
+	# the board shows a person, not an EMP-#### code.
+	cashiers = {c for c in (row.cashier for row in rows) if c}
+	names = (
+		dict(
+			frappe.get_all(
+				"Employee",
+				filters={"name": ("in", list(cashiers))},
+				fields=["name", "employee_name"],
+				limit_page_length=0,
+				as_list=True,
+				ignore_permissions=True,
+			)
+		)
+		if cashiers
+		else {}
+	)
+
+	return {
+		row.pos_profile: {
+			"name": row.name,
+			"opened_at": str(row.period_start_date) if row.period_start_date else None,
+			"cashier": row.cashier,
+			"cashier_name": names.get(row.cashier) or row.cashier,
+		}
+		for row in rows
+	}
+
+
+def _todays_takings(profiles):
+	"""Today's submitted POS Invoices per profile, netted.
+
+	Netted because a return is stored with a negative `grand_total`, so summing the
+	column is already the honest number and subtracting again would double it.
+
+	POS Invoice only. Consolidation at shift close creates a Sales Invoice and LINKS it
+	back rather than removing anything, so these rows survive a closed shift - counting
+	both doctypes would report the morning's takings twice by the afternoon.
+	"""
+	if not profiles:
+		return {}
+
+	rows = frappe.db.sql(
+		"""
+		SELECT pos_profile,
+		       COUNT(*)                  AS invoices,
+		       COALESCE(SUM(grand_total), 0) AS total
+		FROM `tabPOS Invoice`
+		WHERE docstatus = 1
+		  AND posting_date = %(today)s
+		  AND pos_profile IN %(profiles)s
+		GROUP BY pos_profile
+		""",
+		{"today": getdate(), "profiles": tuple(profiles)},
+		as_dict=True,
+	)
+
+	return {
+		row.pos_profile: {"invoices": int(row.invoices), "total": float(row.total)}
+		for row in rows
+	}
+
+
+def _health_fields(health, pos_version, seen_at):
+	"""What the till says about itself, as columns.
+
+	Absent and empty are DIFFERENT here, and getting that wrong is the whole difficulty.
+	An older POS sends no health at all, and must leave what is already known alone - if
+	absent meant zero, every till running last month's build would report an empty queue
+	and no errors, which is exactly the reassuring lie this board exists to stop telling.
+	A till that sends `queued: 0` is saying something real and opposite.
+
+	So every field here is written only when the till actually mentioned it.
+	"""
+	fields = {}
+
+	if not isinstance(health, dict):
+		health = {}
+
+	if "queued" in health:
+		try:
+			fields["queued_orders"] = max(0, int(health["queued"]))
+		except (TypeError, ValueError):
+			pass
+
+	if "last_sync_at" in health and health["last_sync_at"]:
+		try:
+			fields["last_sync_at"] = get_datetime(health["last_sync_at"])
+		except Exception:
+			# A till with a broken clock or a mangled string must still be counted as
+			# alive. This field is a comfort, never a gate.
+			pass
+
+	if "last_error" in health:
+		error = (health.get("last_error") or "").strip()[:MAX_ERROR_CHARS]
+		fields["last_error"] = error
+		# Stamped from the SERVER's clock, like everything else here, and cleared
+		# together with the message so a recovered till cannot show a fault with no
+		# text or text with no time.
+		fields["last_error_at"] = seen_at if error else None
+
+	if pos_version:
+		fields["pos_version"] = str(pos_version)[:64]
+
+	return fields
 
 
 # ---------------------------------------------------------------- guards
@@ -404,6 +628,11 @@ def _watcher_settings(company):
 		"report_window_s": settings["report_window_s"],
 		"warmup_s": settings["warmup_s"],
 		"max_devices": settings["max_devices"],
+		# Whether the till should sweep its branch network at all. A till reports that
+		# it is alive in every shop; it looks for phones only where somebody asked for
+		# attendance. Sent on the key AND on every report, so a shop that switches the
+		# mode does not need its tills restarted to be obeyed.
+		"wifi_enabled": is_wifi_mode(company),
 	}
 
 
