@@ -485,13 +485,62 @@ def _open_shifts(profiles):
 		else {}
 	)
 
+	takings = _takings_since(
+		{row.pos_profile: row.period_start_date for row in rows if row.period_start_date}
+	)
+
 	return {
 		row.pos_profile: {
 			"name": row.name,
 			"opened_at": str(row.period_start_date) if row.period_start_date else None,
 			"cashier": row.cashier,
 			"cashier_name": names.get(row.cashier) or row.cashier,
+			**takings.get(row.pos_profile, {"invoices": 0, "total": 0.0}),
 		}
+		for row in rows
+	}
+
+
+def _takings_since(starts):
+	"""What each open shift has rung up since it opened.
+
+	NOT the same number as the day's, and the difference is the whole reason this exists.
+	A shift can open before midnight and a day can hold two of them, so "what this shift
+	has taken" and "what this till has taken today" routinely disagree — and the person
+	standing at the till only recognises the first one.
+
+	Scoped by TIME, because ERPNext has no field joining a POS Invoice to its opening
+	entry. `barakat/api/shift.py` answers the same question the same way; if that ever
+	changes, both have to change together.
+
+	One query for every open shift rather than one each: a shop with a till per counter
+	would otherwise pay a round trip per card on a page that re-reads every few seconds.
+	"""
+	if not starts:
+		return {}
+
+	# One OR per open shift. Every till has at most one, so this is as many clauses as
+	# the shop has counters - and it stays one round trip on a page that re-reads every
+	# few seconds.
+	clause = " OR ".join(
+		"(i.pos_profile = %s AND TIMESTAMP(i.posting_date, i.posting_time) >= %s)"
+		for _ in starts
+	)
+	rows = frappe.db.sql(
+		f"""
+		SELECT i.pos_profile,
+		       COUNT(*)                        AS invoices,
+		       COALESCE(SUM(i.grand_total), 0) AS total
+		FROM `tabPOS Invoice` i
+		WHERE i.docstatus = 1 AND ({clause})
+		GROUP BY i.pos_profile
+		""",
+		[value for profile, started in starts.items() for value in (profile, started)],
+		as_dict=True,
+	)
+
+	return {
+		row.pos_profile: {"invoices": int(row.invoices), "total": float(row.total)}
 		for row in rows
 	}
 

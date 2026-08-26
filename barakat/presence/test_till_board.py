@@ -22,9 +22,11 @@ feature on must not greet an existing customer with a page full of machines wait
 permission. A till whose profile has really sold is grandfathered; nothing else is.
 """
 
+from datetime import datetime, time
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_to_date, getdate, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
 from barakat.patches.approve_tills_that_have_already_sold import (
 	execute as grandfather_tills,
@@ -127,19 +129,35 @@ class BoardFixtures(FrappeTestCase):
 		frappe.db.set_value("Presence Till", till, "status", status)
 		return till
 
-	def _sale(self, total, profile=PROFILE, day=None, submitted=True, is_return=False):
+	def _sale(
+		self,
+		total,
+		profile=PROFILE,
+		day=None,
+		submitted=True,
+		is_return=False,
+		at=None,
+	):
 		"""A POS Invoice as a ROW, not as a transaction.
 
 		Validation is bypassed and `docstatus` is set directly. What is under test is a
 		sum over a table - building a real submitted invoice would need items, a
 		warehouse, a price list and four accounts, and would be testing ERPNext.
+
+		`at` sets the full stamp, because a shift owns its invoices by TIME rather than
+		by a link: ERPNext has no field joining a POS Invoice to its opening entry, so
+		both this and `barakat/api/shift.py` scope by profile plus the window that opened
+		at `period_start_date`. A fixture that only set a date would sit at midnight and
+		fall outside every shift that opened during the day.
 		"""
+		when = get_datetime(at) if at else None
 		doc = frappe.get_doc(
 			{
 				"doctype": "POS Invoice",
 				"company": self.company,
 				"pos_profile": profile,
-				"posting_date": day or getdate(),
+				"posting_date": when.date() if when else (day or getdate()),
+				"posting_time": when.time() if when else None,
 				"grand_total": total,
 				"is_return": 1 if is_return else 0,
 			}
@@ -151,13 +169,13 @@ class BoardFixtures(FrappeTestCase):
 			frappe.db.set_value("POS Invoice", doc.name, "docstatus", 1)
 		return doc.name
 
-	def _shift(self, profile=PROFILE, status="Open", employee=None):
+	def _shift(self, profile=PROFILE, status="Open", employee=None, start=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "POS Opening Entry",
 				"company": self.company,
 				"pos_profile": profile,
-				"period_start_date": now_datetime(),
+				"period_start_date": get_datetime(start) if start else now_datetime(),
 				"custom_opened_by_staff": employee or self.employee,
 				"status": status,
 			}
@@ -188,6 +206,51 @@ class TestTillBoard(BoardFixtures):
 
 		self.assertEqual(row["shift"]["cashier"], self.employee)
 		self.assertEqual(row["shift"]["cashier_name"], self.employee_name)
+
+	def test_an_open_shift_carries_its_own_takings(self):
+		"""Not the same number as today's, and the difference is the point.
+
+		A shift can start before midnight and a day can hold two of them, so "what this
+		shift has taken" and "what this till has taken today" routinely disagree. The
+		card shows the day; hovering asks about the shift the cashier is actually
+		standing in, and answering that with the day's figure would be a quiet lie.
+		"""
+		self._till()
+		noon = datetime.combine(getdate(), time(12, 0))
+		self._shift(start=noon)
+		self._sale(60, at=datetime.combine(getdate(), time(13, 0)))
+		self._sale(40, at=datetime.combine(getdate(), time(14, 0)))
+		# Today, and on this till, but rung up before this shift opened - the earlier
+		# cashier's. It belongs to the day and not to the person standing there now.
+		self._sale(25, at=datetime.combine(getdate(), time(9, 0)))
+
+		row = self._for(api.till_board())
+
+		self.assertEqual(row["shift"]["total"], 100)
+		self.assertEqual(row["shift"]["invoices"], 2)
+		self.assertEqual(row["today"]["total"], 125)
+
+	def test_a_shift_that_has_sold_nothing_says_zero_rather_than_nothing(self):
+		self._till()
+		self._shift()
+
+		row = self._for(api.till_board())
+
+		self.assertEqual(row["shift"]["total"], 0)
+		self.assertEqual(row["shift"]["invoices"], 0)
+
+	def test_a_night_shift_keeps_what_it_rang_up_before_midnight(self):
+		"""A shift owns everything since it opened, on both sides of midnight."""
+		self._till()
+		last_night = datetime.combine(add_to_date(getdate(), days=-1), time(22, 0))
+		self._shift(start=last_night)
+		self._sale(80, at=datetime.combine(add_to_date(getdate(), days=-1), time(23, 0)))
+
+		row = self._for(api.till_board())
+
+		self.assertEqual(row["shift"]["total"], 80)
+		# ...and today's figure is still strictly today's.
+		self.assertEqual(row["today"]["total"], 0)
 
 	def test_a_till_nobody_has_opened_has_nobody_on_it(self):
 		self._till()
