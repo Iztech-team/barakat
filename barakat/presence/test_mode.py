@@ -41,9 +41,36 @@ class TestPresenceMode(FrappeTestCase):
 
 		self.assertEqual(values["departure_wait_minutes"], 15)
 		self.assertEqual(values["sweep_interval_s"], 2)
+		self.assertEqual(values["report_window_s"], 10)
 		self.assertEqual(values["warmup_s"], 60)
 		self.assertEqual(values["sighting_retention_days"], 30)
 		self.assertEqual(values["max_devices"], 512)
+
+	def test_a_cleared_report_window_falls_back_rather_than_reporting_every_sweep(self):
+		"""Zero here would put the till back to a request every two seconds.
+
+		The window is the only thing standing between a shop and a report per sweep,
+		so a cleared field has to mean the default and not "no window at all". The
+		till clamps it as well, but a server that hands out zero is a server telling
+		every till the wrong thing.
+		"""
+		self._make(mode="Wifi")
+		frappe.db.set_value(
+			"Presence Settings",
+			{"custom_company": self.company},
+			"report_window_s",
+			0,
+		)
+
+		self.assertEqual(
+			settings_for(self.company)["report_window_s"],
+			DEFAULTS["report_window_s"],
+		)
+
+	def test_a_saved_report_window_overrides_the_default(self):
+		self._make(mode="Wifi", report_window_s=30)
+
+		self.assertEqual(settings_for(self.company)["report_window_s"], 30)
 
 	def test_a_saved_value_overrides_the_default(self):
 		self._make(mode="Wifi", departure_wait_minutes=8)

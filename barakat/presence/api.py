@@ -401,6 +401,7 @@ def _watcher_settings(company):
 	return {
 		"sweep_interval_s": settings["sweep_interval_s"],
 		"heartbeat_s": settings["heartbeat_s"],
+		"report_window_s": settings["report_window_s"],
 		"warmup_s": settings["warmup_s"],
 		"max_devices": settings["max_devices"],
 	}

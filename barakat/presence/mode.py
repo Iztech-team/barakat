@@ -20,6 +20,7 @@ DEFAULTS = {
 	"departure_wait_minutes": 15,
 	"sweep_interval_s": 2,
 	"heartbeat_s": 30,
+	"report_window_s": 10,
 	"warmup_s": 60,
 	"sighting_retention_days": 30,
 	"pairing_timeout_s": 120,
