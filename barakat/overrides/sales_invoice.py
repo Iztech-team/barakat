@@ -3,7 +3,7 @@ from frappe.utils import cint, cstr, flt
 
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 
-from barakat.overrides.loyalty import align_loyalty_spend
+from barakat.overrides.loyalty import align_loyalty_spend, release_redemptions_against
 
 
 class BarakatSalesInvoice(SalesInvoice):
@@ -166,6 +166,18 @@ class BarakatSalesInvoice(SalesInvoice):
 		align_loyalty_spend(self)
 
 	# ── sale ──────────────────────────────────────────────────────────────────────
+
+	def delete_loyalty_point_entry(self):
+		"""Detach dependent redemptions first, so a return is never refused.
+
+		The twin of `BarakatPOSInvoice.delete_loyalty_point_entry`. Every Barakat sale
+		reaches the ledger as a POS Invoice, so that is the copy that fires in
+		production; this one keeps a Sales Invoice return — and any desk-side cancel of
+		one — from hitting the same wall. See
+		`barakat.overrides.loyalty.release_redemptions_against`.
+		"""
+		release_redemptions_against(self.doctype, self.name)
+		super().delete_loyalty_point_entry()
 
 	def make_loyalty_point_redemption_gle(self, gl_entries):
 		if self._barakat_books_consolidated_redemption():

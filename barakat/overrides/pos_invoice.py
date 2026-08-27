@@ -12,7 +12,7 @@ from barakat.credit_limits import (
 	may_take_credit,
 	total_owed,
 )
-from barakat.overrides.loyalty import align_loyalty_spend
+from barakat.overrides.loyalty import align_loyalty_spend, release_redemptions_against
 from barakat.rounding import round_half_up
 
 
@@ -173,6 +173,17 @@ class BarakatPOSInvoice(POSInvoice):
 		"""
 		super().on_submit()
 		align_loyalty_spend(self)
+
+	def delete_loyalty_point_entry(self):
+		"""Detach dependent redemptions first, so a return is never refused.
+
+		erpnext throws here when the points this invoice earned have since been spent,
+		which strands a customer at the till over an invoice they cannot reach. See
+		`barakat.overrides.loyalty.release_redemptions_against` for why detaching is
+		both safe and safer than what it replaces.
+		"""
+		release_redemptions_against(self.doctype, self.name)
+		super().delete_loyalty_point_entry()
 
 	def validate_cashier_limits(self):
 		"""Enforce the selling profile's two server-visible cashier limits.

@@ -132,3 +132,64 @@ def invoice_spend(doctype, invoice):
 	"""
 	doc = frappe.get_doc(doctype, invoice)
 	return flt(doc.grand_total) - flt(doc.get_returned_amount())
+
+
+def release_redemptions_against(doctype, invoice):
+	"""Detach redemptions hanging off an invoice's ledger rows; return how many moved.
+
+	Called just before erpnext deletes those rows, which it does on every return and
+	every cancel: `POSInvoice.on_submit` runs
+	`delete_loyalty_point_entry()` + `make_loyalty_point_entry()` on the ORIGINAL sale
+	so the earn is recomputed with the returned amount netted out.
+
+	`delete_loyalty_point_entry` refuses when a redemption row points at the row it is
+	about to delete, and tells the cashier to cancel the invoice that SPENT the points
+	first. On a till that is not an instruction anyone can follow — the customer who
+	spent them has walked out with the goods. Reported as 0001-610: a customer earned
+	across three sales, spent two points on a fourth, then returned the first. Only the
+	first fails, because `apply_loyalty_points` allocates redemptions FIFO (oldest
+	expiry first, `sales_invoice.py`), so the oldest sale is the only one carrying a
+	`redeem_against` link. Worse than the message: the POS pays the cash out first and
+	pushes afterwards, so a Frappe ValidationError (417 → non-retriable) left the till
+	short with no return recorded anywhere.
+
+	Detaching is safe because `redeem_against` guards nothing. A balance is a plain
+	`SUM(loyalty_points)` (`get_loyalty_details`), and the redemption cap is checked
+	against that TOTAL — "You don't have enough Loyalty Points to redeem",
+	`loyalty_program.validate_loyalty_points` — never per earn row. The link is used
+	only by `get_redemption_details`, to spread a new redemption across earn rows. A
+	detached row simply stops reducing any one row's share; it still reduces the
+	balance, which is the number that decides what the customer may spend.
+
+	It also closes a live landmine rather than stepping around one.
+	`apply_loyalty_points` computes `available_points = row.loyalty_points -
+	redeemed_against_it` and, when that is NEGATIVE, writes `-1 * available_points` —
+	a POSITIVE entry, minting points from nothing. An earn row falling below what is
+	already redeemed against it is exactly what erpnext's own delete-and-recreate does
+	on a PARTIAL return; today only the throw above stops it. Detaching first means no
+	row is ever left over-attributed, so that path stays unreachable.
+
+	What it does NOT do is decide who absorbs an over-spend: the points come off the
+	balance in full, and a balance that lands below zero is left below zero. The
+	customer cannot redeem again until they earn back past it, which is what stops the
+	cycle repeating. Judging the one-off case belongs at the till, in front of a
+	person, not here.
+	"""
+	rows = frappe.get_all(
+		"Loyalty Point Entry",
+		filters={"invoice_type": doctype, "invoice": invoice},
+		pluck="name",
+	)
+	if not rows:
+		return 0
+
+	dependents = frappe.get_all(
+		"Loyalty Point Entry",
+		filters={"redeem_against": ["in", rows]},
+		pluck="name",
+	)
+	for name in dependents:
+		# `redeem_against` is a nullable Link, and a Loyalty Point Entry is not
+		# submittable, so this is an ordinary field write — no cancel/amend dance.
+		frappe.db.set_value("Loyalty Point Entry", name, "redeem_against", None)
+	return len(dependents)
