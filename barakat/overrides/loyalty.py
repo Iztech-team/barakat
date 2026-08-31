@@ -134,6 +134,113 @@ def invoice_spend(doctype, invoice):
 	return flt(doc.grand_total) - flt(doc.get_returned_amount())
 
 
+def earn_row(doctype, invoice):
+	"""The row recording what this invoice EARNED, or None.
+
+	The first non-negative row by creation. `make_loyalty_point_entry` runs before
+	`apply_loyalty_points` and a redemption row is negative, so this is the same
+	reading `align_invoice_spend` makes — and it matters that it is the same one,
+	because the two correct different fields of the very same row.
+	"""
+	for row in frappe.get_all(
+		"Loyalty Point Entry",
+		filters={"invoice_type": doctype, "invoice": invoice},
+		fields=["name", "loyalty_points", "loyalty_program_tier"],
+		order_by="creation asc",
+	):
+		if flt(row.loyalty_points) >= 0:
+			return row
+	return None
+
+
+def earned_tier(doctype, invoice):
+	"""The tier an invoice's points were earned at, read BEFORE the row is deleted.
+
+	`collection_factor` is not copied onto a Loyalty Point Entry, so the tier name is
+	the only trace the row keeps of the rate it was priced at. Callers must read this
+	before `delete_loyalty_point_entry`, which erpnext runs on every return and on
+	every cancel of one.
+	"""
+	row = earn_row(doctype, invoice)
+	return (row.loyalty_program_tier or None) if row else None
+
+
+def tier_collection_factor(loyalty_program, tier_name):
+	"""What a point costs on that tier, or None when the tier can't be resolved.
+
+	Tier names are unique within a program — `validate_loyalty_program_tier_names`
+	rejects a duplicate at save time — so the name is a usable key. None whenever it
+	is not (tier renamed or removed since the sale), which leaves the caller on
+	erpnext's own behaviour rather than on a guess.
+	"""
+	if not loyalty_program or not tier_name:
+		return None
+	factor = frappe.db.get_value(
+		"Loyalty Program Collection",
+		{
+			"parent": loyalty_program,
+			"parenttype": "Loyalty Program",
+			"tier_name": tier_name,
+		},
+		"collection_factor",
+	)
+	return flt(factor) or None
+
+
+def reprice_earn_at(doc, tier_name):
+	"""Re-price the earn row erpnext just rebuilt at the rate the SALE earned at.
+
+	`make_loyalty_point_entry` recomputes an invoice's points from scratch on every
+	return, and resolves the tier from the customer's ledger **as it stands now**:
+
+	    lp_details = get_loyalty_program_details_with_points(..., current_transaction_amount=...)
+	    points_earned = cint(eligible_amount / collection_factor)
+
+	The sale's own rate is never consulted. A customer who has since climbed a tier
+	therefore has the *remainder* of an old sale re-priced at the new, richer rate —
+	so a partial return can pay cash back AND raise the balance. With tiers
+	`0 → factor 10` and `1000 → factor 5`: a 928 sale earns 92, a later 93 sale
+	promotes the customer, and returning 400 of the 928 rebuilds its row as
+	528 / 5 = 105. The customer is 400 richer and 13 points up, repeatably.
+
+	A full return hides it — eligible falls to 0, and 0 over any factor is 0 — which
+	is why it reached production.
+
+	The rate a sale earned at is a property of that sale: a return recomputes how
+	much of the sale is left, never what a unit of it is worth. `tier_name` comes
+	from `earned_tier`, captured before the delete.
+
+	The tier is stamped back onto the row as well as the points. That is not
+	cosmetic — it is what the SECOND return of the same invoice reads, so without it
+	the fix would hold for one return and then drift.
+	"""
+	factor = tier_collection_factor(doc.get("loyalty_program"), tier_name)
+	if not factor:
+		return 0
+
+	row = earn_row(doc.doctype, doc.name)
+	if not row:
+		return 0
+
+	# erpnext's own expression for what is still eligible, with its own rounding
+	# (`cint` truncates), so the only thing this changes is the divisor.
+	eligible = (
+		flt(doc.grand_total) - cint(doc.get("loyalty_amount")) - flt(doc.get_returned_amount())
+	)
+	points = cint(eligible / factor)
+
+	changed = 0
+	if cint(row.loyalty_points) != points:
+		frappe.db.set_value("Loyalty Point Entry", row.name, "loyalty_points", points)
+		changed += 1
+	if row.loyalty_program_tier != tier_name:
+		frappe.db.set_value(
+			"Loyalty Point Entry", row.name, "loyalty_program_tier", tier_name
+		)
+		changed += 1
+	return changed
+
+
 def release_redemptions_against(doctype, invoice):
 	"""Detach redemptions hanging off an invoice's ledger rows; return how many moved.
 

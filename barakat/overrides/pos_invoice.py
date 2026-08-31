@@ -12,7 +12,12 @@ from barakat.credit_limits import (
 	may_take_credit,
 	total_owed,
 )
-from barakat.overrides.loyalty import align_loyalty_spend, release_redemptions_against
+from barakat.overrides.loyalty import (
+	align_loyalty_spend,
+	earned_tier,
+	reprice_earn_at,
+	release_redemptions_against,
+)
 from barakat.rounding import round_half_up
 
 
@@ -181,9 +186,24 @@ class BarakatPOSInvoice(POSInvoice):
 		which strands a customer at the till over an invoice they cannot reach. See
 		`barakat.overrides.loyalty.release_redemptions_against` for why detaching is
 		both safe and safer than what it replaces.
+
+		Also the last moment the sale's own earning rate is readable: the row about to
+		be deleted is the only record of it, and on a return erpnext rebuilds one in
+		its place priced at today's tier. See `barakat.overrides.loyalty.reprice_earn_at`.
 		"""
 		release_redemptions_against(self.doctype, self.name)
+		self.flags.barakat_earned_tier = earned_tier(self.doctype, self.name)
 		super().delete_loyalty_point_entry()
+
+	def make_loyalty_point_entry(self):
+		"""Build the row erpnext's way, then put the sale's own rate back on it.
+
+		Only ever corrects a REBUILD: the flag is set by `delete_loyalty_point_entry`
+		immediately before, and a fresh sale reaches this method without one — so a
+		sale still earns at the tier it crosses into, exactly as before.
+		"""
+		super().make_loyalty_point_entry()
+		reprice_earn_at(self, self.flags.pop("barakat_earned_tier", None))
 
 	def validate_cashier_limits(self):
 		"""Enforce the selling profile's two server-visible cashier limits.

@@ -3,7 +3,12 @@ from frappe.utils import cint, cstr, flt
 
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 
-from barakat.overrides.loyalty import align_loyalty_spend, release_redemptions_against
+from barakat.overrides.loyalty import (
+	align_loyalty_spend,
+	earned_tier,
+	reprice_earn_at,
+	release_redemptions_against,
+)
 
 
 class BarakatSalesInvoice(SalesInvoice):
@@ -175,9 +180,23 @@ class BarakatSalesInvoice(SalesInvoice):
 		production; this one keeps a Sales Invoice return — and any desk-side cancel of
 		one — from hitting the same wall. See
 		`barakat.overrides.loyalty.release_redemptions_against`.
+
+		Also the last moment the sale's own earning rate is readable — the twin of
+		`BarakatPOSInvoice.delete_loyalty_point_entry`. See
+		`barakat.overrides.loyalty.reprice_earn_at`.
 		"""
 		release_redemptions_against(self.doctype, self.name)
+		self.flags.barakat_earned_tier = earned_tier(self.doctype, self.name)
 		super().delete_loyalty_point_entry()
+
+	def make_loyalty_point_entry(self):
+		"""Build the row erpnext's way, then put the sale's own rate back on it.
+
+		The twin of `BarakatPOSInvoice.make_loyalty_point_entry`. Only ever corrects a
+		REBUILD: a fresh sale arrives here with no flag set and is left alone.
+		"""
+		super().make_loyalty_point_entry()
+		reprice_earn_at(self, self.flags.pop("barakat_earned_tier", None))
 
 	def make_loyalty_point_redemption_gle(self, gl_entries):
 		if self._barakat_books_consolidated_redemption():
