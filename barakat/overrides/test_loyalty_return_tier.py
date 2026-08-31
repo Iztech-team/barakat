@@ -154,7 +154,7 @@ class TestReturnUsesTheSalesOwnRate(FrappeTestCase):
 		doc.insert()
 		return doc.name
 
-	def _invoice(self, customer, amount, return_against=None):
+	def _invoice(self, customer, amount, return_against=None, redeem_points=0):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Sales Invoice",
@@ -178,6 +178,11 @@ class TestReturnUsesTheSalesOwnRate(FrappeTestCase):
 				],
 			}
 		)
+		if redeem_points:
+			doc.redeem_loyalty_points = 1
+			doc.loyalty_points = redeem_points
+			doc.loyalty_redemption_account = self.ctx.expense
+			doc.loyalty_redemption_cost_center = self.ctx.cost_center
 		doc.flags.ignore_permissions = True
 		doc.insert()
 		doc.submit()
@@ -262,6 +267,62 @@ class TestReturnUsesTheSalesOwnRate(FrappeTestCase):
 			),
 			[PROMOTING_SALE // HIGH_FACTOR],
 		)
+
+
+	# ── the paths that also rebuild an earn row ───────────────────────────────
+
+	def test_cancelling_a_return_re_prices_at_the_sales_rate_too(self):
+		"""`on_cancel` rebuilds the original exactly as `on_submit` does."""
+		customer, sale = self._promoted_customer("cancel-return")
+		returned = self._invoice(customer, 400, return_against=sale.name)
+		self.assertEqual(self._row(sale.name).loyalty_points, 528 // BASE_FACTOR)
+
+		returned.flags.ignore_permissions = True
+		returned.cancel()
+
+		# Nothing is returned any more, so the whole sale is eligible again — and
+		# still at the rate the sale itself earned at.
+		self.assertEqual(self._row(sale.name).loyalty_points, SALE // BASE_FACTOR)
+
+	def test_a_sale_that_redeemed_points_keeps_its_own_rate(self):
+		"""The redeemed value stays out of the eligible amount, at the sale's rate.
+
+		The redeeming sale here is priced at the BASE tier — 900 + 50 is under the
+		threshold — and only the sale after it crosses. So the claw-back rate and the
+		customer's current rate genuinely differ.
+		"""
+		customer = self._customer("redeemed")
+		self._invoice(customer, 900)
+		redeeming = self._invoice(customer, 50, redeem_points=20)
+		self.assertEqual(self._row(redeeming.name).loyalty_program_tier, f"{PREFIX} Base")
+		self._invoice(customer, 100)
+		self.assertEqual(
+			frappe.db.get_value("Customer", customer, "loyalty_program_tier"),
+			f"{PREFIX} High",
+		)
+
+		self._invoice(customer, 20, return_against=redeeming.name)
+
+		# eligible = 50 − 20 redeemed − 20 returned = 10, at the base rate.
+		self.assertEqual(self._row(redeeming.name).loyalty_points, 10 // BASE_FACTOR)
+
+	def test_a_renamed_tier_never_blocks_a_return(self):
+		"""An unresolvable rate falls back to erpnext rather than failing the refund.
+
+		The cash and the goods are the transaction; the points follow it. A return
+		that throws strands a customer at the till.
+		"""
+		customer, sale = self._promoted_customer("renamed")
+		frappe.db.set_value(
+			"Loyalty Point Entry",
+			frappe.get_all("Loyalty Point Entry", filters={"invoice": sale.name}, pluck="name")[0],
+			"loyalty_program_tier",
+			"A Tier That Was Renamed",
+		)
+
+		self._invoice(customer, 400, return_against=sale.name)
+
+		self.assertIsNotNone(self._row(sale.name))
 
 	# ── regressions: nothing above may change the simple cases ────────────────
 
