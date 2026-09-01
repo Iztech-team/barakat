@@ -16,9 +16,11 @@ from frappe.tests.utils import FrappeTestCase
 
 from barakat.validations import (
     SALARY_ADVANCE_FIELD,
+    DuplicateTaxAccountError,
     validate_employee_pin,
     validate_loyalty_program_tier_names,
     validate_pos_profile_accounts,
+    validate_tax_template_accounts,
 )
 
 COMPANY = "Test Co"
@@ -336,6 +338,49 @@ class EmployeePinUniqueness(FrappeTestCase):
                 stored=self._stored(pin="1234", company=self.EMP_CO),
                 duplicates=[self._dupe(emp_company="Barakat Hebron")],
             )
+
+
+class TaxTemplateAccounts(FrappeTestCase):
+    """Two rows of one template may not post to the same account.
+
+    ERPNext allows it and then miscomputes the tax — see
+    `barakat.tax_template_rows` for the invoice this was found on.
+    """
+
+    def _doc(self, *accounts):
+        return frappe._dict(
+            {"taxes": [frappe._dict({"account_head": a}) for a in accounts]}
+        )
+
+    def test_rows_on_different_accounts_save(self):
+        validate_tax_template_accounts(self._doc("VAT - TC", "Levy - TC"), "validate")
+
+    def test_exact_duplicate_is_rejected(self):
+        with self.assertRaises(DuplicateTaxAccountError):
+            validate_tax_template_accounts(self._doc("VAT - TC", "VAT - TC"), "validate")
+
+    def test_case_or_space_only_difference_is_rejected(self):
+        with self.assertRaises(DuplicateTaxAccountError):
+            validate_tax_template_accounts(self._doc("VAT - TC", " vat - tc "), "validate")
+
+    def test_the_refusal_is_a_validation_error(self):
+        # The proxy matches on exc_type, but any caller that only knows Frappe's
+        # base class must still see this as a validation failure, not a 500.
+        with self.assertRaises(frappe.ValidationError):
+            validate_tax_template_accounts(self._doc("VAT - TC", "VAT - TC"), "validate")
+
+    def test_a_repeat_separated_by_other_rows_is_rejected(self):
+        with self.assertRaises(DuplicateTaxAccountError):
+            validate_tax_template_accounts(
+                self._doc("VAT - TC", "Levy - TC", "VAT - TC"), "validate"
+            )
+
+    def test_blank_account_does_not_trip_this_rule(self):
+        # `account_head` is reqd; Frappe reports the empty row itself.
+        validate_tax_template_accounts(self._doc("", ""), "validate")
+
+    def test_template_with_no_rows_is_fine(self):
+        validate_tax_template_accounts(frappe._dict({}), "validate")
 
 
 if __name__ == "__main__":

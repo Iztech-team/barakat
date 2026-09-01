@@ -6,6 +6,7 @@ from frappe import _
 from barakat import receipt_logo
 from barakat.loyalty_tier_names import first_duplicate_tier_name
 from barakat.permissions import pin_role_decision
+from barakat.tax_template_rows import first_duplicate_account
 
 
 class PosPinRoleError(frappe.ValidationError):
@@ -13,6 +14,16 @@ class PosPinRoleError(frappe.ValidationError):
 
 	Its own class so the proxy can recognise it by `exc_type` rather than matching
 	the message text, which Frappe translates per user language.
+	"""
+
+
+class DuplicateTaxAccountError(frappe.ValidationError):
+	"""Raised when two rows of one tax template post to the same account.
+
+	Its own class so the proxy can recognise it by `exc_type` and answer with a
+	coded, localized message. Frappe TRANSLATES thrown messages per user
+	language, so matching the text works in English and silently stops working
+	the moment an Arabic or Hebrew user hits it.
 	"""
 
 
@@ -519,6 +530,35 @@ def validate_loyalty_program_tier_names(doc, method):
 			"This loyalty program already has a tier named <b>{0}</b>. "
 			"Give each tier its own name."
 		).format(duplicate),
+	)
+
+
+def validate_tax_template_accounts(doc, method):
+	"""No two rows of one tax template may post to the same account.
+
+	ERPNext allows it and then gets the arithmetic wrong — see
+	`barakat.tax_template_rows` for the invoice this was found on. The template
+	is the last point where the mistake costs nothing to fix; after it, a till
+	has already taken money that the invoice does not account for.
+
+	On the doctype rather than in the Admin Panel alone, because the desk, the
+	REST API and any future caller write this document too.
+
+	Compared trimmed and case-insensitively: an Account docname is unique under
+	MariaDB's default collation, so `VAT - BAM` beside `vat - BAM` is one
+	account written two ways, not two accounts.
+	"""
+	accounts = [row.account_head for row in (doc.get("taxes") or [])]
+	duplicate = first_duplicate_account(accounts)
+	if not duplicate:
+		return
+	frappe.throw(
+		title=_("Duplicate Tax Account"),
+		msg=_(
+			"This tax template already has a row on <b>{0}</b>. Each row must post "
+			"to a different account, or the tax on every sale is calculated wrongly."
+		).format(duplicate),
+		exc=DuplicateTaxAccountError,
 	)
 
 

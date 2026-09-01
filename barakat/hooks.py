@@ -235,6 +235,12 @@ doc_events = {
 	"Loyalty Program": {
 		"validate": "barakat.validations.validate_loyalty_program_tier_names",
 	},
+	# Two rows posting to ONE account is arithmetic ERPNext gets wrong, not a
+	# configuration choice — the desk and the REST API write this template too,
+	# so the rule cannot live in the Admin Panel alone.
+	"Sales Taxes and Charges Template": {
+		"validate": "barakat.validations.validate_tax_template_accounts",
+	},
 	"Pricing Rule": {
 		"validate": "barakat.validations.validate_pricing_rule_disable",
 		"on_trash": "barakat.validations.guard_pricing_rule_delete",
