@@ -37,6 +37,7 @@ from barakat.permissions import (
 	PERSONAS,
 	PRESERVED_ROLES,
 	bundle_for,
+	login_to_sign_out,
 	may_assign_preset,
 	user_permission_untick_allowed,
 )
@@ -164,6 +165,56 @@ def guard_role_preset(doc, method=None):
 		_("Only a manager can assign or change a staff member's role."),
 		frappe.PermissionError,
 	)
+
+
+def sign_out_on_access_removed(doc, method=None):
+	"""End the ERPNext sessions of a staff member whose access this save took away.
+
+	Wired on Employee `on_update`, alongside `reassert_persona_roles` — the two are
+	the same beat: that one rewrites what the user MAY do, this one stops the
+	sessions still running under what they USED to be able to do.
+
+	QA 0001-607: the proxy stamps the persona into a token at sign-in, so a demoted
+	or offboarded staff member kept the access they had been stripped of until they
+	next signed in — up to a week, one refreshed token at a time, with nothing on
+	the admin side able to end it. The proxy now re-reads the persona when a token
+	is refreshed; this is the half that makes the change bite immediately, applies
+	to every proxy instance, and survives a restart.
+
+	`force=True` because the caller is a manager acting on somebody else: without
+	it, `get_sessions_to_clear` only returns the sessions BEYOND the user's
+	simultaneous-session allowance, which for the usual allowance of one is none of
+	them. The decision itself is in `barakat.permissions.login_to_sign_out` so it is
+	testable off a bench.
+	"""
+	from frappe.sessions import clear_sessions
+
+	# A save the system makes on everyone's behalf is not somebody losing access.
+	# `reassert_persona_roles` rewrites bundles during install and migrate, and
+	# signing every user out of a deploy would be a self-inflicted outage.
+	if frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch:
+		return
+
+	before = doc.get_doc_before_save()
+	if not before:
+		# An insert grants access; it never removes any.
+		return
+
+	login = login_to_sign_out(
+		previous_login=before.user_id,
+		current_login=doc.user_id,
+		previous_preset=before.custom_role_preset,
+		current_preset=doc.custom_role_preset,
+		previous_status=before.status,
+		current_status=doc.status,
+	)
+
+	# Administrator is never touched here, for the same reason it is never touched
+	# by the bundle hook: locking the site owner out of their own bench is not a fix.
+	if not login or login == "Administrator":
+		return
+
+	clear_sessions(user=login, force=True)
 
 
 def guard_user_permission_flag(doc, method=None):

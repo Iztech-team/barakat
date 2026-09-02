@@ -902,3 +902,55 @@ def user_permission_untick_allowed(
 	if is_administrator or is_system_context:
 		return True
 	return not UNTICK_USER_PERMISSION_ROLES.isdisjoint(set(caller_roles))
+
+
+# ── Whose session a staff save must end ──────────────────────────────────────
+# QA 0001-607: a demoted or offboarded staff member kept the access they had been
+# stripped of until they next signed in, because the proxy stamps the persona into
+# a token at login and the token outlives the change. The proxy re-reads the
+# persona on refresh; this is the other half, and it is the durable one — dropping
+# the ERPNext session applies to every process and survives a restart, which an
+# in-memory list over there cannot.
+#
+# Statuses that still mean "this person works here". Anything else — Left,
+# Suspended, Inactive — is access being taken away.
+WORKING_EMPLOYEE_STATUSES = frozenset({"Active"})
+
+
+def login_to_sign_out(
+	*,
+	previous_login,
+	current_login,
+	previous_preset,
+	current_preset,
+	previous_status,
+	current_status,
+):
+	"""Which login, if any, this Employee save must end the sessions of.
+
+	Pure decision — no Frappe. Returns the email, or "" for "nobody".
+
+	Always the login the employee had BEFORE the save: that is the address in the
+	token they are holding, and on a login change it is the one being taken away.
+
+	Four things count as access being removed. Re-saving the SAME values is not one
+	of them — the admin panel posts the whole form on every edit, so treating that
+	as a change would sign people out for a corrected birthday. Neither is gaining
+	something: a rehire, or an employee being given their first login, leaves any
+	session they have alone.
+	"""
+	previous_login = (previous_login or "").strip()
+	if not previous_login:
+		# No login before this save means no session of ours to end. An employee
+		# being GIVEN a login is gaining access, not losing it.
+		return ""
+
+	preset_changed = (previous_preset or "").strip() != (current_preset or "").strip()
+	login_moved = previous_login != (current_login or "").strip()
+	stopped_working = (previous_status or "").strip() in WORKING_EMPLOYEE_STATUSES and (
+		current_status or ""
+	).strip() not in WORKING_EMPLOYEE_STATUSES
+
+	if preset_changed or login_moved or stopped_working:
+		return previous_login
+	return ""

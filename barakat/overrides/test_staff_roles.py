@@ -15,6 +15,7 @@ from barakat.overrides.staff_roles import (
     guard_role_preset,
     guard_user_permission_flag,
     reassert_company_user_permission,
+    sign_out_on_access_removed,
 )
 from barakat.permissions import STAFF_MANAGER_ROLE
 
@@ -174,6 +175,77 @@ class GuardUserPermissionFlag(FrappeTestCase):
     def test_ignores_an_employee_with_no_login(self):
         with _as("manager@example.com", [STAFF_MANAGER_ROLE]):
             guard_user_permission_flag(self._emp(ticked=0, user=""))  # must not raise
+
+
+class _SavedEmployee:
+    """Employee stand-in for the sign-out hook: the fields it reads, before and after."""
+
+    def __init__(self, before, **now):
+        self._before = _SavedEmployee(None, **before) if before is not None else None
+        self.user_id = now.get("user_id", "keeper@example.com")
+        self.custom_role_preset = now.get("custom_role_preset", "Inventory Keeper")
+        self.status = now.get("status", "Active")
+
+    def get_doc_before_save(self):
+        return self._before
+
+
+UNCHANGED = {
+    "user_id": "keeper@example.com",
+    "custom_role_preset": "Inventory Keeper",
+    "status": "Active",
+}
+
+
+class SignOutOnAccessRemoved(FrappeTestCase):
+    """QA 0001-607 — a staff member whose access is taken away loses their session NOW.
+
+    The proxy re-reads the persona when a token is refreshed, but that only bites
+    within the access token's lifetime and only in the process holding the list.
+    Dropping the ERPNext session here is what makes a demotion or an offboarding
+    take effect immediately, for every process, across a restart.
+    """
+
+    def _run(self, before=UNCHANGED, **now):
+        with patch("frappe.sessions.clear_sessions") as cleared:
+            sign_out_on_access_removed(_SavedEmployee(before, **now))
+        return cleared
+
+    def test_demotion_drops_the_session(self):
+        cleared = self._run(custom_role_preset="Cashier")
+        cleared.assert_called_once_with(user="keeper@example.com", force=True)
+
+    def test_offboarding_drops_the_session(self):
+        cleared = self._run(status="Left")
+        cleared.assert_called_once_with(user="keeper@example.com", force=True)
+
+    def test_moving_the_login_drops_the_OLD_address(self):
+        cleared = self._run(user_id="new.address@example.com")
+        cleared.assert_called_once_with(user="keeper@example.com", force=True)
+
+    def test_an_unrelated_edit_leaves_the_session_alone(self):
+        self._run().assert_not_called()
+
+    def test_an_insert_has_nothing_to_drop(self):
+        self._run(before=None, custom_role_preset="Cashier").assert_not_called()
+
+    def test_the_administrator_is_never_signed_out(self):
+        # Locking the site owner out of their own bench is not a fix.
+        cleared = self._run(
+            before={**UNCHANGED, "user_id": "Administrator"},
+            user_id="Administrator",
+            custom_role_preset="Cashier",
+        )
+        cleared.assert_not_called()
+
+    def test_a_migration_signs_nobody_out(self):
+        # `reassert_persona_roles` rewrites bundles during install/migrate; a save
+        # made by the system must never log the whole shop out.
+        frappe.flags.in_migrate = True
+        try:
+            self._run(custom_role_preset="Cashier").assert_not_called()
+        finally:
+            frappe.flags.in_migrate = False
 
 
 if __name__ == "__main__":

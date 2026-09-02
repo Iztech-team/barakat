@@ -172,6 +172,10 @@ doc_events = {
 		"on_update": [
 			"barakat.overrides.staff_roles.reassert_persona_roles",
 			"barakat.overrides.staff_roles.reassert_company_user_permission",
+			# Sessions still running under the access this save took away. Runs
+			# AFTER the bundle is rewritten, so the roles are already correct by
+			# the time the old session is dropped. See QA 0001-607.
+			"barakat.overrides.staff_roles.sign_out_on_access_removed",
 		],
 	},
 	"Attendance": {
