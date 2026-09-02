@@ -57,15 +57,24 @@ named in `COMPANY_NEUTRAL_DOCTYPES` as genuinely site-wide. Anything else fails 
 so a doctype added to the matrix tomorrow is refused rather than leaked, and
 `test_company_scope.py` fails until someone decides which of the two it is.
 
-Note what this module can and cannot do. It only ever runs for a caller with ACTIVE
-Employee records in two or more companies; the boundary for everyone else is the
-`Company` User Permission, which needs the same marker field to bind to. Both layers
-depend on it, which is why `company_marker.py` exists.
+Note what this module can and cannot do. The persona narrowing only ever runs for a
+caller with ACTIVE Employee records in two or more companies; the boundary for everyone
+else is the `Company` User Permission, which needs the same marker field to bind to.
+Both layers depend on it, which is why `company_marker.py` exists.
+
+`unscopable_block` and `blank_marker_block` are the two exceptions to that: they apply
+to every tenant-scoped caller, because the leaks they answer never needed two shops.
+The first refuses a doctype with no company column; the second refuses a ROW with no
+company value, which is the residual half of the 2026-08-05 leak and what ticket
+0001-606 re-measured.
 """
 
 import frappe
 
-from barakat.overrides.company_marker import COMPANY_MARKER_FIELDS
+from barakat.overrides.company_marker import (
+	COMPANY_MARKER_FIELDS,
+	MANDATORY_MARKER_DOCTYPES,
+)
 from barakat.permissions import ALL_ROLE_PERMS, PERSONAS, bundle_for
 from barakat.persona_matrix import MODULE_DOCTYPES
 
@@ -234,6 +243,70 @@ def unscopable_block(user, doctype):
 	return "1=0"
 
 
+def multi_company_site():
+	"""Does this site host more than one Company?
+
+	`ignore_permissions` is the whole point: a tenant-scoped caller's own Company list
+	is already filtered to one row, so asking with their permissions would make every
+	site look single-company and switch the guard below off exactly where it is needed.
+
+	Cached on `frappe.local` — it is asked once per guarded list query and the answer
+	cannot change inside a request. A test that creates a company mid-request must
+	clear `frappe.local._barakat_multi_company`.
+	"""
+	cached = getattr(frappe.local, "_barakat_multi_company", None)
+	if cached is None:
+		cached = (
+			len(frappe.get_all("Company", pluck="name", limit=2, ignore_permissions=True))
+			> 1
+		)
+		frappe.local._barakat_multi_company = cached
+	return cached
+
+
+def blank_marker_block(user, doctype):
+	"""SQL refusing a row whose company marker is BLANK, else `""`.
+
+	`unscopable_block` above answers "this doctype cannot be scoped at all". This is
+	the same question one level down: the doctype is scopable, but THIS ROW carries no
+	owner, and Frappe emits `ifnull(field,'')='' or field in (...)` — so an unstamped
+	row is readable by every shop on the site. That is ticket 0001-606: the markers
+	added on 2026-08-05 closed the doctype-level hole and left the row-level one, which
+	reads exactly like the original leak to anyone testing it.
+
+	Three deliberate limits, each one a way this could otherwise empty a live list for
+	no security gain:
+
+	  1. `MANDATORY_MARKER_DOCTYPES` only. Everywhere else a blank marker is MEANT to
+	     be shared — the `All Item Groups` tree root, stock ERPNext's global `Cash`
+	     mode of payment, `Standard Selling`, the global UOMs. Hiding those breaks the
+	     shop rather than protecting it. See `treeview.py`, which keeps blanks visible
+	     for the same reason.
+	  2. Multi-company sites only. On a site with one company a blank marker leaks to
+	     nobody, so there is nothing to contain — and every Barakat shop site today is
+	     single-company, which is what makes this change inert in production.
+	  3. Tenant-scoped callers only, same population as `unscopable_block`: the
+	     gateway's SSO user, service accounts and background jobs hold no Company
+	     permission and must keep seeing everything.
+
+	Paired with `reqd` on the same three doctypes (`company_marker`), so no new blank
+	can be created and the ones this hides are legacy rows the backfill could not
+	derive. Both halves are required: the schema stops the bleeding, this contains
+	what already leaked.
+	"""
+	if doctype not in MANDATORY_MARKER_DOCTYPES:
+		return ""
+	if not multi_company_site():
+		return ""
+	if not _caller_is_tenant_scoped(user):
+		return ""
+	field = company_field_for(doctype)
+	if not field:
+		# Mid-deploy the column can be briefly absent — rail 2 of `unscopable_block`.
+		return ""
+	return f"ifnull(`tab{doctype}`.`{field}`, '') != ''"
+
+
 def active_company():
 	"""The company this request declared, or None.
 
@@ -358,6 +431,11 @@ def has_permission(doc, ptype="read", user=None, **kwargs):
 	if unscopable_block(user, doctype):
 		return False
 
+	# Same, for a row with no owner. Without this, a blank row hidden from the list is
+	# still openable by name, which is not a boundary.
+	if blank_marker_block(user, doctype) and not _doc_company(doc, doctype):
+		return False
+
 	scope = scope_for(user, doctype)
 	if scope is None:
 		return True
@@ -392,21 +470,29 @@ def get_permission_query_conditions(user=None, doctype=None):
 	if blocked:
 		return blocked
 
-	scope = scope_for(user, doctype)
-	if scope is None:
-		return ""
+	# Collected rather than returned one at a time: the row-level guard applies to
+	# EVERY tenant-scoped caller, while the persona narrowing below stands down for
+	# anyone working in a single shop. Both must hold, so they are ANDed.
+	conditions = []
+	blank = blank_marker_block(user, doctype)
+	if blank:
+		conditions.append(blank)
 
-	allowed, pinned = scope
-	if "read" not in allowed and "select" not in allowed:
-		# Matches nothing. `1=0` rather than an empty string, which would silently
-		# unfilter the query — the failure mode this whole module exists to prevent.
-		return "1=0"
-	if pinned:
-		field = company_field_for(doctype)
-		if field:
-			return f"`tab{doctype}`.`{field}` = {frappe.db.escape(pinned)}"
-		if doctype not in COMPANY_NEUTRAL_DOCTYPES:
-			# Shop-owned, but there is no column to pin it by. Returning "" here is
-			# what leaked every shop's Contact and Item Price rows until 2026-08-05.
+	scope = scope_for(user, doctype)
+	if scope is not None:
+		allowed, pinned = scope
+		if "read" not in allowed and "select" not in allowed:
+			# Matches nothing. `1=0` rather than an empty string, which would silently
+			# unfilter the query — the failure mode this whole module exists to prevent.
 			return "1=0"
-	return ""
+		if pinned:
+			field = company_field_for(doctype)
+			if field:
+				conditions.append(
+					f"`tab{doctype}`.`{field}` = {frappe.db.escape(pinned)}"
+				)
+			elif doctype not in COMPANY_NEUTRAL_DOCTYPES:
+				# Shop-owned, but there is no column to pin it by. Returning "" here is
+				# what leaked every shop's Contact and Item Price rows until 2026-08-05.
+				return "1=0"
+	return " and ".join(conditions)

@@ -433,7 +433,8 @@
   "options": "Company",
   "insert_after": "company_name",
   "in_list_view": 0,
-  "in_standard_filter": 0
+  "in_standard_filter": 0,
+  "reqd": 1
  },
  {
   "doctype": "Custom Field",
@@ -445,7 +446,8 @@
   "options": "Company",
   "insert_after": "price_list",
   "in_list_view": 0,
-  "in_standard_filter": 0
+  "in_standard_filter": 0,
+  "reqd": 1
  },
  {
   "doctype": "Custom Field",
@@ -457,7 +459,8 @@
   "options": "Company",
   "insert_after": "description",
   "in_list_view": 0,
-  "in_standard_filter": 0
+  "in_standard_filter": 0,
+  "reqd": 1
  },
  {
   "doctype": "Custom Field",

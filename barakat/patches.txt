@@ -26,3 +26,4 @@ barakat.patches.clear_pos_pin_for_non_pos_roles
 barakat.patches.close_shifts_a_handover_left_open
 barakat.patches.approve_tills_that_have_already_sold
 barakat.patches.reprice_returned_earn_rows
+barakat.patches.require_company_marker_on_contact_item_price

@@ -17,11 +17,17 @@ import unittest.mock
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from barakat.overrides.company_marker import COMPANY_MARKER_FIELDS
+from barakat.overrides.company_marker import (
+	COMPANY_MARKER_FIELDS,
+	MANDATORY_MARKER_DOCTYPES,
+)
 from barakat.overrides.company_scope import (
 	COMPANY_NEUTRAL_DOCTYPES,
 	GUARDED_DOCTYPES,
+	blank_marker_block,
 	company_field_for,
+	get_permission_query_conditions,
+	has_permission,
 	strict_scope_enabled,
 	unscopable_block,
 )
@@ -100,7 +106,16 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 				key = f"{doctype}-{field['fieldname']}"
 				with self.subTest(field=key):
 					self.assertIn(key, shipped, f"{key} is not in the fixtures")
-					for attribute in ("fieldtype", "options", "insert_after", "label"):
+					for attribute in (
+						"fieldtype",
+						"options",
+						"insert_after",
+						"label",
+						# `reqd` is the 0001-606 half. Drifting here would ship a
+						# fresh install whose rows can be blank while an upgraded
+						# site's cannot, which is the worst of both.
+						"reqd",
+					):
 						self.assertEqual(
 							shipped[key].get(attribute), field.get(attribute), attribute
 						)
@@ -188,3 +203,204 @@ class TestCompanyScopeCoverage(FrappeTestCase):
 				self.assertIsNotNone(meta_field, f"{doctype}.{field} does not exist")
 				self.assertEqual(meta_field.fieldtype, "Link")
 				self.assertEqual(meta_field.options, "Company")
+
+
+class TestMandatoryCompanyMarker(FrappeTestCase):
+	"""A row of these three may not exist without an owner.
+
+	The 2026-08-05 fix made the doctypes scopable; it left rows that nothing could
+	derive an owner for, and a blank marker is readable by every shop. Ticket 0001-606
+	re-measured exactly that. `reqd` removes the case, the same way the presence
+	doctypes have always done it (`presence/test_doctypes.py`).
+	"""
+
+	def test_the_marker_is_mandatory_on_every_row_owning_doctype(self):
+		for doctype in MANDATORY_MARKER_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				field = frappe.get_meta(doctype).get_field("custom_company")
+				self.assertIsNotNone(field, f"{doctype} has no custom_company field")
+				self.assertTrue(
+					field.reqd,
+					f"{doctype}.custom_company must be reqd - a blank marker is "
+					f"visible to every shop on the site",
+				)
+
+	def test_the_shared_tree_masters_are_never_made_mandatory(self):
+		"""Excluded on purpose, and a fresh install depends on it.
+
+		Every Supplier Group and Territory on every production site is an ERPNext seed
+		inserted by Administrator, for whom no company can be derived. Mandatory there
+		would fail `bench new-site`, not close a leak.
+		"""
+		for doctype in ("Supplier Group", "Territory"):
+			with self.subTest(doctype=doctype):
+				self.assertNotIn(doctype, MANDATORY_MARKER_DOCTYPES)
+				field = frappe.get_meta(doctype).get_field("custom_company")
+				self.assertFalse(
+					field.reqd,
+					f"{doctype}.custom_company must stay optional - its rows are "
+					f"shared ERPNext seeds",
+				)
+
+	def test_every_mandatory_doctype_ships_a_marker(self):
+		"""The two lists must not drift: a name here with no field is a no-op."""
+		for doctype in MANDATORY_MARKER_DOCTYPES:
+			self.assertIn(doctype, COMPANY_MARKER_FIELDS)
+
+
+class TestBlankMarkerBlock(FrappeTestCase):
+	"""The read-time half: a legacy blank row is refused, not shared.
+
+	`reqd` stops new blanks. It cannot reach the rows already in the table, and on a
+	multi-company site those are the leak the ticket measured.
+	"""
+
+	def _multi(self, value=True):
+		return unittest.mock.patch(
+			"barakat.overrides.company_scope.multi_company_site", return_value=value
+		)
+
+	def _tenant(self, value=True):
+		return unittest.mock.patch(
+			"barakat.overrides.company_scope._caller_is_tenant_scoped", return_value=value
+		)
+
+	def test_it_refuses_a_blank_row_on_a_multi_company_site(self):
+		with self._multi(), self._tenant():
+			self.assertEqual(
+				blank_marker_block("someone@example.com", "Item Price"),
+				"ifnull(`tabItem Price`.`custom_company`, '') != ''",
+			)
+
+	def test_a_single_company_site_is_untouched(self):
+		"""Every Barakat shop site today. A blank there leaks to nobody, and hiding
+		it would empty a live list for no gain."""
+		with self._multi(False), self._tenant():
+			for doctype in MANDATORY_MARKER_DOCTYPES:
+				with self.subTest(doctype=doctype):
+					self.assertEqual(blank_marker_block("someone@example.com", doctype), "")
+
+	def test_a_caller_outside_the_tenant_boundary_is_untouched(self):
+		"""The gateway's SSO user and background jobs hold no Company permission."""
+		with self._multi(), self._tenant(False):
+			self.assertEqual(blank_marker_block("service@example.com", "Contact"), "")
+
+	def test_it_never_touches_a_doctype_whose_blank_is_shared(self):
+		"""`All Item Groups`, the stock `Cash` mode, `Standard Selling`, global UOMs.
+
+		Hiding those breaks the shop instead of protecting it - `treeview.py` keeps
+		blanks visible for the same reason.
+		"""
+		for doctype in ("Item Group", "Mode of Payment", "Price List", "UOM", "Territory"):
+			with self.subTest(doctype=doctype):
+				with self._multi(), self._tenant():
+					self.assertEqual(blank_marker_block("someone@example.com", doctype), "")
+
+	def test_a_missing_column_mid_deploy_never_blacks_out(self):
+		"""Patches run before `sync_fixtures`; the column is briefly absent."""
+		with self._multi(), self._tenant(), unittest.mock.patch(
+			"barakat.overrides.company_scope.company_field_for", return_value=None
+		):
+			self.assertEqual(blank_marker_block("someone@example.com", "Contact"), "")
+
+	def test_the_list_query_carries_the_condition(self):
+		"""It must reach the SQL, not just the helper."""
+		with self._multi(), self._tenant():
+			condition = get_permission_query_conditions(
+				user="someone@example.com", doctype="Contact"
+			)
+			self.assertIn("ifnull(`tabContact`.`custom_company`, '') != ''", condition)
+
+	def test_opening_a_blank_row_by_name_is_refused_too(self):
+		"""A row hidden from the list but openable by name is not a boundary."""
+		with self._multi(), self._tenant():
+			self.assertFalse(
+				has_permission(
+					{"doctype": "Contact", "custom_company": ""}, user="someone@example.com"
+				)
+			)
+
+	def test_a_stamped_row_is_still_readable(self):
+		"""The guard must only cost blank rows. This is the no-blackout rail."""
+		company = frappe.get_all("Company", pluck="name", limit=1)[0]
+		with self._multi(), self._tenant():
+			self.assertTrue(
+				has_permission(
+					{"doctype": "Contact", "custom_company": company},
+					user="someone@example.com",
+				)
+			)
+
+
+class TestMarkerStampingOnSave(FrappeTestCase):
+	"""Mandatory is only safe if the stamp always gets there first.
+
+	Frappe runs `validate` hooks in `run_before_save_methods()` and the mandatory
+	check in `_validate()` on the next line, so these prove the ordering as much as
+	the derivation. A regression here does not leak — it stops shops saving.
+	"""
+
+	def setUp(self):
+		self.company = frappe.get_all("Company", pluck="name", limit=1)[0]
+
+	def test_an_item_price_inherits_its_item_s_company(self):
+		item = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_Barakat 606 Item",
+				"item_name": "_Barakat 606 Item",
+				"item_group": frappe.get_all("Item Group", pluck="name", limit=1)[0],
+				"custom_company": self.company,
+				"is_stock_item": 0,
+			}
+		)
+		item.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Item", item.name, force=True)
+
+		price = frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": item.name,
+				"price_list": frappe.get_all("Price List", pluck="name", limit=1)[0],
+				"price_list_rate": 1,
+			}
+		)
+		price.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Item Price", price.name, force=True)
+
+		self.assertEqual(price.custom_company, self.company)
+
+	def test_a_contact_inherits_the_party_it_is_linked_to(self):
+		customer = frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": "_Barakat 606 Customer",
+				"custom_company": self.company,
+			}
+		)
+		customer.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Customer", customer.name, force=True)
+
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "_Barakat 606 Contact",
+				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		)
+		contact.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Contact", contact.name, force=True)
+
+		self.assertEqual(contact.custom_company, self.company)
+
+	def test_a_row_whose_owner_cannot_be_derived_is_refused_not_left_blank(self):
+		"""The whole point. Before this, the same insert produced a blank row that
+		every shop on the site could read."""
+		with unittest.mock.patch(
+			"barakat.overrides.company_marker.contact_company", return_value=""
+		):
+			contact = frappe.get_doc(
+				{"doctype": "Contact", "first_name": "_Barakat 606 Orphan"}
+			)
+			with self.assertRaises(frappe.MandatoryError):
+				contact.insert(ignore_permissions=True)

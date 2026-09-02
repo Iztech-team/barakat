@@ -31,6 +31,30 @@ filled. A BLANK marker is visible to EVERYONE — Frappe emits
 `ifnull(field,'')='' or field in (...)` unless `apply_strict_user_permissions` is on —
 so stamping is half the fix and the backfill patch is the other half. Both are required.
 
+## Why the marker is also MANDATORY (2026-09-02)
+
+Stamping and backfilling are both best-effort: the stamp fills nothing when it cannot
+derive an owner, and the backfill deliberately refuses to guess on a multi-company site.
+Every row they leave behind is blank, and a blank row is readable by every shop — which
+is the original leak, at row granularity instead of doctype granularity.
+
+The presence module already solved this and it is the pattern followed here: make the
+marker `reqd`, so the blank case cannot be reached at all (see
+`presence/test_doctypes.py`). Ordering makes it safe — Frappe runs `validate` hooks in
+`run_before_save_methods()` and the mandatory check in `_validate()` immediately after,
+so the stamp below always gets first refusal.
+
+`MANDATORY_MARKER_DOCTYPES` is the three with a parent to inherit from, NOT all five.
+`Supplier Group` and `Territory` are excluded on purpose: every row on every production
+site is an ERPNext seed that is genuinely shared and deliberately blank, and ERPNext's
+own installer creates them as Administrator. Making those mandatory would fail a fresh
+install. See `stamp_new_owned_master`.
+
+Rows that predate this still exist and are still blank, so the schema rule is paired
+with a read-time one: `company_scope.blank_marker_block` refuses a blank row of these
+three doctypes on a site that has more than one company. Both are needed — the schema
+stops new blanks, the query condition contains the old ones.
+
 ## Where the value comes from
 
 Never invented, always inherited from the record that already carries a trustworthy
@@ -53,6 +77,11 @@ re-deriving on every save would undo that silently.
 
 import frappe
 
+# The three whose owner is always derivable from a parent record, so a blank is never
+# legitimate and the field can be `reqd`. Read the module docstring before adding a
+# fourth — `Supplier Group` and `Territory` are excluded deliberately, not by omission.
+MANDATORY_MARKER_DOCTYPES = ("Contact", "Item Price", "Product Bundle")
+
 # The markers this module owns. Kept here rather than only in
 # `fixtures/custom_field.json` so the backfill patch can create them itself: on a site
 # migrating up to this version the patch runs BEFORE `sync_fixtures`, so the column does
@@ -65,6 +94,7 @@ COMPANY_MARKER_FIELDS = {
 			"fieldtype": "Link",
 			"options": "Company",
 			"insert_after": "company_name",
+			"reqd": 1,
 		}
 	],
 	"Item Price": [
@@ -74,6 +104,7 @@ COMPANY_MARKER_FIELDS = {
 			"fieldtype": "Link",
 			"options": "Company",
 			"insert_after": "price_list",
+			"reqd": 1,
 		}
 	],
 	"Product Bundle": [
@@ -83,6 +114,7 @@ COMPANY_MARKER_FIELDS = {
 			"fieldtype": "Link",
 			"options": "Company",
 			"insert_after": "description",
+			"reqd": 1,
 		}
 	],
 	# The two tree masters. Marker only, no backfill -- see `stamp_new_owned_master`.
@@ -136,6 +168,24 @@ def _sole_permitted_company(user=None):
 	return next(iter(values)) if len(values) == 1 else ""
 
 
+def sole_site_company():
+	"""The site's only Company, or "" when it hosts none or several.
+
+	The last resort in every derivation below, and not a guess: with one company on
+	the site there is exactly one answer a row could possibly have. The backfill patch
+	already fills blanks this way for the same reason — this puts the same rule on the
+	live path, so a single-company site never has to refuse a save once the marker is
+	mandatory.
+
+	`ignore_permissions` matters: this must count the SITE's companies, and a
+	tenant-scoped caller's own `get_all("Company")` returns just their own — which
+	would make an 8-company site look single-company to them and hand every row the
+	caller's company.
+	"""
+	names = frappe.get_all("Company", pluck="name", limit=2, ignore_permissions=True)
+	return names[0] if len(names) == 1 else ""
+
+
 def contact_company(doc):
 	"""Derive a Contact's company. See the module docstring for the order."""
 	for row in doc.get("links") or []:
@@ -161,7 +211,7 @@ def contact_company(doc):
 		if len(companies) == 1:
 			return next(iter(companies))
 
-	return _sole_permitted_company()
+	return _sole_permitted_company() or sole_site_company()
 
 
 def stamp_contact(doc, method=None):
@@ -172,10 +222,27 @@ def stamp_contact(doc, method=None):
 		doc.custom_company = company
 
 
+def _owned_row_company(item_code):
+	"""The company for a row that hangs off an Item, in descending trustworthiness.
+
+	The Item first, then the caller's sole Company permission, then the site's sole
+	Company — the same order `contact_company` uses, and for the same reason: each
+	step is an authority the caller cannot forge, and the fallbacks only fire where
+	there is exactly one possible answer.
+
+	The two fallbacks are not decoration. ERPNext inserts an Item Price of its own
+	whenever `standard_rate` is set on an Item, so once the marker is mandatory a
+	derivation that returns "" does not leave a blank row — it fails the Item save.
+	"""
+	return (
+		_company_of_item(item_code) or _sole_permitted_company() or sole_site_company()
+	)
+
+
 def stamp_item_price(doc, method=None):
 	if (doc.get("custom_company") or "").strip():
 		return
-	company = _company_of_item(doc.get("item_code"))
+	company = _owned_row_company(doc.get("item_code"))
 	if company:
 		doc.custom_company = company
 
@@ -183,7 +250,7 @@ def stamp_item_price(doc, method=None):
 def stamp_product_bundle(doc, method=None):
 	if (doc.get("custom_company") or "").strip():
 		return
-	company = _company_of_item(doc.get("new_item_code"))
+	company = _owned_row_company(doc.get("new_item_code"))
 	if company:
 		doc.custom_company = company
 
