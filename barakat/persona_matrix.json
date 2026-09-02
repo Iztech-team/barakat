@@ -1,6 +1,7 @@
 {
   "Accountant": {
     "accounting": "write",
+    "assistant": "read",
     "attendance": "none",
     "branches": "none",
     "customers": "read",
@@ -26,6 +27,7 @@
   },
   "Branch Supervisor": {
     "accounting": "read",
+    "assistant": "write",
     "attendance": "write",
     "branches": "read",
     "customers": "write",
@@ -51,6 +53,7 @@
   },
   "Cashier": {
     "accounting": "none",
+    "assistant": "read",
     "attendance": "none",
     "branches": "none",
     "customers": "read",
@@ -76,6 +79,7 @@
   },
   "HR": {
     "accounting": "none",
+    "assistant": "none",
     "attendance": "write",
     "branches": "read",
     "customers": "none",
@@ -101,6 +105,7 @@
   },
   "Inventory Keeper": {
     "accounting": "none",
+    "assistant": "none",
     "attendance": "none",
     "branches": "none",
     "customers": "none",
@@ -126,6 +131,7 @@
   },
   "Manager": {
     "accounting": "write",
+    "assistant": "write",
     "attendance": "write",
     "branches": "write",
     "customers": "write",

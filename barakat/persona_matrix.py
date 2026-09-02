@@ -26,6 +26,7 @@ MODULE_KEYS = (
 	"accounting",
 	"customers",
 	"suppliers",
+	"assistant",
 	"reports.sales",
 	"reports.products",
 	"reports.inventory",
@@ -158,6 +159,12 @@ MODULE_DOCTYPES = {
 		"Territory",
 	),
 	"suppliers": ("Supplier", "Supplier Group", "Purchase Invoice"),
+	# Generates no role: the AP assistant's tools call the proxy's EXISTING
+	# customers/reports service functions, which already run under the caller's
+	# own `customers`/`reports` doctype grants above. `assistant` only gates
+	# whether the chat feature and its tools are offered at all — it is not a
+	# second door into ERPNext.
+	"assistant": (),
 	"reports.sales": ("Sales Invoice", "POS Invoice"),
 	# POS Invoice: the top-products report ranks by SALES, so it reads invoices.
 	"reports.products": ("Item", "Bin", "POS Invoice"),
@@ -308,6 +315,7 @@ PERSONA_MATRIX = {
 		"settings": "none",
 		"accounting": "read",
 		"customers": "write",
+		"assistant": "write",
 		"suppliers": "read",
 		"reports.sales": "read",
 		"reports.products": "read",
@@ -340,6 +348,7 @@ PERSONA_MATRIX = {
 		"settings": "none",
 		"accounting": "none",
 		"customers": "read",
+		"assistant": "read",
 		"suppliers": "none",
 		"reports.sales": "none",
 		"reports.products": "none",
@@ -369,6 +378,7 @@ PERSONA_MATRIX = {
 		"settings": "none",
 		"accounting": "write",
 		"customers": "read",
+		"assistant": "read",
 		"suppliers": "write",
 		"reports.sales": "read",
 		"reports.products": "none",
@@ -394,6 +404,7 @@ PERSONA_MATRIX = {
 		"settings": "none",
 		"accounting": "none",
 		"customers": "none",
+		"assistant": "none",
 		"suppliers": "write",
 		"reports.sales": "none",
 		"reports.products": "read",
@@ -423,6 +434,7 @@ PERSONA_MATRIX = {
 		"settings": "none",
 		"accounting": "none",
 		"customers": "none",
+		"assistant": "none",
 		"suppliers": "none",
 		"reports.sales": "none",
 		"reports.products": "none",
